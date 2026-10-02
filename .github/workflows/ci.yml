@@ -1,0 +1,91 @@
+name: CI — Monorepo Quality Gates
+
+on:
+  push:
+    branches:
+      - main
+      - development
+  pull_request:
+    branches:
+      - main
+      - development
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Static Analysis & Type Checking ───────────────────────
+  typecheck:
+    name: Typecheck & Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Typecheck Backend & Frontend
+        run: npm run typecheck
+
+  # ── 2. Backend Unit & Validation Tests ───────────────────────
+  test-backend:
+    name: Backend Validation Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Run Environment Validation Tests
+        run: npm --prefix apps/api test src/modules/infrastructure/configuration/env.validation.spec.ts
+
+  # ── 3. Production Build Verification ─────────────────────────
+  build-apps:
+    name: Build Verification (API & Web)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Build API Application
+        run: npm run build:api
+
+      - name: Build Web Application
+        run: npm run build:web
+        env:
+          NEXT_PUBLIC_BACKEND_URL: 'https://api.nuts-commerce.com'
+          NEXT_PUBLIC_API_URL: '/api/v1'

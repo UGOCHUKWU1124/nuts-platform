@@ -1,0 +1,247 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark, .dark *));
+
+/* Modern Dynamic Theme Tokens - Facebook & Instagram (Meta) Aesthetic */
+:root {
+  --sans: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --heading: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.011em;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Surfaces & Backgrounds */
+  --background: #ffffff;
+  --foreground: #0f1419;
+
+  --card: #ffffff;
+  --card-foreground: #0f1419;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f1419;
+
+  /* Dynamic Primary - Solid Black in Light Mode, flips to Solid White in Dark Mode */
+  --primary: #0f1419;
+  --primary-foreground: #ffffff;
+
+  /* Dynamic Secondary & Muted */
+  --secondary: #f0f2f5;
+  --secondary-foreground: #0f1419;
+
+  --muted: #f0f2f5;
+  --muted-foreground: #65676b;
+
+  --accent: #f0f2f5;
+  --accent-foreground: #0f1419;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  /* Borders & Controls */
+  --border: #e4e6eb;
+  --input: #e4e6eb;
+  --ring: #0f1419;
+
+  --chart-1: #0f1419;
+  --chart-2: #525252;
+  --chart-3: #737373;
+  --chart-4: #a3a3a3;
+  --chart-5: #e5e5e5;
+
+  --radius: 0.75rem;
+
+  /* Sidebar Tokens */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1419;
+  --sidebar-primary: #0f1419;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f2f5;
+  --sidebar-accent-foreground: #0f1419;
+  --sidebar-border: #e4e6eb;
+  --sidebar-ring: #0f1419;
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Deep Sleek Dark Surfaces */
+  --background: #09090b;
+  --foreground: #f4f4f5;
+
+  --card: #121215;
+  --card-foreground: #f4f4f5;
+
+  --popover: #121215;
+  --popover-foreground: #f4f4f5;
+
+  /* Dynamic Primary - Crisp Solid White in Dark Mode */
+  --primary: #ffffff;
+  --primary-foreground: #09090b;
+
+  /* Dynamic Secondary & Muted */
+  --secondary: #1e1e24;
+  --secondary-foreground: #f4f4f5;
+
+  --muted: #1e1e24;
+  --muted-foreground: #a1a1aa;
+
+  --accent: #1e1e24;
+  --accent-foreground: #ffffff;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  /* Borders & Controls */
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #d4d4d8;
+
+  --chart-1: #ffffff;
+  --chart-2: #d4d4d8;
+  --chart-3: #a1a1aa;
+  --chart-4: #71717a;
+  --chart-5: #27272a;
+
+  /* Sidebar Tokens */
+  --sidebar: #121215;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #09090b;
+  --sidebar-accent: #1e1e24;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #d4d4d8;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans), system-ui, sans-serif;
+  --font-serif: var(--serif);
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --color-border: var(--border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+html {
+  overflow-x: clip;
+  width: 100%;
+  max-width: 100%;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: -0.011em;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-tap-highlight-color: transparent;
+}
+
+img,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 2.75rem;
+    font-size: max(1rem, 16px);
+  }
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--heading);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+button,
+[role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+a,
+select {
+  cursor: pointer;
+}
+
+/* Touch-optimized smooth scrolling utilities */
+.touch-pan-x {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.touch-pan-y {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area support for iOS notches */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}

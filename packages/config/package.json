@@ -1,0 +1,10 @@
+{
+  "name": "@nuts/config",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./eslint-preset.js",
+  "files": [
+    "eslint-preset.js",
+    "prettier-preset.js"
+  ]
+}

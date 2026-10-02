@@ -1,0 +1,1291 @@
+// vendors.service.ts
+
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Prisma, ROLE } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { createHmac, randomBytes } from 'crypto';
+import type { StringValue } from 'ms';
+
+import { AuthTokens } from 'src/modules/auth/cookies/auth-cookie.service';
+import { OtpService } from 'src/modules/auth/otp/otp.service';
+import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
+import { EmailService } from 'src/modules/infrastructure/mail/email.service';
+import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { resolveCategoryHierarchy } from 'src/modules/products/products.service';
+import { AccountLockService } from 'src/modules/security/services/account-lock.service';
+import {
+  AuditLogService,
+  toAuditPayload,
+  type AuditChanges,
+} from 'src/modules/shared/audit-log/audit-log.service';
+import {
+  BCRYPT_SALT_ROUNDS,
+  DUMMY_PASSWORD_HASH,
+} from 'src/modules/shared/constants/bcrypt.constants';
+import {
+  VENDOR_STORE,
+  VENDOR_STORE_PRODUCTS,
+  VENDOR_STORE_TTL,
+} from 'src/modules/shared/constants/cache.constant';
+import { generateSlug } from 'src/modules/shared/utils/slug.util';
+
+import { CreateVendorDto } from './dto/create-vendor.dto';
+import { UpdateVendorDto, VendorLoginDto } from './dto/update-vendor.dto';
+import { VendorReactivateDto } from './dto/vendor-reactivate.dto';
+import { VendorResetPasswordDto } from './dto/vendor-reset-password.dto';
+import { VendorProfileDto } from './dto/vendor-response.dto';
+import { VendorStatusResponseDto } from './dto/vendor-status-response.dto';
+
+const vendorSelect = {
+  id: true,
+  email: true,
+  storeName: true,
+  storeSlug: true,
+  storeDescription: true,
+  businessPhone: true,
+  businessEmail: true,
+  storeLogoUrl: true,
+  storeLogoAltText: true,
+  isVerified: true,
+  isActive: true,
+  isApproved: true,
+  firstName: true,
+  lastName: true,
+  phone: true,
+  tokenVersion: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+type VendorSelectPayload = Prisma.VendorGetPayload<{
+  select: typeof vendorSelect;
+}>;
+
+const storeProductSelect = {
+  id: true,
+  name: true,
+  slug: true,
+  price: true,
+  stock: true,
+  hasVariants: true,
+  categoryId: true,
+  createdAt: true,
+  images: {
+    where: {
+      isPrimary: true,
+    },
+    take: 1,
+    select: {
+      url: true,
+    },
+  },
+  variants: {
+    where: {
+      isDeleted: false,
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+    select: {
+      id: true,
+      options: true,
+      stock: true,
+      isActive: true,
+    },
+  },
+  category: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      parentId: true,
+      path: true,
+    },
+  },
+} as const;
+
+export interface VendorSession {
+  profile: VendorProfileDto;
+  tokens: AuthTokens;
+}
+
+@Injectable()
+export class VendorsService {
+  private readonly logger = new Logger(VendorsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly otpService: OtpService,
+    private readonly emailService: EmailService,
+    private readonly auditLog: AuditLogService,
+    private readonly cacheService: CacheService,
+    private readonly accountLockService: AccountLockService,
+  ) {}
+
+  async register(
+    dto: CreateVendorDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorSession> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const slugSource = dto.storeSlug?.trim() || dto.storeName.trim();
+    const storeSlug = generateSlug(slugSource);
+
+    if (!storeSlug) {
+      throw new BadRequestException('Invalid store slug or store name');
+    }
+
+    /*
+     * This is an early friendly validation only.
+     *
+     * The database unique constraints remain the final protection against
+     * concurrent registrations using the same email/store slug.
+     */
+    const existingVendor = await this.prisma.vendor.findFirst({
+      where: {
+        OR: [
+          {
+            email: normalizedEmail,
+          },
+          {
+            storeSlug,
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingVendor) {
+      throw new ConflictException('Email or store slug already in use');
+    }
+
+    await this.otpService.verifyOtp(normalizedEmail, dto.otpCode);
+
+    const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
+
+    /*
+     * The wallet is created as part of the same database operation.
+     *
+     * This prevents a vendor from being successfully created without the
+     * wallet that the rest of the vendor system expects to exist.
+     */
+    let vendor: VendorSelectPayload;
+
+    try {
+      vendor = await this.prisma.vendor.create({
+        data: {
+          email: normalizedEmail,
+          password: hashedPassword,
+          storeName: dto.storeName.trim(),
+          storeSlug,
+          storeDescription: dto.storeDescription?.trim() ?? '',
+          businessPhone: dto.businessPhone,
+          businessEmail: dto.businessEmail?.trim() ?? '',
+          firstName: dto.firstName?.trim() ?? '',
+          lastName: dto.lastName?.trim() ?? '',
+          phone: dto.phone,
+          vendorWallet: {
+            create: {},
+          },
+        },
+        select: vendorSelect,
+      });
+    } catch (error) {
+      /*
+       * A unique constraint can still fail after the pre-check when two
+       * registrations race each other. Convert that database error into the
+       * expected API response.
+       */
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Email or store slug already in use');
+      }
+
+      throw error;
+    }
+
+    /*
+     * Audit/email are intentionally not part of the database transaction.
+     * External side effects should not hold a database transaction open.
+     */
+    void this.auditLog
+      .log({
+        action: 'VENDOR_REGISTER',
+        entity: 'Vendor',
+        entityId: vendor.id,
+        payload: {
+          email: vendor.email,
+          storeName: vendor.storeName,
+          storeSlug: vendor.storeSlug,
+        },
+        ipAddress,
+        userAgent,
+      })
+      .catch((error) => {
+        this.logger.warn('Failed to log vendor registration audit', error);
+      });
+
+    void this.emailService
+      .sendWelcomeEmail(vendor.email, vendor.firstName ?? '')
+      .catch((error) => {
+        this.logger.error('Failed to send vendor welcome email', error);
+      });
+
+    const tokens = await this.generateTokens(
+      vendor.id,
+      vendor.email,
+      vendor.tokenVersion,
+    );
+
+    await this.storeRefreshToken(
+      vendor.id,
+      tokens.refreshToken,
+      tokens.refreshId,
+    );
+
+    return {
+      profile: this.toVendorProfile(vendor),
+      tokens,
+    };
+  }
+
+  async login(
+    dto: VendorLoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorSession> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const identifier = `email:${normalizedEmail}`;
+
+    const loginSelect = {
+      ...vendorSelect,
+      password: true,
+    } as const;
+
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        email: normalizedEmail,
+      },
+      select: loginSelect,
+    });
+
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      vendor?.password ?? DUMMY_PASSWORD_HASH,
+    );
+
+    if (!vendor || !passwordMatches) {
+      /*
+       * Security-sensitive logging/lock failures should not prevent the
+       * authentication response from being returned.
+       */
+      await Promise.allSettled([
+        this.accountLockService.recordFailedAttempt(identifier),
+        this.auditLog.log({
+          action: 'VENDOR_LOGIN_FAILED',
+          entity: 'Vendor',
+          entityId: vendor?.id,
+          payload: { credentialType: 'email' },
+          ipAddress,
+          userAgent,
+        }),
+      ]);
+
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!vendor.isActive) {
+      throw new UnauthorizedException('Vendor account is deactivated');
+    }
+
+    if (!vendor.isApproved) {
+      throw new UnauthorizedException('Vendor account is not approved yet');
+    }
+
+    void this.accountLockService.resetAttempts(identifier).catch((error) => {
+      this.logger.warn('Failed to reset vendor login attempts', error);
+    });
+
+    /*
+     * Password-cost upgrades happen asynchronously so an old hash does not
+     * add another expensive bcrypt operation to the login request.
+     */
+    const hashCost = Number(vendor.password.split('$')[2]);
+
+    if (Number.isFinite(hashCost) && hashCost < BCRYPT_SALT_ROUNDS) {
+      void bcrypt
+        .hash(dto.password, BCRYPT_SALT_ROUNDS)
+        .then((upgradedHash) =>
+          this.prisma.vendor.update({
+            where: {
+              id: vendor.id,
+            },
+            data: {
+              password: upgradedHash,
+            },
+          }),
+        )
+        .catch((error) => {
+          this.logger.warn(
+            'Failed to upgrade vendor password hash cost',
+            error,
+          );
+        });
+    }
+
+    const tokens = await this.generateTokens(
+      vendor.id,
+      vendor.email,
+      vendor.tokenVersion,
+    );
+
+    await this.storeRefreshToken(
+      vendor.id,
+      tokens.refreshToken,
+      tokens.refreshId,
+    );
+
+    void this.auditLog
+      .log({
+        action: 'VENDOR_LOGIN',
+        entity: 'Vendor',
+        entityId: vendor.id,
+        payload: { role: 'VENDOR' },
+        ipAddress,
+        userAgent,
+      })
+      .catch((error) => {
+        this.logger.warn('Failed to write vendor login audit log', error);
+      });
+
+    return {
+      profile: this.toVendorProfile(vendor),
+      tokens,
+    };
+  }
+
+  async getProfile(vendorId: string): Promise<VendorProfileDto> {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        id: vendorId,
+      },
+      select: vendorSelect,
+    });
+
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    return this.toVendorProfile(vendor);
+  }
+
+  async updateProfile(
+    vendorId: string,
+    dto: UpdateVendorDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorProfileDto> {
+    const vendor = await this.getVendorOrThrow(vendorId);
+
+    const data: Prisma.VendorUpdateInput = {};
+
+    /*
+     * Only send fields that are actually present in the DTO.
+     * This prevents undefined values from being unnecessarily included in
+     * Prisma update payloads and makes the audit diff accurate.
+     */
+    if (dto.storeDescription !== undefined) {
+      data.storeDescription = dto.storeDescription;
+    }
+
+    if (dto.businessPhone !== undefined) {
+      data.businessPhone = dto.businessPhone;
+    }
+
+    if (dto.businessEmail !== undefined) {
+      data.businessEmail = dto.businessEmail;
+    }
+
+    if (dto.firstName !== undefined) {
+      data.firstName = dto.firstName;
+    }
+
+    if (dto.lastName !== undefined) {
+      data.lastName = dto.lastName;
+    }
+
+    if (dto.phone !== undefined) {
+      data.phone = dto.phone;
+    }
+
+    if (dto.storeLogoUrl !== undefined) {
+      data.storeLogoUrl = dto.storeLogoUrl;
+    }
+
+    if (
+      dto.storeName !== undefined &&
+      dto.storeName.trim() !== vendor.storeName
+    ) {
+      const storeName = dto.storeName.trim();
+      const storeSlug = generateSlug(storeName);
+
+      if (!storeSlug) {
+        throw new BadRequestException('Invalid store name');
+      }
+
+      /*
+       * The uniqueness check is still only a friendly pre-check.
+       * The unique DB constraint handles concurrent updates.
+       */
+      const existingSlug = await this.prisma.vendor.findFirst({
+        where: {
+          storeSlug,
+          id: {
+            not: vendorId,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (existingSlug) {
+        throw new ConflictException(
+          'Store slug generated from storeName is already in use',
+        );
+      }
+
+      data.storeName = storeName;
+      data.storeSlug = storeSlug;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return this.toVendorProfile(
+        await this.prisma.vendor.findUniqueOrThrow({
+          where: {
+            id: vendorId,
+          },
+          select: vendorSelect,
+        }),
+      );
+    }
+
+    let updated: VendorSelectPayload;
+
+    try {
+      updated = await this.prisma.vendor.update({
+        where: {
+          id: vendorId,
+        },
+        data,
+        select: vendorSelect,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Store slug is already in use');
+      }
+
+      throw error;
+    }
+
+    const changedFields: AuditChanges = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value === undefined) {
+        continue;
+      }
+
+      const oldValue = vendor[key as keyof typeof vendor];
+
+      if (oldValue !== value) {
+        changedFields[key] = {
+          old: oldValue ?? null,
+          new: JSON.parse(JSON.stringify(value)) as AuditChanges[string]['new'],
+        };
+      }
+    }
+
+    if (Object.keys(changedFields).length > 0) {
+      await this.auditLog.log({
+        action: 'VENDOR_UPDATE_PROFILE',
+        entity: 'Vendor',
+        entityId: vendorId,
+        payload: toAuditPayload({
+          changes: changedFields,
+        }),
+        ipAddress,
+        userAgent,
+      });
+    }
+
+    /*
+     * Store slug can change during the update.
+     * Invalidate both the old and new store cache keys so neither version
+     * remains stale.
+     */
+    const cacheSlugs = new Set([vendor.storeSlug, updated.storeSlug]);
+
+    await Promise.all([
+      ...[...cacheSlugs].map((slug) =>
+        this.cacheService.del(VENDOR_STORE(slug)),
+      ),
+      ...[...cacheSlugs].map((slug) =>
+        this.cacheService.del(VENDOR_STORE_PRODUCTS(slug)),
+      ),
+    ]);
+
+    return this.toVendorProfile(updated);
+  }
+
+  async deactivateProfile(
+    vendorId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorStatusResponseDto> {
+    await this.getVendorOrThrow(vendorId);
+
+    const updated = await this.prisma.vendor.update({
+      where: {
+        id: vendorId,
+      },
+      data: {
+        isActive: false,
+        deactivatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        isActive: true,
+        isApproved: true,
+        isVerified: true,
+        updatedAt: true,
+        email: true,
+        storeName: true,
+        storeSlug: true,
+      },
+    });
+
+    await Promise.all([
+      this.auditLog.log({
+        action: 'VENDOR_SELF_DEACTIVATE',
+        entity: 'Vendor',
+        entityId: vendorId,
+        payload: {
+          email: updated.email,
+          storeName: updated.storeName,
+        },
+        ipAddress,
+        userAgent,
+      }),
+      this.cacheService.del(VENDOR_STORE(updated.storeSlug)),
+      this.cacheService.del(VENDOR_STORE_PRODUCTS(updated.storeSlug)),
+    ]);
+
+    return {
+      id: updated.id,
+      isActive: updated.isActive,
+      isApproved: updated.isApproved,
+      isVerified: updated.isVerified,
+      updatedAt: updated.updatedAt,
+    };
+  }
+
+  async reactivate(
+    dto: VendorReactivateDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorStatusResponseDto> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        email: normalizedEmail,
+      },
+      select: {
+        id: true,
+        password: true,
+        isActive: true,
+        storeName: true,
+        storeSlug: true,
+        isApproved: true,
+      },
+    });
+
+    if (!vendor) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (vendor.isActive) {
+      throw new BadRequestException('Account is already active');
+    }
+
+    const isPasswordValid = await bcrypt.compare(dto.password, vendor.password);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const updated = await this.prisma.vendor.update({
+      where: {
+        id: vendor.id,
+      },
+      data: {
+        isActive: true,
+        deactivatedAt: null,
+        deactivatedReason: null,
+      },
+      select: {
+        id: true,
+        isActive: true,
+        isApproved: true,
+        isVerified: true,
+        updatedAt: true,
+        email: true,
+        storeName: true,
+        storeSlug: true,
+      },
+    });
+
+    await Promise.all([
+      this.auditLog.log({
+        action: 'VENDOR_SELF_REACTIVATE',
+        entity: 'Vendor',
+        entityId: vendor.id,
+        payload: {
+          email: updated.email,
+          storeName: updated.storeName,
+        },
+        ipAddress,
+        userAgent,
+      }),
+      this.cacheService.del(VENDOR_STORE(updated.storeSlug)),
+      this.cacheService.del(VENDOR_STORE_PRODUCTS(updated.storeSlug)),
+    ]);
+
+    return {
+      id: updated.id,
+      isActive: updated.isActive,
+      isApproved: updated.isApproved,
+      isVerified: updated.isVerified,
+      updatedAt: updated.updatedAt,
+    };
+  }
+
+  async deleteProfile(
+    vendorId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    let vendor: {
+      id: string;
+      email: string;
+      storeName: string;
+      storeSlug: string;
+    };
+
+    try {
+      vendor = await this.prisma.vendor.delete({
+        where: {
+          id: vendorId,
+        },
+        select: {
+          id: true,
+          email: true,
+          storeName: true,
+          storeSlug: true,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new NotFoundException('Vendor not found');
+      }
+
+      throw error;
+    }
+
+    await Promise.all([
+      this.auditLog.log({
+        action: 'VENDOR_SELF_DELETE',
+        entity: 'Vendor',
+        entityId: vendorId,
+        payload: {
+          email: vendor.email,
+          storeName: vendor.storeName,
+        },
+        ipAddress,
+        userAgent,
+      }),
+      this.cacheService.del(VENDOR_STORE(vendor.storeSlug)),
+      this.cacheService.del(VENDOR_STORE_PRODUCTS(vendor.storeSlug)),
+    ]);
+  }
+
+  async findAllPublicVendors(
+    categoryId?: string,
+    search?: string,
+    requestedLimit?: number,
+  ): Promise<VendorProfileDto[]> {
+    const trimmedSearch = search?.trim();
+    const limit =
+      Number.isFinite(requestedLimit) && requestedLimit! > 0
+        ? Math.min(50, Math.floor(requestedLimit!))
+        : undefined;
+
+    const cacheKey = `vendors:public:${trimmedSearch ? encodeURIComponent(trimmedSearch.toLowerCase()) : 'all'}:${categoryId ?? 'all'}:${limit ?? 'all'}`;
+
+    return this.cacheService.wrap(cacheKey, VENDOR_STORE_TTL, async () => {
+      let targetCategoryIds: string[] | undefined;
+      if (categoryId) {
+        const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+            WITH RECURSIVE category_descendants AS (
+              SELECT id FROM "categories" WHERE id = ${categoryId}
+              UNION ALL
+              SELECT c.id FROM "categories" c
+              INNER JOIN category_descendants cd ON c."parentId" = cd.id
+            )
+            SELECT id FROM category_descendants;
+          `;
+        targetCategoryIds = rows.map((r) => r.id);
+        // An unknown category must produce no matches instead of silently
+        // dropping the category predicate and returning every vendor.
+        if (targetCategoryIds.length === 0) return [];
+      }
+
+      const where: Prisma.VendorWhereInput = {
+        isActive: true,
+        isApproved: true,
+        ...(targetCategoryIds && targetCategoryIds.length > 0
+          ? {
+              products: {
+                some: {
+                  categoryId: { in: targetCategoryIds },
+                  isDeleted: false,
+                  isActive: true,
+                },
+              },
+            }
+          : {}),
+        ...(trimmedSearch
+          ? {
+              OR: [
+                {
+                  storeName: {
+                    contains: trimmedSearch,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  storeDescription: {
+                    contains: trimmedSearch,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            }
+          : {}),
+      };
+
+      const vendors = await this.prisma.vendor.findMany({
+        where,
+        select: {
+          ...vendorSelect,
+          products: {
+            where: { isDeleted: false, isActive: true },
+            select: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  parent: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                      parent: {
+                        select: {
+                          id: true,
+                          name: true,
+                          slug: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        ...(limit ? { take: limit } : {}),
+        orderBy: {
+          storeName: 'asc',
+        },
+      });
+
+      return vendors.map((vendor) => {
+        const catMap = new Map<
+          string,
+          { id: string; name: string; slug: string }
+        >();
+        for (const p of vendor.products || []) {
+          if (p.category) {
+            const root =
+              p.category.parent?.parent ?? p.category.parent ?? p.category;
+            if (root && !catMap.has(root.id)) {
+              catMap.set(root.id, {
+                id: root.id,
+                name: root.name,
+                slug: root.slug,
+              });
+            }
+          }
+        }
+        return this.toVendorProfile(vendor, Array.from(catMap.values()));
+      });
+    });
+  }
+
+  async findStoreBySlug(storeSlug: string): Promise<VendorProfileDto> {
+    return this.cacheService.wrap(
+      VENDOR_STORE(storeSlug),
+      VENDOR_STORE_TTL,
+      async () => {
+        const vendor = await this.prisma.vendor.findUnique({
+          where: {
+            storeSlug,
+          },
+          select: {
+            ...vendorSelect,
+            products: {
+              where: {
+                isDeleted: false,
+                isActive: true,
+              },
+              take: 100,
+              select: {
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    parent: {
+                      select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                        parent: {
+                          select: {
+                            id: true,
+                            name: true,
+                            slug: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (!vendor || !vendor.isActive || !vendor.isApproved) {
+          throw new NotFoundException('Store not found');
+        }
+
+        const catMap = new Map<
+          string,
+          { id: string; name: string; slug: string }
+        >();
+        for (const p of vendor.products || []) {
+          if (p.category) {
+            const root =
+              p.category.parent?.parent ?? p.category.parent ?? p.category;
+            if (root && !catMap.has(root.id)) {
+              catMap.set(root.id, {
+                id: root.id,
+                name: root.name,
+                slug: root.slug,
+              });
+            }
+          }
+        }
+
+        return this.toVendorProfile(vendor, Array.from(catMap.values()));
+      },
+    );
+  }
+
+  async findStoreProducts(storeSlug: string): Promise<{
+    store: VendorProfileDto;
+    products: any[];
+  }> {
+    return this.cacheService.wrap(
+      VENDOR_STORE_PRODUCTS(storeSlug),
+      VENDOR_STORE_TTL,
+      async () => {
+        const vendor = await this.prisma.vendor.findUnique({
+          where: {
+            storeSlug,
+          },
+          select: {
+            ...vendorSelect,
+            products: {
+              where: {
+                isDeleted: false,
+                isActive: true,
+              },
+              take: 100,
+              select: storeProductSelect,
+              orderBy: {
+                createdAt: 'desc',
+              },
+            },
+          },
+        });
+
+        if (!vendor || !vendor.isActive || !vendor.isApproved) {
+          throw new NotFoundException('Store not found');
+        }
+
+        const { products, ...storeData } = vendor;
+
+        const catMap = new Map<
+          string,
+          { id: string; name: string; slug: string }
+        >();
+        const formattedProducts = products.map((p) => {
+          const hierarchy = resolveCategoryHierarchy(p.category);
+          if (hierarchy.category && hierarchy.category.id) {
+            catMap.set(hierarchy.category.id, hierarchy.category);
+          }
+          return {
+            ...p,
+            category: hierarchy.category,
+            parentSubcategory: hierarchy.parentSubcategory ?? null,
+            subcategory: hierarchy.subcategory ?? null,
+            leafCategory: p.category
+              ? {
+                  id: p.category.id,
+                  name: p.category.name,
+                  slug: p.category.slug,
+                }
+              : null,
+          };
+        });
+
+        return {
+          store: this.toVendorProfile(storeData, Array.from(catMap.values())),
+          products: formattedProducts,
+        };
+      },
+    );
+  }
+
+  private async getVendorOrThrow(vendorId: string) {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        id: vendorId,
+      },
+      select: {
+        id: true,
+        storeName: true,
+        email: true,
+        storeSlug: true,
+        isActive: true,
+      },
+    });
+
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    return vendor;
+  }
+
+  private toVendorProfile(
+    vendor: VendorSelectPayload,
+    categories?: Array<{ id: string; name: string; slug: string }>,
+  ): VendorProfileDto {
+    return {
+      id: vendor.id,
+      email: vendor.email,
+      storeName: vendor.storeName,
+      storeSlug: vendor.storeSlug,
+      storeDescription: vendor.storeDescription,
+      businessPhone: vendor.businessPhone,
+      businessEmail: vendor.businessEmail,
+      storeLogoUrl: vendor.storeLogoUrl,
+      storeLogoAltText: vendor.storeLogoAltText,
+      firstName: vendor.firstName,
+      lastName: vendor.lastName,
+      phone: vendor.phone,
+      isVerified: vendor.isVerified,
+      isActive: vendor.isActive,
+      isApproved: vendor.isApproved,
+      createdAt: vendor.createdAt,
+      updatedAt: vendor.updatedAt,
+      ...(categories ? { categories } : {}),
+    };
+  }
+
+  async resetPassword(
+    dto: VendorResetPasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        email: normalizedEmail,
+      },
+      select: {
+        id: true,
+        firstName: true,
+      },
+    });
+
+    if (!vendor) {
+      throw new BadRequestException('Invalid email or reset code');
+    }
+
+    await this.otpService.verifyOtp(
+      normalizedEmail,
+      dto.otpCode,
+      'password-reset',
+    );
+
+    const hashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
+
+    await this.prisma.vendor.update({
+      where: {
+        id: vendor.id,
+      },
+      data: {
+        password: hashedPassword,
+        refreshToken: null,
+        refreshTokenId: null,
+      },
+    });
+
+    await this.auditLog.log({
+      action: 'VENDOR_RESET_PASSWORD',
+      entity: 'Vendor',
+      entityId: vendor.id,
+      ipAddress,
+      userAgent,
+    });
+
+    void this.emailService
+      .sendPasswordResetSuccessEmail(dto.email, vendor.firstName ?? '')
+      .catch((error) => {
+        this.logger.error(
+          'Failed to send password reset confirmation email',
+          error,
+        );
+      });
+  }
+
+  async logout(
+    vendorId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.prisma.vendor.update({
+      where: {
+        id: vendorId,
+      },
+      data: {
+        refreshToken: null,
+        refreshTokenId: null,
+      },
+    });
+
+    await this.auditLog.log({
+      action: 'VENDOR_LOGOUT',
+      entity: 'Vendor',
+      entityId: vendorId,
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  async refresh(
+    vendorId: string,
+    expectedRefreshId: string,
+  ): Promise<VendorSession> {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        id: vendorId,
+      },
+      select: vendorSelect,
+    });
+
+    if (!vendor) {
+      throw new UnauthorizedException('Vendor not found');
+    }
+
+    if (!vendor.isActive) {
+      throw new UnauthorizedException('Vendor account is deactivated');
+    }
+
+    if (!vendor.isApproved) {
+      throw new UnauthorizedException('Vendor account is not approved yet');
+    }
+
+    const tokens = await this.generateTokens(
+      vendor.id,
+      vendor.email,
+      vendor.tokenVersion,
+    );
+
+    await this.storeRefreshToken(
+      vendor.id,
+      tokens.refreshToken,
+      tokens.refreshId,
+      expectedRefreshId,
+    );
+
+    return {
+      profile: this.toVendorProfile(vendor),
+      tokens,
+    };
+  }
+
+  private async generateTokens(
+    vendorId: string,
+    email: string,
+    tokenVersion = 0,
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    refreshId: string;
+  }> {
+    const refreshId = randomBytes(16).toString('hex');
+
+    const accessSecret = this.configService.getOrThrow<string>('JWT_SECRET');
+    const refreshSecret =
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+    const accessExpiresIn = this.configService.getOrThrow<string>(
+      'JWT_ACCESS_EXPIRES_IN',
+    ) as StringValue;
+    const refreshExpiresIn = this.configService.get<string>(
+      'JWT_REFRESH_EXPIRES_IN',
+      '7d',
+    ) as StringValue;
+    const issuer = this.configService.getOrThrow<string>('JWT_ISSUER');
+    const accessAudience = this.configService.getOrThrow<string>(
+      'JWT_ACCESS_AUDIENCE',
+    );
+    const refreshAudience = this.configService.getOrThrow<string>(
+      'JWT_REFRESH_AUDIENCE',
+    );
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(
+        {
+          sub: vendorId,
+          email,
+          role: ROLE.VENDOR,
+          type: 'vendor',
+          tokenVersion,
+        },
+        {
+          secret: accessSecret,
+          expiresIn: accessExpiresIn,
+          issuer,
+          audience: accessAudience,
+        },
+      ),
+      this.jwtService.signAsync(
+        {
+          sub: vendorId,
+          email,
+          role: ROLE.VENDOR,
+          type: 'vendor',
+          refreshId,
+        },
+        {
+          secret: refreshSecret,
+          expiresIn: refreshExpiresIn,
+          issuer,
+          audience: refreshAudience,
+        },
+      ),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+      refreshId,
+    };
+  }
+
+  private async storeRefreshToken(
+    vendorId: string,
+    _refreshToken: string,
+    refreshId: string,
+    expectedRefreshId?: string,
+  ): Promise<void> {
+    const refreshSecret =
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+
+    /*
+     * High-entropy random IDs (128 bits) are hashed using HMAC-SHA256 (0.005ms)
+     * instead of CPU-intensive password stretching (bcrypt, 75ms).
+     */
+    const hashedRefreshId = createHmac('sha256', refreshSecret)
+      .update(refreshId)
+      .digest('hex');
+
+    if (expectedRefreshId) {
+      const result = await this.prisma.vendor.updateMany({
+        where: {
+          id: vendorId,
+          refreshTokenId: expectedRefreshId,
+          isActive: true,
+          isApproved: true,
+        },
+        data: {
+          refreshToken: hashedRefreshId,
+          refreshTokenId: refreshId,
+        },
+      });
+      if (result.count !== 1) {
+        throw new UnauthorizedException(
+          'Refresh session has already been rotated',
+        );
+      }
+      return;
+    }
+
+    await this.prisma.vendor.update({
+      where: { id: vendorId },
+      data: { refreshToken: hashedRefreshId, refreshTokenId: refreshId },
+    });
+  }
+}
