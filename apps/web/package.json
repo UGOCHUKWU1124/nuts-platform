@@ -44,5 +44,9 @@
   },
   "allowScripts": {
     "unrs-resolver@1.12.2": true
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-x64-gnu": "16.3.5",
+    "lightningcss-linux-x64-gnu": "1.32.0"
   }
 }
