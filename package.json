@@ -1,0 +1,42 @@
+{
+  "name": "nuts-commerce",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NUTS Commerce — Multi-vendor enterprise e-commerce platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:down": "docker compose --profile dev down",
+    "dev:logs": "docker compose --profile dev logs -f",
+    "dev:logs:api": "docker compose --profile dev logs -f api",
+    "dev:logs:web": "docker compose --profile dev logs -f client",
+    "prod": "docker compose --profile prod up -d --build",
+    "prod:down": "docker compose --profile prod down",
+    "prod:logs": "docker compose --profile prod logs -f",
+    "build:api": "npm run --prefix apps/api build",
+    "build:web": "npm run --prefix apps/web build",
+    "typecheck:api": "npm run --prefix apps/api typecheck",
+    "typecheck:web": "npm run --prefix apps/web typecheck",
+    "typecheck": "npm run typecheck:api && npm run typecheck:web",
+    "db:generate": "npm run --prefix apps/api db:generate",
+    "migrate:deploy": "npm run --prefix apps/api migrate:deploy",
+    "migrate:status": "npm run --prefix apps/api migrate:status",
+    "migrate:dev": "npm run --prefix apps/api migrate:dev",
+    "build": "docker compose build",
+    "dev:docker": "docker compose --profile dev up --build",
+    "dev:api": "npm run --prefix apps/api dev",
+    "dev:web": "npm run --prefix apps/web dev",
+    "prod:docker": "docker compose --profile prod up -d --build"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "turbo": "^2.11.5"
+  },
+  "packageManager": "npm@11.17.0",
+  "prisma": {
+    "schema": "packages/database/schema.prisma"
+  }
+}

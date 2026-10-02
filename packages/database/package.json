@@ -1,0 +1,24 @@
+{
+  "name": "@nuts/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "prisma generate --schema=./schema.prisma",
+    "db:push": "prisma db push --schema=./schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=./schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "prisma": "^7.8.0",
+    "typescript": "^5.9.3"
+  },
+  "prisma": {
+    "schema": "schema.prisma"
+  }
+}

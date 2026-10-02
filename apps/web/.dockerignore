@@ -1,0 +1,16 @@
+node_modules
+.next
+.env
+.env.*
+!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.git
+.gitignore
+.vscode
+.idea
+.dockerignore
+Dockerfile
+tsconfig.tsbuildinfo
+*.log

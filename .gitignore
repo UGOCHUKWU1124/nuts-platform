@@ -1,0 +1,66 @@
+# Dependencies and package manager caches
+**/node_modules/
+**/.pnp.*
+**/.yarn/cache/
+**/.npm/
+
+# Build output and framework caches
+**/dist/
+**/build/
+**/coverage/
+**/.nyc_output/
+**/.next/
+**/out/
+**/.turbo/
+**/.cache/
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# Local environment and secrets (keep example templates in Git)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and runtime files
+**/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+*.pid
+*.pid.lock
+*.seed
+pids/
+
+# Local temporary files
+**/.temp/
+**/.tmp/
+docker-compose.override.yml
+
+# Generated endpoint audit report
+/controller-audit.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors and local workspace settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.launch
+.project
+.classpath
+.settings/
+.c9/
+
+# Certificates and private keys
+*.pem
+*.key

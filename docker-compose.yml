@@ -1,0 +1,363 @@
+# ==============================================================================
+# docker-compose.yml — Unified Stack (Dev + Prod via Profiles)
+# ==============================================================================
+# Dev:  docker compose --profile dev up --build
+# Prod: docker compose --profile prod up -d --build
+# Down: docker compose --profile dev down
+#
+# Environment:
+#   - All secrets loaded via env_file (NO ${VAR} interpolation for secrets)
+#   - Root .env only provides safe defaults for compose-level config
+# ==============================================================================
+
+# ── Shared environment anchors ───────────────────────────────────────────────
+x-api-env: &api-env
+  NODE_ENV: ${NODE_ENV:-development}
+  PORT: 3001
+
+x-client-env: &client-env
+  NODE_ENV: ${NODE_ENV:-development}
+  INTERNAL_API_URL: http://api:3001
+
+services:
+
+  # ── NestJS API (Development) ───────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+      target: dev
+    container_name: nuts_api
+    restart: unless-stopped
+    profiles: ["dev"]
+    ports:
+      - "${API_PORT:-3001}:3001"
+    env_file:
+      - ./apps/api/.env.development
+    environment:
+      <<: *api-env
+      NODE_ENV: development
+      SWAGGER_ENABLED: "true"
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/prisma.config.ts:/app/prisma.config.ts:ro
+    networks:
+      nuts_net:
+        aliases:
+          - api
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  # Apply schema changes once before starting any production API replica.
+  # A failed migration keeps api-prod blocked by service_completed_successfully.
+  api-migrate:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+      target: runner
+    image: nuts-api:latest
+    container_name: nuts_api_migrate
+    restart: "no"
+    profiles: ["prod"]
+    entrypoint: ["dumb-init", "./docker-migrate.sh"]
+    env_file:
+      - ./apps/api/.env.production
+    environment:
+      <<: *api-env
+      NODE_ENV: production
+    networks:
+      - nuts_net
+
+  # ── NestJS API (Production) ────────────────────────────────────────────────
+  api-prod:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+      target: runner
+    image: nuts-api:latest
+    container_name: nuts_api
+    restart: unless-stopped
+    profiles: ["prod"]
+    expose:
+      - "3001"
+    env_file:
+      - ./apps/api/.env.production
+    environment:
+      <<: *api-env
+      NODE_ENV: production
+      SWAGGER_ENABLED: "${SWAGGER_ENABLED:-false}"
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    networks:
+      nuts_net:
+        aliases:
+          - api
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ── Next.js Client (Development) ───────────────────────────────────────────
+  client:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+      target: dev
+    container_name: nuts_client
+    restart: unless-stopped
+    profiles: ["dev"]
+    ports:
+      - "${CLIENT_PORT:-5173}:3000"
+    env_file:
+      - ./apps/web/.env.development
+    environment:
+      <<: *client-env
+      NODE_ENV: development
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:${API_PORT:-3001}
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-3001}/api/v1
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/public:/app/public:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - nuts_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Next.js Client (Production) ────────────────────────────────────────────
+  client-prod:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+      target: runner
+      args:
+        INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:3001}
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:?Set NEXT_PUBLIC_BACKEND_URL to the public HTTPS site origin}
+        NEXT_PUBLIC_API_URL: /api/v1
+    image: nuts-client:latest
+    container_name: nuts_client
+    restart: unless-stopped
+    profiles: ["prod"]
+    expose:
+      - "3000"
+    env_file:
+      - ./apps/web/.env.production
+    environment:
+      <<: *client-env
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+    depends_on:
+      api-prod:
+        condition: service_healthy
+    networks:
+      - nuts_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ── Nginx Reverse Proxy (Production Only) ──────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nuts_nginx
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/templates:ro
+      - type: bind
+        source: ./nginx/certs/origin.pem
+        target: /etc/nginx/tls/origin.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./nginx/certs/origin-key.pem
+        target: /etc/nginx/tls/origin-key.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the production hostname}
+      NGINX_ENVSUBST_FILTER: ^PUBLIC_DOMAIN$
+    depends_on:
+      api-prod:
+        condition: service_healthy
+      client-prod:
+        condition: service_healthy
+    networks:
+      - nuts_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kfsS https://localhost/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  nuts_net:
+    name: nuts_network
+    driver: bridge
+
+# ==============================================================================
+# DOCKER COMMAND REFERENCE CHEAT SHEET
+# ==============================================================================
+#
+# ── 1. DEVELOPMENT WORKFLOW (--profile dev) ──────────────────────────────────
+# The 'dev' profile launches the NestJS API ('nuts_api') and Next.js Client
+# ('nuts_client') with local source directory bind-mounts, hot-reloading (Turbopack
+# & nest --watch), and direct port bindings (API: 3001, Client: 5173/3000).
+#
+# • Start dev stack in foreground (with real-time build and log output):
+#   docker compose --profile dev up --build
+#   (or: npm run dev)
+#
+# • Start dev stack in background (detached mode):
+#   docker compose --profile dev up -d --build
+#
+# • Stop and remove all dev containers and bridge network:
+#   docker compose --profile dev down
+#   (or: npm run dev:down)
+#
+# • Stop dev stack and destroy attached Docker volumes (clean slate):
+#   docker compose --profile dev down -v
+#
+# • Stream real-time logs from both API and Client:
+#   docker compose --profile dev logs -f
+#   (or: npm run dev:logs)
+#
+# • Stream logs specifically for the NestJS API container:
+#   docker compose --profile dev logs -f api
+#   (or: npm run dev:logs:api)
+#
+# • Stream logs specifically for the Next.js Client container:
+#   docker compose --profile dev logs -f client
+#   (or: npm run dev:logs:client)
+#
+#
+# ── 2. PRODUCTION WORKFLOW (--profile prod) ──────────────────────────────────
+# The 'prod' profile builds multi-stage minimal runtime images ('runner' target),
+# sets up resource limits (CPU/Memory cgroups), runs as unprivileged users
+# ('node' and 'nextjs'), uses 'dumb-init' for graceful PID 1 signal propagation,
+# automatically runs Prisma migrations in the entrypoint, and proxies traffic via Nginx.
+#
+# • Build production images and start in background (detached mode):
+#   docker compose --profile prod up -d --build
+#   (or: npm run prod)
+#
+# • Gracefully stop and remove all production containers (API, Client, Nginx):
+#   docker compose --profile prod down
+#   (or: npm run prod:down)
+#
+# • Stream real-time logs across all production services:
+#   docker compose --profile prod logs -f
+#   (or: npm run prod:logs)
+#
+# • Stream Nginx reverse-proxy access and rate-limiting logs:
+#   docker compose --profile prod logs -f nginx
+#
+# • Stream production API logs (including database migration entrypoint logs):
+#   docker compose --profile prod logs -f api-prod
+#
+# • Stream production Client standalone logs:
+#   docker compose --profile prod logs -f client-prod
+#
+#
+# ── 3. SELECTIVE SERVICE BUILDS ──────────────────────────────────────────────
+# Build or rebuild images without starting or changing the runtime container states.
+#
+# • Rebuild only the NestJS API image:
+#   docker compose build api
+#   (or: npm run build:api)
+#
+# • Rebuild only the Next.js Client image:
+#   docker compose build client
+#   (or: npm run build:client)
+#
+# • Rebuild all defined service images:
+#   docker compose build
+#   (or: npm run build)
+#
+# • Force complete rebuild ignoring Docker cache (bypasses stale cached layers):
+#   docker compose build --no-cache
+#
+#
+# ── 4. INTERACTIVE SHELL & DEBUGGING ─────────────────────────────────────────
+# Execute shell sessions directly inside live containers for troubleshooting.
+#
+# • Enter NestJS API container shell:
+#   docker exec -it nuts_api sh
+#   (Inspect /app, environment variables via 'env', or test network connectivity)
+#
+# • Enter Next.js Client container shell:
+#   docker exec -it nuts_client sh
+#
+# • Enter Nginx container shell:
+#   docker exec -it nuts_nginx sh
+#   (Test configuration via 'nginx -t', check /var/log/nginx/access.log)
+#
+#
+# ── 5. PRISMA & DATABASE OPERATIONS IN DOCKER ────────────────────────────────
+# Run Prisma schema operations directly through the containerized runtime.
+#
+# • Deploy pending database migrations:
+#   docker exec -it nuts_api prisma migrate deploy --schema=src/modules/infrastructure/prisma/schema.prisma
+#
+# • Check migration synchronization status:
+#   docker exec -it nuts_api prisma migrate status --schema=src/modules/infrastructure/prisma/schema.prisma
+#
+# • Re-generate Prisma Client inside the container:
+#   docker exec -it nuts_api prisma generate --schema=src/modules/infrastructure/prisma/schema.prisma
+#
+#
+# ── 6. MONITORING, DIAGNOSTICS & SYSTEM CLEANUP ──────────────────────────────
+#
+# • Check container status, uptime, port bindings, and healthcheck states:
+#   docker compose ps
+#
+# • Live resource utilization monitor (CPU, Memory % vs limits, Network I/O):
+#   docker stats
+#
+# • Hard clean reset (removes containers, networks, custom images, and volumes):
+#   docker compose --profile dev down --rmi local --volumes --remove-orphans
+#
+# • Prune unused dangling images, build caches, and stopped containers to free disk:
+#   docker system prune -f
+# ==============================================================================
+
+#docker exec nuts_api prisma generate --schema=src/modules/infrastructure/prisma/schema.prisma
+#docker restart nuts_client
+#docker logs --tail 25 nuts_client

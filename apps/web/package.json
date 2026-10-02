@@ -1,0 +1,53 @@
+{
+  "name": "@nuts/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development next dev -p 5173",
+    "build": "next build",
+    "start": "cross-env NODE_ENV=production next start -p 5173",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "start:staging": "cross-env NODE_ENV=staging next start -p 5173"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "@radix-ui/react-dialog": "^1.1.0",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@tanstack/react-query": "^5.102.8",
+    "axios": "^1.7.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.7.0",
+    "next": "^16.3.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7.53.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.2",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.102.8",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.5",
+    "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-x64-gnu": "16.3.5",
+    "lightningcss-linux-x64-gnu": "1.32.0",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.3"
+  }
+}
