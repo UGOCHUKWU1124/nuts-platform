@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { VariantCombinations } from 'src/modules/shared/dto/variant-combinations.dto';
+import { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 
 type OptionsShape =
   | { options: Prisma.JsonValue }
