@@ -174,21 +174,51 @@ export class CartService {
       subtotal,
     );
 
-    if (
-      discountCode.scope === 'VENDOR' &&
-      !discountCode.platformwide &&
-      discountCode.applicableProductIds.length > 0 &&
-      !response.cartItems.some((item) =>
-        discountCode.applicableProductIds.includes(item.productId),
-      )
-    ) {
-      throw new BadRequestException(
-        'This discount code does not apply to any products in your cart',
-      );
+    let eligibleSubtotal = subtotal;
+
+    if (discountCode.scope === 'VENDOR' && !discountCode.platformwide) {
+      if (discountCode.applicableProductIds.length > 0) {
+        const eligibleItems = response.cartItems.filter((item) =>
+          discountCode.applicableProductIds.includes(item.productId),
+        );
+
+        if (eligibleItems.length === 0) {
+          throw new BadRequestException(
+            'This discount code does not apply to any products in your cart',
+          );
+        }
+
+        eligibleSubtotal = new Prisma.Decimal(
+          eligibleItems.reduce(
+            (sum, item) => sum + item.price * item.quantity,
+            0,
+          ),
+        );
+      } else if (discountCode.vendorId) {
+        const eligibleItems = response.cartItems.filter(
+          (item) => item.product.vendor?.id === discountCode.vendorId,
+        );
+
+        if (eligibleItems.length === 0) {
+          throw new BadRequestException(
+            'This discount code does not apply to any products from this vendor in your cart',
+          );
+        }
+
+        eligibleSubtotal = new Prisma.Decimal(
+          eligibleItems.reduce(
+            (sum, item) => sum + item.price * item.quantity,
+            0,
+          ),
+        );
+      }
     }
 
     const discountAmount = Number(
-      this.discountCodeService.calculateDiscount(discountCode, subtotal),
+      this.discountCodeService.calculateDiscount(
+        discountCode,
+        eligibleSubtotal,
+      ),
     );
 
     const deliveryCharge = response.cart.deliveryCharge;
@@ -653,23 +683,33 @@ export class CartService {
         userId,
         checkedOut: false,
       },
+      orderBy: { createdAt: 'desc' },
       include: CART_INCLUDE,
     });
 
     if (!cart) {
-      /*
-       * The transaction isolation protects this creation when this method
-       * is called as part of a serializable cart mutation.
-       *
-       * For the strongest guarantee, the database should also enforce
-       * one active cart per user.
-       */
-      cart = await prisma.cart.create({
-        data: {
-          userId,
-        },
-        include: CART_INCLUDE,
-      });
+      try {
+        cart = await prisma.cart.create({
+          data: {
+            userId,
+          },
+          include: CART_INCLUDE,
+        });
+      } catch (error) {
+        // Handle concurrent cart creation race: fallback to querying the cart that was just created
+        cart = await prisma.cart.findFirst({
+          where: {
+            userId,
+            checkedOut: false,
+          },
+          orderBy: { createdAt: 'desc' },
+          include: CART_INCLUDE,
+        });
+
+        if (!cart) {
+          throw error;
+        }
+      }
     }
 
     return cart;
