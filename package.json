@@ -38,5 +38,13 @@
   "packageManager": "npm@11.17.0",
   "prisma": {
     "schema": "packages/database/schema.prisma"
+  },
+  "allowScripts": {
+    "prisma": true,
+    "@prisma/engines": true,
+    "bcrypt": true,
+    "@swc/core": true,
+    "unrs-resolver": true,
+    "@sentry/node-cpu-profiler": true
   }
 }

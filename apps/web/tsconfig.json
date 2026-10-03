@@ -1,57 +1,25 @@
 {
+  "extends": "../../tsconfig.web.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "ES2022"
-    ],
     "allowJs": false,
-    "skipLibCheck": true,
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "noImplicitReturns": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "react-jsx",
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "plugins": [{"name": "next"}],
     "paths": {
+      "@/*": ["./src/*"],
       "@/components/domain/*": ["./src/components/domain/*"],
       "@/components/feedback/*": ["./src/components/feedback/*"],
       "@/components/layout/*": ["./src/components/layout/*"],
       "@/components/ui/*": ["./src/components/ui/*"],
-      "@/components/*": [
-        "./src/components/domain/*",
-        "./src/components/*"
-      ],
-      "@/component/*": [
-        "./src/components/domain/*",
-        "./src/components/*"
-      ],
-      "@/hooks/*": [
-        "./src/hooks/*"
-      ],
-      "@/hook/*": [
-        "./src/hooks/*"
-      ],
-      "@/api/modules/*": [
-        "./src/api/modules/*"
-      ],
-      "@/api/*": [
-        "./src/api/modules/*",
-        "./src/api/*"
-      ],
-      "@/*": [
-        "./src/*"
-      ]
+      "@/components/*": ["./src/components/*", "./src/components/domain/*"],
+      "@/component/*": ["./src/components/domain/*", "./src/components/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/hook/*": ["./src/hooks/*"],
+      "@/api/modules/*": ["./src/api/modules/*"],
+      "@/api/*": ["./src/api/*", "./src/api/modules/*"]
     }
   },
   "include": [
@@ -61,7 +29,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

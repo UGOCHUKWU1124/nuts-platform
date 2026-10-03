@@ -1,21 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.node.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "target": "ES2022",
-    "typeRoots": [
-      "./node_modules/@types",
-      "../../node_modules/@types",
-      "../../apps/api/node_modules/@types"
-    ],
-    "paths": {
-      "@prisma/client": ["./node_modules/@prisma/client"],
-      "bcrypt": ["../../apps/api/node_modules/bcrypt", "./node_modules/bcrypt"],
-      "cloudinary": ["../../apps/api/node_modules/cloudinary"]
-    },
-    "skipLibCheck": true
+    "rootDir": "./src",
+    "outDir": "./dist"
   },
   "include": ["src/**/*"]
 }
