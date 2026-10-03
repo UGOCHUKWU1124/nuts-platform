@@ -139,8 +139,14 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
             <div className="lg:col-span-8 space-y-4">
               {items.map((item) => {
                 const itemTotal = Number(item.price) * item.quantity;
-                const isItemUpdating = updateItem.isPending && updateItem.variables?.productId === item.productId;
-                const isItemRemoving = removeItem.isPending && removeItem.variables?.productId === item.productId;
+                const isItemUpdating =
+                  updateItem.isPending &&
+                  updateItem.variables?.productId === item.productId &&
+                  (updateItem.variables?.variantId ?? null) === (item.variant?.id ?? null);
+                const isItemRemoving =
+                  removeItem.isPending &&
+                  removeItem.variables?.productId === item.productId &&
+                  (removeItem.variables?.variantId ?? null) === (item.variant?.id ?? null);
 
                 return (
                   <div

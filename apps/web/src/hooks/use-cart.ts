@@ -13,10 +13,16 @@ import { storeItemAddedPath } from "@/lib/cart-path";
 function matchesCartItem(
   line: CartItemResponseDto,
   productId: string,
-  variantId?: string
+  variantId?: string,
+  allLines?: CartItemResponseDto[]
 ): boolean {
   if (line.productId !== productId) return false;
-  return variantId ? line.variant?.id === variantId : !line.variant;
+  if (variantId) return line.variant?.id === variantId;
+  if (allLines) {
+    const linesForProduct = allLines.filter((l) => l.productId === productId);
+    if (linesForProduct.length === 1) return true;
+  }
+  return !line.variant;
 }
 
 export function useCart(initialData?: CartResponseDto | null) {
@@ -64,7 +70,7 @@ export function useCart(initialData?: CartResponseDto | null) {
         if (!current) return current;
 
         const target = current.cartItems.find((line: CartItemResponseDto) =>
-          matchesCartItem(line, productId, variantId)
+          matchesCartItem(line, productId, variantId, current.cartItems)
         );
 
         if (!target) return current;
@@ -110,7 +116,7 @@ export function useCart(initialData?: CartResponseDto | null) {
         if (!current) return current;
 
         const target = current.cartItems.find((line: CartItemResponseDto) =>
-          matchesCartItem(line, productId, variantId)
+          matchesCartItem(line, productId, variantId, current.cartItems)
         );
 
         if (!target) return current;
@@ -210,7 +216,7 @@ export function useCart(initialData?: CartResponseDto | null) {
         if (!current) return current;
 
         const existing = current.cartItems.find((line: CartItemResponseDto) =>
-          matchesCartItem(line, productId, variantId)
+          matchesCartItem(line, productId, variantId, current.cartItems)
         );
 
         const nextItems = existing
