@@ -9,13 +9,13 @@ import { Reflector } from '@nestjs/core';
 
 import { map, Observable } from 'rxjs';
 
-import { BYPASS_RESPONSE_INTERCEPTOR_KEY } from 'src/modules/shared/decorators/bypass-response-interceptor.decorator';
-import { MESSAGE_KEY } from 'src/modules/shared/decorators/message.decorator';
+import { BYPASS_RESPONSE_INTERCEPTOR_KEY } from '@api/modules/shared/decorators/bypass-response-interceptor.decorator';
+import { MESSAGE_KEY } from '@api/modules/shared/decorators/message.decorator';
 
 import {
   ApiResponseDto,
   PaginationMetaDto,
-} from 'src/modules/shared/dto/api-response.dto';
+} from '@api/modules/shared/dto/api-response.dto';
 
 type PaginatedPayload<T> = {
   data: T[];

@@ -9,7 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import type { Request, Response } from 'express';
-import { getPrismaErrorDetail } from 'src/modules/shared/utils/prisma-error.util';
+import { getPrismaErrorDetail } from '@api/modules/shared/utils/prisma-error.util';
 
 /** Shape returned by NestJS HttpException.getResponse() when validation fails. */
 interface HttpExceptionBody {
