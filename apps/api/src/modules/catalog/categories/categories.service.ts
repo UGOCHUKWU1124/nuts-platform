@@ -148,25 +148,65 @@ export class CategoriesService {
   }
 
   /**
-   * Recursively recalculates and updates the materialized path of all descendants.
+   * Rebuilds the materialized path of every descendant of `parentId`.
+   *
+   * Uses one recursive CTE driven by `parentId` (indexed) rather than a
+   * `LIKE 'old/%'` prefix rewrite because:
+   *   - `_` / `%` in slugs are LIKE wildcards and could rewrite unrelated rows;
+   *   - legacy rows with a NULL path have no prefix to match, which previously
+   *     left their descendants stale;
+   *   - paths are recomputed from slugs, so any pre-existing drift self-heals.
+   * Cost: one statement / one roundtrip regardless of subtree size.
+   * The depth guard protects against a corrupted parent cycle looping forever.
    */
   private async updateDescendantPathsInTx(
     tx: Prisma.TransactionClient,
     parentId: string,
-    parentPath: string,
+    oldPath: string | null,
+    newPath: string,
   ): Promise<void> {
+    if (oldPath === newPath) return;
+
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw(
+        Prisma.sql`
+          WITH RECURSIVE subtree AS (
+            SELECT c."id", (${newPath} || '/' || c."slug") AS new_path, 1 AS depth
+            FROM "categories" c
+            WHERE c."parentId" = ${parentId}
+            UNION ALL
+            SELECT c."id", s.new_path || '/' || c."slug", s.depth + 1
+            FROM "categories" c
+            INNER JOIN subtree s ON c."parentId" = s."id"
+            WHERE s.depth < 64
+          )
+          UPDATE "categories" AS t
+          SET "path" = subtree.new_path
+          FROM subtree
+          WHERE t."id" = subtree."id"
+            AND t."path" IS DISTINCT FROM subtree.new_path
+        `,
+      );
+      return;
+    }
+
     const children = await tx.category.findMany({
       where: { parentId },
       select: { id: true, slug: true },
     });
 
     for (const child of children) {
-      const childPath = `${parentPath}/${child.slug}`;
+      const childPath = `${newPath}/${child.slug}`;
       await tx.category.update({
         where: { id: child.id },
         data: { path: childPath },
       });
-      await this.updateDescendantPathsInTx(tx, child.id, childPath);
+      await this.updateDescendantPathsInTx(
+        tx,
+        child.id,
+        oldPath ? `${oldPath}/${child.slug}` : null,
+        childPath,
+      );
     }
   }
 
@@ -311,7 +351,12 @@ export class CategoriesService {
       });
 
       if (existing.path !== newPath) {
-        await this.updateDescendantPathsInTx(tx, cat.id, newPath);
+        await this.updateDescendantPathsInTx(
+          tx,
+          cat.id,
+          existing.path,
+          newPath,
+        );
       }
 
       return cat;
@@ -623,7 +668,7 @@ export class CategoriesService {
     // Bump this suffix when the public tree shape changes so Redis cannot
     // keep serving the previous duplicated `subCategories` payload.
     const cacheKey = `${CATEGORY_TREE()}:v2:${includeInactive}:${includeArchived}`;
-    return this.cacheService.wrap(cacheKey, CATEGORY_TTL, async () => {
+    return this.cacheService.wrapStale(cacheKey, CATEGORY_TTL, async () => {
       // 1. Fetch all matching categories
       const categories = await this.prisma.category.findMany({
         where: includeArchived
@@ -793,7 +838,7 @@ export class CategoriesService {
       return response;
     };
 
-    return this.cacheService.wrap(cacheKey, CATEGORY_TTL, loadCategory);
+    return this.cacheService.wrapStale(cacheKey, CATEGORY_TTL, loadCategory);
   }
 
   /**
@@ -886,7 +931,7 @@ export class CategoriesService {
       return response;
     };
 
-    return this.cacheService.wrap(cacheKey, CATEGORY_TTL, loadCategory);
+    return this.cacheService.wrapStale(cacheKey, CATEGORY_TTL, loadCategory);
   }
 
   /**
@@ -1039,7 +1084,10 @@ export class CategoriesService {
 
   private async invalidateCache(): Promise<void> {
     try {
-      await this.cacheService.delByPattern('category:*');
+      await Promise.all([
+        this.cacheService.delByPattern('category:*'),
+        this.cacheService.delByPattern('categories:*'),
+      ]);
     } catch (err) {
       this.logger.warn({ err }, 'Cache invalidation warning');
     }

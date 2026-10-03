@@ -31,14 +31,16 @@ export class PaystackIpMiddleware implements NestMiddleware {
 
     const ip = req.ip || req.socket.remoteAddress || '';
 
-    // Try x-forwarded-for header (Paystack sends requests via load balancers)
+    // Try x-forwarded-for header (Paystack sends requests via load balancers/proxies)
     const forwardedFor = req.headers['x-forwarded-for'];
-    const clientIp =
+    const rawIp =
       (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor) || ip;
+    const clientIp =
+      (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '') || ip;
 
     if (!this.allowedIps.has(clientIp)) {
       this.logger.warn(
-        { ip: clientIp, path: req.path },
+        { ip: clientIp, rawIp, path: req.path },
         'Blocked webhook request from unauthorized IP',
       );
       throw new UnauthorizedException('Invalid webhook source');

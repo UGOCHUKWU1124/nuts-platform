@@ -61,12 +61,15 @@ export class AdminAuthService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<{ user: AdminAuthUserDto; tokens: AuthTokens }> {
-    const identifier = `email:${dto.email.toLowerCase().trim()}`;
+    // setup() persists emails lowercased; the lookup and the lockout key must
+    // use the same normalized value or mixed-case logins can never succeed.
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const identifier = `email:${normalizedEmail}`;
 
     // Only select the fields we actually need — avoids transferring hashed
     // refresh tokens and other columns that serve no purpose here.
     const admin = await this.prisma.admin.findUnique({
-      where: { email: dto.email },
+      where: { email: normalizedEmail },
       select: ADMIN_LOGIN_SELECT,
     });
 

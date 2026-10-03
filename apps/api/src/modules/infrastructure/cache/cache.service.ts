@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
+import { RedlockService } from '../redis/redlock.service';
 
 export enum CacheKeys {
   // Products
@@ -68,6 +69,13 @@ export class CacheService {
     { generation: number; runId: symbol; promise: Promise<unknown> }
   >();
   private readonly generations = new Map<string, number>();
+
+  /**
+   * Jitter fraction applied to every TTL (0–15 %).
+   * Spreads expiry times across instances so cache keys never all expire
+   * simultaneously, eliminating the synchronized-expiry stampede vector.
+   */
+  private readonly TTL_JITTER_FRACTION = 0.15;
 
   private generationFor(key: string): number {
     return this.generations.get(key) ?? 0;
@@ -155,6 +163,7 @@ export class CacheService {
   constructor(
     @Inject(REDIS_CLIENT)
     private readonly redis: Redis,
+    private readonly redlock: RedlockService,
   ) {}
 
   /**
@@ -221,11 +230,50 @@ export class CacheService {
     if (serialized === undefined) return;
     this.rememberLocally(key, serialized);
 
+    // Apply jitter to spread expiry times across instances, preventing
+    // the synchronized-expiry stampede (all instances miss at the same second).
+    const jitteredTtl =
+      ttl + Math.floor(Math.random() * ttl * this.TTL_JITTER_FRACTION);
+
     try {
-      await this.redis.set(key, serialized, 'EX', ttl);
+      await this.redis.set(key, serialized, 'EX', jitteredTtl);
     } catch (error) {
       this.logger.warn(
         `Redis SET failed for "${key}": ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Writes both the primary key (short TTL) and a stale shadow key (long TTL).
+   * The shadow key is used by wrapStale() to serve stale data during revalidation.
+   */
+  private async writeWithStale<T>(
+    key: string,
+    value: T,
+    ttl: number,
+  ): Promise<void> {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) return;
+    this.rememberLocally(key, serialized);
+
+    const jitteredTtl =
+      ttl + Math.floor(Math.random() * ttl * this.TTL_JITTER_FRACTION);
+    // Stale window: keep data available for 2× the fresh TTL so background
+    // revalidation can complete without ever exposing a cold-start to users.
+    const staleTtl = jitteredTtl * 2;
+    const staleKey = `stale:${key}`;
+
+    try {
+      const pipeline = this.redis.pipeline();
+      pipeline.set(key, serialized, 'EX', jitteredTtl);
+      pipeline.set(staleKey, serialized, 'EX', staleTtl);
+      await pipeline.exec();
+    } catch (error) {
+      this.logger.warn(
+        `Redis SET (with stale) failed for "${key}": ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -335,6 +383,154 @@ export class CacheService {
     }
 
     return this.computeOnce(key, ttlSeconds, computeFn);
+  }
+
+  /**
+   * Cross-instance stampede-safe cache-aside using a distributed Redlock mutex.
+   *
+   * On a cache miss, only **one** instance across the entire cluster acquires
+   * the lock and runs the DB query. All other instances wait and then read the
+   * freshly-populated cache value — a single DB round-trip per miss regardless
+   * of cluster size or concurrent request count.
+   *
+   * Use this for expensive shared reads: analytics aggregations, large product
+   * listings, category trees, etc.
+   *
+   * @param lockTtlMs  How long the lock is held (defaults to 10 s, enough for
+   *                   a slow DB query to complete and write to cache).
+   * @param waitMs     How long non-holders sleep before retrying the cache read
+   *                   (defaults to 150 ms).
+   * @param maxWaitMs  Upper limit on total wait time before falling back to a
+   *                   direct DB query to avoid starving the request (30 s).
+   */
+  async wrapWithLock<T>(
+    key: string,
+    ttlSeconds: number,
+    computeFn: () => Promise<T>,
+    options: { lockTtlMs?: number; waitMs?: number; maxWaitMs?: number } = {},
+  ): Promise<T> {
+    // 1. Fast path — L1 + Redis hit (no lock needed)
+    const cached = await this.get<T>(key);
+    if (cached !== undefined) return cached;
+
+    const lockKey = `cache:lock:${key}`;
+    const lockTtlMs = options.lockTtlMs ?? 10_000;
+    const waitMs = options.waitMs ?? 150;
+    const maxWaitMs = options.maxWaitMs ?? 30_000;
+
+    // 2. Try to acquire the distributed lock
+    try {
+      const result = await this.redlock.using(
+        [lockKey],
+        lockTtlMs,
+        async () => {
+          // Double-check after acquiring — another instance may have already
+          // populated the cache while we were waiting for the lock.
+          const doubleCheck = await this.get<T>(key);
+          if (doubleCheck !== undefined) return doubleCheck;
+
+          // We hold the lock — run the expensive query
+          const value = await computeFn();
+          await this.write(key, value, ttlSeconds);
+          return value;
+        },
+      );
+      return result;
+    } catch {
+      // Lock contention (another instance has it) — poll until cache is warm
+      const deadline = Date.now() + maxWaitMs;
+      while (Date.now() < deadline) {
+        await new Promise<void>((r) => setTimeout(r, waitMs));
+        const polled = await this.get<T>(key);
+        if (polled !== undefined) return polled;
+      }
+
+      // Safety valve: fallback to a direct query rather than returning an error
+      this.logger.warn(
+        `wrapWithLock: max wait exceeded for "${key}", falling back to direct DB query`,
+      );
+      return this.computeOnce(key, ttlSeconds, computeFn);
+    }
+  }
+
+  /**
+   * Stale-while-revalidate cache pattern for catalog/public reads.
+   *
+   * - On a fresh hit  → returns immediately.
+   * - On a stale hit  → returns stale data **instantly**, triggers a background
+   *                     revalidation so the next request gets fresh data.
+   * - On a cold miss  → acquires a lock, runs the query synchronously, and
+   *                     populates both the fresh and stale keys.
+   *
+   * This is the best pattern for high-traffic public endpoints where a slightly
+   * stale response is acceptable but latency must remain low at all times.
+   */
+  async wrapStale<T>(
+    key: string,
+    ttlSeconds: number,
+    computeFn: () => Promise<T>,
+  ): Promise<T> {
+    // 1. Fresh hit — fastest path
+    const fresh = await this.get<T>(key);
+    if (fresh !== undefined) return fresh;
+
+    const staleKey = `stale:${key}`;
+
+    // 2. Stale hit — serve immediately, revalidate in background
+    try {
+      const staleRaw = await this.redis.get(staleKey);
+      if (staleRaw !== null) {
+        const staleValue = JSON.parse(staleRaw) as T;
+        // Fire-and-forget: revalidate without blocking the request
+        this.revalidateInBackground(key, ttlSeconds, computeFn).catch(
+          (err: unknown) =>
+            this.logger.error(
+              `wrapStale: background revalidation failed for "${key}": ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            ),
+        );
+        return staleValue;
+      }
+    } catch (err) {
+      this.logger.warn(
+        `wrapStale: stale key read failed for "${key}": ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    // 3. Cold miss — use lock so only one instance runs the query
+    return this.wrapWithLock(key, ttlSeconds, async () => {
+      const value = await computeFn();
+      // Write fresh + stale shadow keys atomically
+      await this.writeWithStale(key, value, ttlSeconds);
+      return value;
+    });
+  }
+
+  /**
+   * Background revalidation helper for wrapStale().
+   * Uses a lock to ensure only one instance revalidates at a time.
+   */
+  private async revalidateInBackground<T>(
+    key: string,
+    ttlSeconds: number,
+    computeFn: () => Promise<T>,
+  ): Promise<void> {
+    const lockKey = `cache:revalidate:${key}`;
+    try {
+      await this.redlock.using([lockKey], 10_000, async () => {
+        // Another instance may have already revalidated by the time we get the lock
+        const alreadyFresh = await this.redis.get(key);
+        if (alreadyFresh !== null) return;
+
+        const value = await computeFn();
+        await this.writeWithStale(key, value, ttlSeconds);
+      });
+    } catch {
+      // Lock contention means another instance is already revalidating — that's fine
+    }
   }
 
   /**
