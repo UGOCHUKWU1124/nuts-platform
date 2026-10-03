@@ -552,7 +552,7 @@ export class ProductsService {
    */
   async getCategoryLookupMap(): Promise<CategoryLookupMap> {
     const cacheKey = 'categories:lookup:map:v2';
-    const list = await this.cacheService.wrap(cacheKey, 300, async () => {
+    const list = await this.cacheService.wrapStale(cacheKey, 300, async () => {
       return this.prisma.category.findMany({
         select: {
           id: true,
@@ -949,7 +949,7 @@ export class ProductsService {
     };
 
     if (params.bypassCache) return loadProducts();
-    return this.cacheService.wrap(cacheKey, PRODUCT_TTL, loadProducts);
+    return this.cacheService.wrapStale(cacheKey, PRODUCT_TTL, loadProducts);
   }
 
   /**
@@ -1079,7 +1079,7 @@ export class ProductsService {
     };
 
     if (params.bypassCache) return loadProducts();
-    return this.cacheService.wrap(cacheKey, PRODUCT_TTL, loadProducts);
+    return this.cacheService.wrapStale(cacheKey, PRODUCT_TTL, loadProducts);
   }
 
   /**
@@ -1120,7 +1120,7 @@ export class ProductsService {
     // metadata generation, and link prefetches. Share the same cold lookup and
     // cache write so a cache miss does not fan out into duplicate DB queries.
     if (bypassCache) return loadProduct();
-    return this.cacheService.wrap(cacheKey, PRODUCT_TTL, loadProduct);
+    return this.cacheService.wrapStale(cacheKey, PRODUCT_TTL, loadProduct);
   }
 
   /**
@@ -1216,7 +1216,9 @@ export class ProductsService {
     };
 
     if (params.bypassCache) return loadGoingNuts();
-    return this.cacheService.wrap(cacheKey, PRODUCT_TTL, loadGoingNuts);
+    // Going Nuts is a heavy aggregation query — use the lock pattern to ensure
+    // at most one instance runs the groupBy/backfill queries on a cache miss.
+    return this.cacheService.wrapWithLock(cacheKey, PRODUCT_TTL, loadGoingNuts);
   }
 
   /* ==========================================================================

@@ -757,7 +757,7 @@ export class VendorsService {
 
     const cacheKey = `vendors:public:${trimmedSearch ? encodeURIComponent(trimmedSearch.toLowerCase()) : 'all'}:${categoryId ?? 'all'}:${limit ?? 'all'}`;
 
-    return this.cacheService.wrap(cacheKey, VENDOR_STORE_TTL, async () => {
+    return this.cacheService.wrapStale(cacheKey, VENDOR_STORE_TTL, async () => {
       let targetCategoryIds: string[] | undefined;
       if (categoryId) {
         const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
@@ -870,7 +870,7 @@ export class VendorsService {
   }
 
   async findStoreBySlug(storeSlug: string): Promise<VendorProfileDto> {
-    return this.cacheService.wrap(
+    return this.cacheService.wrapStale(
       VENDOR_STORE(storeSlug),
       VENDOR_STORE_TTL,
       async () => {
@@ -944,7 +944,7 @@ export class VendorsService {
     store: VendorProfileDto;
     products: any[];
   }> {
-    return this.cacheService.wrap(
+    return this.cacheService.wrapStale(
       VENDOR_STORE_PRODUCTS(storeSlug),
       VENDOR_STORE_TTL,
       async () => {
