@@ -44,6 +44,18 @@ async function bootstrap() {
     .getInstance() as import('express').Express;
   expressApp.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
+  // Raise the per-response listener ceiling before any middleware attaches its
+  // own 'finish' handlers. The default of 10 is a leak-detection heuristic that
+  // is too low for a production middleware stack (pino-http + OTel HTTP/Express
+  // instrumentation + NestJS platform adapter + compression + end-of-stream ×2
+  // + Express internals already reaches ~12). We use 25 rather than 0 so that
+  // a real listener leak (e.g., a handler that keeps attaching listeners across
+  // retries without ever removing them) will still surface as a warning.
+  expressApp.use((_req, res, next) => {
+    res.setMaxListeners(25);
+    next();
+  });
+
   // Install parsers explicitly so request memory use stays bounded. Retain the
   // exact JSON bytes for Paystack's signature check without making a second copy.
   expressApp.use(
