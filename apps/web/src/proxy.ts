@@ -25,7 +25,12 @@ function contentSecurityPolicy(nonce: string): string {
     "frame-ancestors 'none'",
     "form-action 'self'",
     `script-src ${scriptSources.join(" ")}`,
-    `style-src-elem 'self' 'nonce-${nonce}'`,
+    // Styles: runtime-injected <style> tags (sonner, Next dev overlay/fonts,
+    // React 19 hoisted styles) carry no nonce. A nonce in this directive makes
+    // browsers IGNORE 'unsafe-inline', so we deliberately omit it here.
+    // Scripts stay nonce + strict-dynamic, which is where XSS risk lives.
+    "style-src 'self' 'unsafe-inline'",
+    "style-src-elem 'self' 'unsafe-inline'",
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com",
     "font-src 'self' data:",
