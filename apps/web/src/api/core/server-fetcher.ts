@@ -10,6 +10,7 @@ const isDevEnv = process.env.NODE_ENV === "development";
 const FETCH_RETRIES = 2;
 const FETCH_RETRY_MS = 100;
 const FETCH_TIMEOUT_MS = isDevEnv ? 15_000 : 10_000;
+const SLOW_UPSTREAM_MS = Number(process.env.SERVER_FETCH_SLOW_MS) || 1_000;
 
 export interface ServerEnvelope<T> {
   success?: boolean;
@@ -105,13 +106,12 @@ export async function serverFetchEnvelope<T>(
 
       if (!res.ok) {
         if (res.status === 404) return null;
-        console.warn(`[serverFetch] Non-ok status ${res.status} for ${endpointPath}`);
         return null;
       }
 
       const payload: unknown = await res.json();
       const durationMs = Math.round(performance.now() - requestStartedAt);
-      if (durationMs > 200) {
+      if (process.env.NODE_ENV === "development" && durationMs > SLOW_UPSTREAM_MS) {
         console.warn(`[serverFetch] Slow upstream ${endpointPath}: ${durationMs}ms`);
       }
       if (payload && typeof payload === "object" && "data" in payload) {
@@ -137,12 +137,12 @@ export async function serverFetchEnvelope<T>(
       }
       const isTimeout = name === "TimeoutError" || name === "AbortError";
       if (attempt < FETCH_RETRIES && (isTransientNetworkError(error) || isTimeout)) {
-        console.warn(`[serverFetch] Retrying ${endpointPath} (attempt ${attempt + 1}/${FETCH_RETRIES}) after error:`, message || error);
         await sleep(FETCH_RETRY_MS * attempt);
         continue;
       }
-      const errMsg = message;
-      console.warn(`[serverFetch] Failed to fetch ${endpointPath}:`, errMsg || error);
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[serverFetch] Failed ${endpointPath}:`, message || error);
+      }
       return null;
     }
   }

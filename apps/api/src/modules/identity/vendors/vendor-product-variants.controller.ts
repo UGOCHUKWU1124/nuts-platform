@@ -29,18 +29,18 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
-import { CreateVariantDto } from 'src/modules/product-variants/dto/create-variant.dto';
-import { QueryVariantDto } from 'src/modules/product-variants/dto/query-variant.dto';
-import { UpdateVariantStockDto } from 'src/modules/product-variants/dto/update-variant-stock.dto';
-import { UpdateVariantDto } from 'src/modules/product-variants/dto/update-variant.dto';
-import { ProductVariantListResponseDto } from 'src/modules/product-variants/dto/variant-response.dto';
-import { VariantStockUpdateResponseDto } from 'src/modules/product-variants/dto/variant-stock-update-response.dto';
-import { VendorVariantResponseDto } from 'src/modules/product-variants/dto/vendor-variant-response.dto';
-import { ProductVariantsService } from 'src/modules/product-variants/product-variants.service';
-import { AuthStrategy } from 'src/modules/shared/decorators/auth-strategy.decorator';
-import { GetVendor } from 'src/modules/shared/decorators/get-vendor.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+import { CreateVariantDto } from '@api/modules/product-variants/dto/create-variant.dto';
+import { QueryVariantDto } from '@api/modules/product-variants/dto/query-variant.dto';
+import { UpdateVariantStockDto } from '@api/modules/product-variants/dto/update-variant-stock.dto';
+import { UpdateVariantDto } from '@api/modules/product-variants/dto/update-variant.dto';
+import { ProductVariantListResponseDto } from '@api/modules/product-variants/dto/variant-response.dto';
+import { VariantStockUpdateResponseDto } from '@api/modules/product-variants/dto/variant-stock-update-response.dto';
+import { VendorVariantResponseDto } from '@api/modules/product-variants/dto/vendor-variant-response.dto';
+import { ProductVariantsService } from '@api/modules/product-variants/product-variants.service';
+import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - PRODUCT VARIANTS')

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { PaymentsModule } from 'src/modules/payments/payments.module';
-import { DiscountCodeModule } from 'src/modules/promotions/discount-code.module';
-import { ReferralModule } from 'src/modules/referral/referral.module';
-import { UsersModule } from 'src/modules/users/users.module';
-import { WalletModule } from 'src/modules/wallet/wallet.module';
+import { PaymentsModule } from '@api/modules/payments/payments.module';
+import { DiscountCodeModule } from '@api/modules/promotions/discount-code.module';
+import { ReferralModule } from '@api/modules/referral/referral.module';
+import { UsersModule } from '@api/modules/users/users.module';
+import { WalletModule } from '@api/modules/wallet/wallet.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 

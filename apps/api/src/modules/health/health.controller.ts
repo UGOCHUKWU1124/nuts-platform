@@ -1,7 +1,7 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
 
 @ApiTags('HEALTH')
 @Public()

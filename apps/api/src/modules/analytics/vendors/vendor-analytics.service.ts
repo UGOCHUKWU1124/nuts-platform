@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { parseDateRange } from 'src/modules/shared/utils/date-range.util';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { parseDateRange } from '@api/modules/shared/utils/date-range.util';
 import {
   RANGE_DAYS,
   VendorAnalyticsQueryDto,

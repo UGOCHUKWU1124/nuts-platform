@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "baseUrl": "./dist",
+    "paths": {
+      "@api/modules/auth/*": ["modules/auth/*"],
+      "@api/modules/users/*": ["modules/identity/users/*", "modules/users/*"],
+      "@api/modules/creators/*": ["modules/identity/creators/*", "modules/creators/*"],
+      "@api/modules/admin/*": ["modules/identity/admin/*", "modules/admin/*"],
+      "@api/modules/products/*": ["modules/catalog/products/*", "modules/products/*"],
+      "@api/modules/category/*": ["modules/catalog/categories/*", "modules/catalog/category/*", "modules/category/*"],
+      "@api/modules/product-variants/*": ["modules/catalog/variants/*", "modules/catalog/product-variants/*", "modules/product-variants/*"],
+      "@api/modules/cart/*": ["modules/checkout/cart/*", "modules/cart/*"],
+      "@api/modules/orders/*": ["modules/checkout/orders/*", "modules/orders/*"],
+      "@api/modules/promotions/*": ["modules/checkout/discounts/*", "modules/checkout/promotions/*", "modules/promotions/*"],
+      "@api/modules/payments/*": ["modules/billing/payments/*", "modules/payments/*"],
+      "@api/modules/wallet/*": ["modules/billing/wallets/*", "modules/billing/wallet/*", "modules/wallet/*"],
+      "@api/modules/reviews/*": ["modules/engagement/reviews/*", "modules/reviews/*"],
+      "@api/modules/wishlist/*": ["modules/engagement/wishlist/*", "modules/wishlist/*"],
+      "@api/modules/referral/*": ["modules/engagement/referral/*", "modules/referral/*"],
+      "@api/modules/*": ["modules/*"],
+      "@api/common/*": ["common/*"],
+      "@api/*": ["*"]
+    }
+  }
+}

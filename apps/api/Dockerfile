@@ -12,10 +12,10 @@ RUN apk add --no-cache python3 make g++ openssl
 
 # 1. Copy workspace manifests for optimal layer caching
 COPY package*.json ./
-COPY apps/api/package*.json ./apps/api/
-COPY packages/database/package*.json ./packages/database/
-COPY packages/types/package*.json ./packages/types/
-COPY packages/config/package*.json ./packages/config/
+COPY apps/api/package.json ./apps/api/
+COPY packages/database/package.json ./packages/database/
+COPY packages/types/package.json ./packages/types/
+COPY packages/config/package.json ./packages/config/
 
 # 2. Install workspace dependencies
 RUN npm ci
@@ -39,10 +39,10 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ openssl curl
 
 COPY package*.json ./
-COPY apps/api/package*.json ./apps/api/
-COPY packages/database/package*.json ./packages/database/
-COPY packages/types/package*.json ./packages/types/
-COPY packages/config/package*.json ./packages/config/
+COPY apps/api/package.json ./apps/api/
+COPY packages/database/package.json ./packages/database/
+COPY packages/types/package.json ./packages/types/
+COPY packages/config/package.json ./packages/config/
 
 RUN npm ci
 
@@ -57,7 +57,7 @@ ENV NODE_ENV=development
 ENV PORT=3001
 EXPOSE 3001
 
-CMD ["npx", "nest", "start", "--watch"]
+CMD ["npm", "run", "dev"]
 
 # ─── Stage 3: Production Runtime ──────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -80,6 +80,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/database/schema.prisma ./packages/database/schema.prisma
 COPY --from=builder /app/packages/database/migrations ./packages/database/migrations
 COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
+COPY --from=builder /app/apps/api/tsconfig.runtime.json ./apps/api/tsconfig.runtime.json
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 # Fail the image build if the runtime entrypoint's local module was omitted.
 RUN test -s /app/apps/api/dist/main.js \

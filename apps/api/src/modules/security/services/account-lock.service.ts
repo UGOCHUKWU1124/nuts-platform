@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { createHash } from 'node:crypto';
-import { SECURITY } from 'src/modules/shared/constants';
+import { SECURITY } from '@api/modules/shared/constants';
 
 @Injectable()
 export class AccountLockService {

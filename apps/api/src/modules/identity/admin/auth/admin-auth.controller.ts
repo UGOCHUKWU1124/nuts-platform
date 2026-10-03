@@ -24,25 +24,25 @@ import {
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import type { Request, Response } from 'express';
-import { AuthCookieService } from 'src/modules/auth/cookies/auth-cookie.service';
-import { LoginDto } from 'src/modules/auth/dto/login.dto';
-import { JwtRefreshGuard } from 'src/modules/auth/guards/jwt-refresh.guard';
-import type { RefreshJwtPayload } from 'src/modules/auth/types/refresh-jwt-payload.type';
-import { AccountLockGuard } from 'src/modules/security/guards/account-lock.guard';
+import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
+import { LoginDto } from '@api/modules/auth/dto/login.dto';
+import { JwtRefreshGuard } from '@api/modules/auth/guards/jwt-refresh.guard';
+import type { RefreshJwtPayload } from '@api/modules/auth/types/refresh-jwt-payload.type';
+import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
 import {
   RefreshTokenThrottle,
   StrictThrottle,
-} from 'src/modules/shared/decorators/custom-throttler.decorator';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+} from '@api/modules/shared/decorators/custom-throttler.decorator';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import {
   extractIpAddress,
   extractUserAgent,
-} from 'src/modules/shared/utils/request.util';
+} from '@api/modules/shared/utils/request.util';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminJwtAuthGuard } from './admin-jwt-auth.guard';
 import { AdminAuthResponseDto } from './dto/admin-auth-response.dto';

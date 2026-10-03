@@ -4,11 +4,11 @@ import { NotificationPriority, NotificationType, ROLE } from '@prisma/client';
 import {
   EmailOrderItem,
   EmailTemplatesService,
-} from 'src/modules/infrastructure/mail/email-templates.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { RABBITMQ_QUEUES } from 'src/modules/infrastructure/rabbitmq/rabbitmq.constants';
-import { RabbitMQService } from 'src/modules/infrastructure/rabbitmq/rabbitmq.service';
-import { DomainEvents } from 'src/modules/shared/events/domain-events';
+} from '@api/modules/infrastructure/mail/email-templates.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
+import { DomainEvents } from '@api/modules/shared/events/domain-events';
 import type {
   OrderCancelledPayload,
   OrderDeliveredPayload,
@@ -17,7 +17,7 @@ import type {
   PaymentConfirmedPayload,
   PaymentFailedPayload,
   ReferralRewardCreditedPayload,
-} from 'src/modules/shared/events/event-payloads';
+} from '@api/modules/shared/events/event-payloads';
 
 @Injectable()
 export class NotificationListener {

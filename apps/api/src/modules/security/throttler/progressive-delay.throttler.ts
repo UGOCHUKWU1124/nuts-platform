@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
-import { SECURITY } from 'src/modules/shared/constants';
+import { SECURITY } from '@api/modules/shared/constants';
 
 /**
  * Service to implement progressive login delays.

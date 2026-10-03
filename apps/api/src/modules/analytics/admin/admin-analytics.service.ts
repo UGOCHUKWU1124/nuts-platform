@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { parseDateRange } from 'src/modules/shared/utils/date-range.util';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { parseDateRange } from '@api/modules/shared/utils/date-range.util';
 import { RANGE_DAYS } from '../vendors/dto/vendor-analytics-query.dto';
 import { AdminAnalyticsAuditService } from './admin-analytics-audit.service';
 import { AdminAnalyticsProductsService } from './admin-analytics-products.service';

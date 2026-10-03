@@ -35,6 +35,7 @@ export function WishlistPageView({ initialItems, categories }: WishlistPageViewP
         price: item.price,
         productName: item.name,
         productSlug: item.slug,
+        variantId: item.variantId ?? undefined,
         addedFrom: "PRODUCT_PAGE",
       },
       {
@@ -48,7 +49,15 @@ export function WishlistPageView({ initialItems, categories }: WishlistPageViewP
             },
           });
         },
-        onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Unable to add this item to your cart")),
+        onError: (error: unknown) => {
+          const msg = getApiErrorMessage(error, "Unable to add this item to your cart");
+          if (msg.toLowerCase().includes("variant")) {
+            router.push(`/product/${item.slug}`);
+            toast.info("Please choose an option before adding to your cart");
+            return;
+          }
+          toast.error(msg);
+        },
       }
     );
   };
@@ -138,7 +147,7 @@ export function WishlistPageView({ initialItems, categories }: WishlistPageViewP
                     {/* Remove Action */}
                     <button
                       type="button"
-                      onClick={() => removeItem(item.productId)}
+                      onClick={() => removeItem(item.productId, item.variantId ?? undefined)}
                       aria-label="Remove item"
                       className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-muted-foreground backdrop-blur-sm shadow-xs hover:text-foreground transition-colors"
                     >

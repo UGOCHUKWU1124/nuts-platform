@@ -3,6 +3,10 @@
 **/.pnp.*
 **/.yarn/cache/
 **/.npm/
+# Workspace sub-package lockfiles (root package-lock.json is the single source of truth)
+apps/*/package-lock.json
+packages/*/package-lock.json
+
 
 # Build output and framework caches
 **/dist/

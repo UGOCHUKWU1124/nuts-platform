@@ -4,7 +4,7 @@ import nodemailer, { Transporter } from 'nodemailer';
 import {
   EmailProvider,
   SendEmailOptions,
-} from 'src/modules/shared/interfaces/email-provider.interface';
+} from '@api/modules/shared/interfaces/email-provider.interface';
 
 @Injectable()
 export class NodemailerProvider implements EmailProvider {

@@ -10,9 +10,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { VendorProfileDto } from './dto/vendor-response.dto';
 import { VendorsService } from './vendors.service';
 

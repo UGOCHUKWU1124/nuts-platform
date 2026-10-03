@@ -11,7 +11,7 @@ import {
   buildCursorWhere,
   getCursorPagination,
   type CursorPaginationMetaDto,
-} from 'src/modules/shared/utils/cursor-pagination.util';
+} from '@api/modules/shared/utils/cursor-pagination.util';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 
 export interface CreateNotificationDto {

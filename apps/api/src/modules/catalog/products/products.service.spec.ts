@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { AuditLogService } from 'src/modules/shared/audit-log/audit-log.service';
-import { SearchService } from 'src/modules/shared/search/search.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
+import { SearchService } from '@api/modules/shared/search/search.service';
 import { CategoriesService } from '../categories/categories.service';
 import { ProductsService } from './products.service';
 
@@ -126,6 +126,7 @@ describe('ProductsService – Products CRUD', () => {
         ...mockProduct,
         isDeleted: true,
       });
+      mockPrisma.product.findMany.mockResolvedValue([]);
       mockPrisma.product.update.mockResolvedValue(mockProduct);
 
       const result = await service.restore('prod-123');

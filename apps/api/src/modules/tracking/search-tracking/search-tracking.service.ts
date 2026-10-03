@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RABBITMQ_QUEUES } from 'src/modules/infrastructure/rabbitmq/rabbitmq.constants';
-import { RabbitMQService } from 'src/modules/infrastructure/rabbitmq/rabbitmq.service';
+import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
 
 @Injectable()
 export class SearchTrackingService {

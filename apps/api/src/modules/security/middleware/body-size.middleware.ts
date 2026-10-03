@@ -5,7 +5,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
-import { SECURITY } from 'src/modules/shared/constants';
+import { SECURITY } from '@api/modules/shared/constants';
 
 /**
  * Middleware to enforce a maximum request body size (10mb).

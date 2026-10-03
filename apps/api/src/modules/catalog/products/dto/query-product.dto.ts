@@ -8,7 +8,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { ToBoolean } from 'src/modules/shared/decorators/to-boolean.decorator';
+import { ToBoolean } from '@api/modules/shared/decorators/to-boolean.decorator';
 export class QueryProductDto {
   @ApiPropertyOptional()
   @IsString()

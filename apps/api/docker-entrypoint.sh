@@ -8,4 +8,5 @@
 set -eu
 
 echo "[entrypoint] Starting NestJS API (migrations are managed by api-migrate)..."
-exec node dist/main
+export TS_NODE_PROJECT=./tsconfig.runtime.json
+exec node -r tsconfig-paths/register dist/main

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AdminVariantResponseDto } from 'src/modules/product-variants/dto/admin-variant-response.dto';
-import type { VariantCombinations } from 'src/modules/shared/dto/variant-combinations.dto';
+import { AdminVariantResponseDto } from '@api/modules/product-variants/dto/admin-variant-response.dto';
+import type { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 
 class AdminProductCategoryRefDto {
   @ApiProperty() id!: string;

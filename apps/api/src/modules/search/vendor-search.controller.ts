@@ -8,11 +8,11 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 
-import { VendorJwtAuthGuard } from 'src/modules/identity/vendors/guards/vendor-auth.guard';
-import { AuthStrategy } from 'src/modules/shared/decorators/auth-strategy.decorator';
-import { GetVendor } from 'src/modules/shared/decorators/get-vendor.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { SearchService } from 'src/modules/shared/search/search.service';
+import { VendorJwtAuthGuard } from '@api/modules/identity/vendors/guards/vendor-auth.guard';
+import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { SearchService } from '@api/modules/shared/search/search.service';
 import { QuerySearchDto } from './dto/query-search.dto';
 import { SearchResponseDto, SearchResultDto } from './dto/search-result.dto';
 

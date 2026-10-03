@@ -11,15 +11,15 @@ import { Prisma, ROLE } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import type { StringValue } from 'ms';
-import { AuthTokens } from 'src/modules/auth/cookies/auth-cookie.service';
-import { LoginDto } from 'src/modules/auth/dto/login.dto';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { AccountLockService } from 'src/modules/security/services/account-lock.service';
-import { AuditLogService } from 'src/modules/shared/audit-log/audit-log.service';
+import type { AuthTokens } from '@api/modules/auth/types/auth.types';
+import { LoginDto } from '@api/modules/auth/dto/login.dto';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { AccountLockService } from '@api/modules/security/services/account-lock.service';
+import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
 import {
-  BCRYPT_SALT_ROUNDS,
-  DUMMY_PASSWORD_HASH,
-} from 'src/modules/shared/constants/bcrypt.constants';
+  BCRYPT_COST_FACTOR,
+  UNKNOWN_ACCOUNT_PASSWORD_HASH,
+} from '@api/modules/shared/constants/bcrypt.constants';
 import { AdminAuthUserDto } from './dto/admin-auth-user.dto';
 import { AdminRegisterDto } from './dto/admin-register.dto';
 
@@ -72,7 +72,7 @@ export class AdminAuthService {
 
     const passwordMatches = await bcrypt.compare(
       dto.password,
-      admin?.password ?? DUMMY_PASSWORD_HASH,
+      admin?.password ?? UNKNOWN_ACCOUNT_PASSWORD_HASH,
     );
 
     if (!admin || !passwordMatches) {
@@ -101,9 +101,9 @@ export class AdminAuthService {
 
     // Upgrade weak legacy hashes after successful login. Never lower a hash's
     // work factor: doing so would silently make an already stronger hash weaker.
-    if (bcrypt.getRounds(admin.password) < BCRYPT_SALT_ROUNDS) {
+    if (bcrypt.getRounds(admin.password) < BCRYPT_COST_FACTOR) {
       bcrypt
-        .hash(dto.password, BCRYPT_SALT_ROUNDS)
+        .hash(dto.password, BCRYPT_COST_FACTOR)
         .then((upgradedHash) =>
           this.prisma.admin.update({
             where: { id: admin.id },
@@ -156,7 +156,7 @@ export class AdminAuthService {
     }
 
     const normalizedEmail = dto.email.trim().toLowerCase();
-    const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
 
     let admin;
     try {
@@ -247,6 +247,14 @@ export class AdminAuthService {
       admin.refreshToken,
     );
     if (!valid) {
+      await this.prisma.admin.updateMany({
+        where: { id: admin.id },
+        data: {
+          refreshToken: null,
+          refreshTokenId: null,
+          tokenVersion: { increment: 1 },
+        },
+      });
       throw new UnauthorizedException('Invalid refresh token');
     }
 

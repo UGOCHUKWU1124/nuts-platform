@@ -1,8 +1,8 @@
-// Cost 12 is a practical production baseline. Login flows upgrade weaker
+// Cost factor 12 is a practical production baseline. Login flows upgrade weaker
 // existing hashes after successful authentication and never downgrade hashes.
-export const BCRYPT_SALT_ROUNDS = 12;
+export const BCRYPT_COST_FACTOR = 12;
 
-// Fixed, non-login dummy hash used to keep unknown-account login timing close
-// to an ordinary password comparison without hashing input on every attempt.
-export const DUMMY_PASSWORD_HASH =
+// Fixed bcrypt hash used when a login email is not found. It is intentionally
+// public and avoids hashing attacker-controlled input on every unknown login.
+export const UNKNOWN_ACCOUNT_PASSWORD_HASH =
   '$2b$12$TivXb9R0HwhxN/hjavR9QuxWr8bz7FnrGrjVHaPwAPDlEfhC.6DFa';

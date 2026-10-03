@@ -3,12 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrderStatus, PaymentStatus } from '@prisma/client';
-import { EmailService } from 'src/modules/infrastructure/mail/email.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { ReferralService } from 'src/modules/referral/referral.service';
-import { UsersService } from 'src/modules/users/users.service';
-import { WalletService } from 'src/modules/wallet/wallet.service';
+import { EmailService } from '@api/modules/infrastructure/mail/email.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { ReferralService } from '@api/modules/referral/referral.service';
+import { UsersService } from '@api/modules/users/users.service';
+import { WalletService } from '@api/modules/wallet/wallet.service';
+import { CircuitBreakerService } from '@api/modules/infrastructure/resiliency/circuit-breaker.service';
 import { PaymentsService } from './payments.service';
+
+const mockCircuitBreakerService = {
+  executePaystack: jest.fn((fn: () => unknown) => fn()),
+  executeSmtp: jest.fn((fn: () => unknown) => fn()),
+  executeCloudinary: jest.fn((fn: () => unknown) => fn()),
+  getStatus: jest.fn(),
+};
 
 const mockPrisma = {
   payment: {
@@ -78,6 +86,7 @@ describe('PaymentsService – refund', () => {
         { provide: WalletService, useValue: mockWalletService },
         { provide: ReferralService, useValue: mockReferralService },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        { provide: CircuitBreakerService, useValue: mockCircuitBreakerService },
       ],
     }).compile();
 

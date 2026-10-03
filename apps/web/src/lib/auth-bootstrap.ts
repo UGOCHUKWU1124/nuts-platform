@@ -1,5 +1,5 @@
 import { performTokenRefresh } from "@/api/core/client";
-import { clearAuthTokens,getAuthToken } from "@/api/core/token-storage";
+import { clearAuthTokens } from "@/api/core/token-storage";
 import { getActiveRole,useAuthStore,type AuthRole } from "@/zustand/auth";
 import { authBroadcast,type AuthEvent } from "./auth-events";
 
@@ -52,11 +52,14 @@ export const authBootstrap = async (): Promise<void> => {
   current.syncActiveRole(currentRole);
 
   const roleSession = current.sessions?.[currentRole];
-  const hasToken = Boolean(getAuthToken(currentRole));
   const hasCookie = hasSessionIndicatorCookieForRole(currentRole);
 
-  // If already authenticated with active in-memory token and valid cookie for this surface, no-op.
-  if (roleSession?.isAuthenticated && roleSession?.user && hasCookie && hasToken) {
+  // If Zustand session is already authenticated and the session cookie is still present,
+  // skip the refresh. The in-memory access token is intentionally excluded: it resets to null
+  // on every page reload (JS module re-init), so including it would trigger a needless /refresh
+  // on every page load even when the session is perfectly valid. Genuine token expiry is
+  // caught lazily by the 401 interceptor in client.ts, which then calls performTokenRefresh.
+  if (roleSession?.isAuthenticated && roleSession?.user && hasCookie) {
     return;
   }
 
@@ -75,8 +78,9 @@ export const authBootstrap = async (): Promise<void> => {
     const existingSession = state.sessions?.[currentRole];
     const hasPersistedUser = Boolean(existingSession?.user);
 
-    // If session is already authenticated, has user, and has in-memory token, no need to refresh
-    if (existingSession?.isAuthenticated && hasPersistedUser && getAuthToken(currentRole)) {
+    // If session is already authenticated and we have the user profile, skip refresh.
+    // Token expiry is handled lazily by the 401 interceptor in client.ts.
+    if (existingSession?.isAuthenticated && hasPersistedUser) {
       return;
     }
 

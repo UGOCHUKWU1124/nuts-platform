@@ -15,26 +15,26 @@ import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 
-import { EmailService } from 'src/modules/infrastructure/mail/email.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { CircuitBreakerService } from 'src/modules/infrastructure/resiliency/circuit-breaker.service';
-import { UsersService } from 'src/modules/users/users.service';
-import { WalletService } from 'src/modules/wallet/wallet.service';
+import { EmailService } from '@api/modules/infrastructure/mail/email.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { CircuitBreakerService } from '@api/modules/infrastructure/resiliency/circuit-breaker.service';
+import { UsersService } from '@api/modules/users/users.service';
+import { WalletService } from '@api/modules/wallet/wallet.service';
 
-import { generateStatusNote } from 'src/modules/orders/constants/order-status.constants';
+import { generateStatusNote } from '@api/modules/orders/constants/order-status.constants';
 
-import { DomainEvents } from 'src/modules/shared/events/domain-events';
+import { DomainEvents } from '@api/modules/shared/events/domain-events';
 
-import type { OrderProcessingPayload } from 'src/modules/shared/events/event-payloads';
+import type { OrderProcessingPayload } from '@api/modules/shared/events/event-payloads';
 
-import { VENDOR_COMMISSION_RATE } from 'src/modules/shared/constants/commission.constants';
+import { VENDOR_COMMISSION_RATE } from '@api/modules/shared/constants/commission.constants';
 
 import {
   PAYSTACK_SUCCESS_STATUS,
   PAYSTACK_TRANSACTION_INI_URL,
   PAYSTACK_TRANSACTION_VERIFY_BASE_URL,
   PAYSTACK_WEBHOOK_CRYPTO_ALGO,
-} from 'src/modules/shared/constants/payment.constants';
+} from '@api/modules/shared/constants/payment.constants';
 
 import {
   InitializePaymentResponseDto,

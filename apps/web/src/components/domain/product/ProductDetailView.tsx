@@ -110,23 +110,82 @@ export function ProductDetailView({
 
   const defaultVariant = product?.variants?.find((variant) => variant.inStock && variant.stock > 0)
     ?? product?.variants?.[0];
-  const selectionIsValid = variantOptionGroups.every(({ name, values }) =>
-    typeof selectedOptions[name] === "string" && values.includes(selectedOptions[name]),
-  );
-  const effectiveSelectedOptions = selectionIsValid
-    ? selectedOptions
-    : Object.fromEntries(defaultVariant?.options.map(({ name, value }) => [name, value]) ?? []);
+
+  const defaultOptions = useMemo(() => {
+    return Object.fromEntries(
+      defaultVariant?.options?.map(({ name, value }) => [name, value]) ?? []
+    );
+  }, [defaultVariant]);
+
+  const effectiveSelectedOptions = useMemo(() => {
+    return { ...defaultOptions, ...selectedOptions };
+  }, [defaultOptions, selectedOptions]);
 
   const variants = product?.variants ?? [];
-  const selectedVariant = (() => {
+
+  const selectedVariant = useMemo(() => {
     if (!variants.length || variantOptionGroups.length === 0) return null;
-    if (!variantOptionGroups.every(({ name }) => effectiveSelectedOptions[name] !== undefined)) return null;
-    return variants.find((variant) =>
+    return (
+      variants.find((variant) =>
+        variantOptionGroups.every(({ name }) =>
+          variant.options?.some(
+            (option) =>
+              option.name === name &&
+              option.value === effectiveSelectedOptions[name]
+          )
+        )
+      ) ?? null
+    );
+  }, [variants, variantOptionGroups, effectiveSelectedOptions]);
+
+  const handleSelectOption = (groupName: string, optionValue: string) => {
+    if (!variants.length) return;
+
+    const candidateOptions = {
+      ...effectiveSelectedOptions,
+      [groupName]: optionValue,
+    };
+
+    let matched = variants.find((variant) =>
       variantOptionGroups.every(({ name }) =>
-        variant.options?.some((option) => option.name === name && option.value === effectiveSelectedOptions[name])
+        variant.options?.some(
+          (opt) => opt.name === name && opt.value === candidateOptions[name]
+        )
       )
-    ) ?? null;
-  })();
+    );
+
+    if (!matched) {
+      matched =
+        variants.find(
+          (v) =>
+            v.inStock &&
+            v.stock > 0 &&
+            v.options?.some(
+              (opt) => opt.name === groupName && opt.value === optionValue
+            )
+        ) ??
+        variants.find((v) =>
+          v.options?.some(
+            (opt) => opt.name === groupName && opt.value === optionValue
+          )
+        );
+    }
+
+    if (matched?.options?.length) {
+      const newSelections = Object.fromEntries(
+        matched.options.map((opt) => [opt.name, opt.value])
+      );
+      setSelectedOptions(newSelections);
+    } else {
+      setSelectedOptions((current) => ({
+        ...current,
+        [groupName]: optionValue,
+      }));
+    }
+
+    setSelectedImageIndex(0);
+    setQuantity(1);
+  };
 
   const effectiveBreadcrumbs = useMemo(() => {
     if (breadcrumbs && breadcrumbs.length > 0) return breadcrumbs;
@@ -205,7 +264,7 @@ export function ProductDetailView({
 
   const stock = selectedVariant?.stock ?? (p.hasVariants ? 0 : p.stock ?? 0);
   const isOutOfStock = stock <= 0;
-  const isLiked = isInWishlist(p.id);
+  const isLiked = isInWishlist(p.id, selectedVariant?.id);
 
   const nextImage = () => {
     if (images.length > 1) {
@@ -282,15 +341,18 @@ export function ProductDetailView({
 
   async function handleWishlist() {
     try {
-      const added = await toggleItem({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        price: p.price ?? 0,
-        discountPrice: p.discountPrice,
-        thumbnail: p.imageUrl,
-        vendor: p.vendor,
-      });
+      const added = await toggleItem(
+        {
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          price: basePrice,
+          discountPrice: originalPrice,
+          thumbnail: activeImage || p.imageUrl,
+          vendor: p.vendor,
+        },
+        selectedVariant?.id
+      );
       if (added) {
         toast.success("Saved to wishlist");
       } else {
@@ -362,6 +424,8 @@ export function ProductDetailView({
                 src={activeImage}
                 alt={p.name}
                 className="h-full w-full object-contain p-6 transition-all duration-300"
+                priority
+                loading="eager"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
@@ -522,32 +586,31 @@ export function ProductDetailView({
                     <div className="flex flex-wrap gap-2.5">
                       {values.map((value) => {
                         const isSelected = effectiveSelectedOptions[name] === value;
-                        const canSelect = p.variants?.some((variant) =>
-                          variant.inStock && variant.stock > 0 &&
-                          variant.options?.some((option) => option.name === name && option.value === value) &&
-                          variantOptionGroups.every(({ name: otherName }) =>
-                            otherName === name || effectiveSelectedOptions[otherName] === undefined ||
-                            variant.options?.some((option) => option.name === otherName && option.value === effectiveSelectedOptions[otherName])
-                          )
-                        ) ?? false;
+                        const isAvailable = variants.some((v) =>
+                          v.options?.some((opt) => opt.name === name && opt.value === value)
+                        );
+                        const hasStock = variants.some((v) =>
+                          v.inStock &&
+                          v.stock > 0 &&
+                          v.options?.some((opt) => opt.name === name && opt.value === value)
+                        );
                         return (
                           <button
                             key={`${name}:${value}`}
                             type="button"
                             aria-pressed={isSelected}
-                            disabled={!canSelect}
-                            onClick={() => {
-                              setSelectedOptions((current) => ({ ...current, [name]: value }));
-                              setSelectedImageIndex(0);
-                              setQuantity(1);
-                            }}
+                            disabled={!isAvailable}
+                            onClick={() => handleSelectOption(name, value)}
                             className={`rounded-xl border px-4 py-2 text-sm sm:text-base font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
                               isSelected
                                 ? "border-primary bg-primary text-primary-foreground shadow-xs font-semibold"
                                 : "border-border bg-card text-foreground hover:border-foreground/40"
-                            }`}
+                            } ${!hasStock && !isSelected ? "opacity-60" : ""}`}
                           >
                             <span className="capitalize">{value}</span>
+                            {!hasStock && (
+                              <span className="ml-1.5 text-[11px] font-normal opacity-70">(Out of stock)</span>
+                            )}
                           </button>
                         );
                       })}

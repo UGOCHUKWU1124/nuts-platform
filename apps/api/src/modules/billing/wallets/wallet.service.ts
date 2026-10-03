@@ -10,9 +10,9 @@ import {
   WalletTransactionType,
 } from '@prisma/client';
 
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
-import { buildPaginationMeta } from 'src/modules/shared/utils/pagination-meta.util';
+import { buildPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
 
 @Injectable()
 export class WalletService {

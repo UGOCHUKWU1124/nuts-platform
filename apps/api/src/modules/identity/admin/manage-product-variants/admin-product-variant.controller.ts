@@ -22,17 +22,17 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { AdminVariantResponseDto } from 'src/modules/product-variants/dto/admin-variant-response.dto';
-import { CreateVariantDto } from 'src/modules/product-variants/dto/create-variant.dto';
-import { UpdateVariantStockDto } from 'src/modules/product-variants/dto/update-variant-stock.dto';
-import { UpdateVariantDto } from 'src/modules/product-variants/dto/update-variant.dto';
-import { VariantStockUpdateResponseDto } from 'src/modules/product-variants/dto/variant-stock-update-response.dto';
-import { ProductVariantsService } from 'src/modules/product-variants/product-variants.service';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { AdminVariantResponseDto } from '@api/modules/product-variants/dto/admin-variant-response.dto';
+import { CreateVariantDto } from '@api/modules/product-variants/dto/create-variant.dto';
+import { UpdateVariantStockDto } from '@api/modules/product-variants/dto/update-variant-stock.dto';
+import { UpdateVariantDto } from '@api/modules/product-variants/dto/update-variant.dto';
+import { VariantStockUpdateResponseDto } from '@api/modules/product-variants/dto/variant-stock-update-response.dto';
+import { ProductVariantsService } from '@api/modules/product-variants/product-variants.service';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - PRODUCT VARIANTS')
 @ApiBearerAuth('JWT-auth')

@@ -6,8 +6,8 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { ToBoolean } from 'src/modules/shared/decorators/to-boolean.decorator';
-import { CursorPaginationDto } from 'src/modules/shared/dto/cursor-pagination.dto';
+import { ToBoolean } from '@api/modules/shared/decorators/to-boolean.decorator';
+import { CursorPaginationDto } from '@api/modules/shared/dto/cursor-pagination.dto';
 
 /**
  * Product listing filters — sent in the POST body (not the query string).

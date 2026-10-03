@@ -2,9 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { AuthCookiesModule } from 'src/modules/auth/auth-cookies.module';
-import { PrismaModule } from 'src/modules/infrastructure/prisma/prisma.module';
-import { SecurityModule } from 'src/modules/security/security.module';
+import { AuthCookiesModule } from '@api/modules/auth/auth-cookies.module';
+import { PrismaModule } from '@api/modules/infrastructure/prisma/prisma.module';
+import { SecurityModule } from '@api/modules/security/security.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 

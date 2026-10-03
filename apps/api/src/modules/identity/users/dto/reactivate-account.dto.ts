@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
-import { MaxPasswordBytes } from 'src/modules/shared/decorators/max-password-bytes.decorator';
+import { MaxPasswordBytes } from '@api/modules/shared/decorators/max-password-bytes.decorator';
 
 export class ReactivateAccountDto {
   @ApiProperty({ example: 'user@example.com' })

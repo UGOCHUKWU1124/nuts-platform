@@ -27,20 +27,20 @@ import {
 import type { Request, Response } from 'express';
 
 import { ROLE } from '@prisma/client';
-import { AuthCookieService } from 'src/modules/auth/cookies/auth-cookie.service';
-import { OtpService } from 'src/modules/auth/otp/otp.service';
-import { ReferralService } from 'src/modules/referral/referral.service';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { OtpRequired } from 'src/modules/shared/decorators/otp-required.decorator';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
+import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
+import { OtpService } from '@api/modules/auth/otp/otp.service';
+import { ReferralService } from '@api/modules/referral/referral.service';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import {
   extractIpAddress,
   extractUserAgent,
-} from 'src/modules/shared/utils/request.util';
+} from '@api/modules/shared/utils/request.util';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { DeactivateAccountResponseDto } from './dto/deactivate-account-response.dto';
 import { ReactivateAccountDto } from './dto/reactivate-account.dto';

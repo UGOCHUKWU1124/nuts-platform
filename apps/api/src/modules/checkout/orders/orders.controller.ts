@@ -32,13 +32,13 @@ import { CheckoutResponseDto } from './dto/checkout-response.dto';
 import { CheckoutDto } from './dto/checkout.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
 
-import { PaginationQueryDto } from 'src/modules/shared/dto/pagination-query.dto';
+import { PaginationQueryDto } from '@api/modules/shared/dto/pagination-query.dto';
 
 import { ROLE } from '@prisma/client';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import type { RequestWithUser } from 'src/modules/shared/interfaces/request-with-user.interface';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import type { RequestWithUser } from '@api/modules/shared/interfaces/request-with-user.interface';
 
 @ApiTags('Orders')
 @ApiBearerAuth()

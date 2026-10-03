@@ -32,30 +32,30 @@ import { RegisterDto } from './dto/register.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
-import { AccountLockGuard } from 'src/modules/security/guards/account-lock.guard';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
+import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
 
 import {
   PasswordResetThrottle,
   RefreshTokenThrottle,
   StrictThrottle,
-} from 'src/modules/shared/decorators/custom-throttler.decorator';
+} from '@api/modules/shared/decorators/custom-throttler.decorator';
 
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 
 import {
   extractIpAddress,
   extractUserAgent,
-} from 'src/modules/shared/utils/request.util';
+} from '@api/modules/shared/utils/request.util';
 
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 
 import { ROLE } from '@prisma/client';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
 
