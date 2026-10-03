@@ -33,22 +33,22 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { CreateProductDto } from 'src/modules/products/dto/create-product.dto';
-import { ProductReactivateResponseDto } from 'src/modules/products/dto/product-reactivate-response.dto';
-import { QueryProductDto } from 'src/modules/products/dto/query-product.dto';
-import { StockUpdateResponseDto } from 'src/modules/products/dto/stock-update-response.dto';
-import { UpdateProductDto } from 'src/modules/products/dto/update-product.dto';
-import { UpdateStockDto } from 'src/modules/products/dto/update-stock.dto';
-import { VendorProductResponseDto } from 'src/modules/products/dto/vendor-product-response.dto';
-import { ProductsService } from 'src/modules/products/products.service';
-import { AuthStrategy } from 'src/modules/shared/decorators/auth-strategy.decorator';
-import { GetVendor } from 'src/modules/shared/decorators/get-vendor.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { CreateProductDto } from '@api/modules/products/dto/create-product.dto';
+import { ProductReactivateResponseDto } from '@api/modules/products/dto/product-reactivate-response.dto';
+import { QueryProductDto } from '@api/modules/products/dto/query-product.dto';
+import { StockUpdateResponseDto } from '@api/modules/products/dto/stock-update-response.dto';
+import { UpdateProductDto } from '@api/modules/products/dto/update-product.dto';
+import { UpdateStockDto } from '@api/modules/products/dto/update-stock.dto';
+import { VendorProductResponseDto } from '@api/modules/products/dto/vendor-product-response.dto';
+import { ProductsService } from '@api/modules/products/products.service';
+import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
 import {
   ApiResponseDto,
   PaginationMetaDto,
-} from 'src/modules/shared/dto/api-response.dto';
+} from '@api/modules/shared/dto/api-response.dto';
 import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - PRODUCTS')

@@ -6,7 +6,7 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import {
   getErrorCode,
   getErrorMessage,
-} from 'src/modules/shared/utils/error-details.util';
+} from '@api/modules/shared/utils/error-details.util';
 
 @Injectable()
 export class OutboxRelay {

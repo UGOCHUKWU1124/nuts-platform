@@ -5,9 +5,9 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryStatus } from '@prisma/client';
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { AuditLogService } from 'src/modules/shared/audit-log/audit-log.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
 import { CategoriesService } from './categories.service';
 
 describe('CategoriesService (Hierarchical Catalog System)', () => {
@@ -251,6 +251,11 @@ describe('CategoriesService (Hierarchical Catalog System)', () => {
 
     it('should reject moving a category under one of its own descendants', async () => {
       prisma.category.findUnique.mockResolvedValue(mockCategories[2]); // Samsung target
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'cat-root-electronics' },
+        { id: 'cat-child-phones' },
+        { id: 'cat-leaf-samsung' },
+      ]);
       // Mock CTE descendant IDs of Electronics returning Phones and Samsung
       prisma.$queryRaw.mockResolvedValue([
         { id: 'cat-root-electronics' },
@@ -269,6 +274,11 @@ describe('CategoriesService (Hierarchical Catalog System)', () => {
   describe('3. Lifecycle: Archive & Safe Deletion', () => {
     it('should archive a category and cascade status to all descendants', async () => {
       prisma.category.findFirst.mockResolvedValue(mockCategories[0]);
+      prisma.category.findUnique.mockResolvedValue(mockCategories[0]);
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'cat-child-phones' },
+        { id: 'cat-leaf-samsung' },
+      ]);
       prisma.$queryRaw.mockResolvedValue([
         { id: 'cat-child-phones' },
         { id: 'cat-leaf-samsung' },

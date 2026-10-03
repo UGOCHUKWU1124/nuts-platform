@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { CategoriesModule } from 'src/modules/category/categories.module';
+import { CategoriesModule } from '@api/modules/category/categories.module';
 import { AdminCategoryController } from './admin-category.controller';
 
 @Module({

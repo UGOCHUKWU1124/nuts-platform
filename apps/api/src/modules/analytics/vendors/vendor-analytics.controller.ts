@@ -13,11 +13,11 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { VendorJwtAuthGuard } from 'src/modules/identity/vendors/guards/vendor-auth.guard';
-import { AuthStrategy } from 'src/modules/shared/decorators/auth-strategy.decorator';
-import { GetVendor } from 'src/modules/shared/decorators/get-vendor.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+import { VendorJwtAuthGuard } from '@api/modules/identity/vendors/guards/vendor-auth.guard';
+import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { VendorAnalyticsQueryDto } from './dto/vendor-analytics-query.dto';
 import { VendorAnalyticsSummaryDto } from './dto/vendor-analytics-summary.dto';
 import { VendorAnalyticsService } from './vendor-analytics.service';

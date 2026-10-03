@@ -1,9 +1,4 @@
-import {
-  Controller,
-  MessageEvent,
-  Sse,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, MessageEvent, Sse, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import { GetUser } from '../../../common/decorators/get-user.decorator';

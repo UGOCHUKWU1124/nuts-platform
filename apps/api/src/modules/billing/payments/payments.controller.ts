@@ -28,7 +28,7 @@ import {
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { Public } from 'src/modules/shared/decorators/public.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { PaymentsService } from './payments.service';
 
 import { RefundPaymentDto, RequestPaymentOtpDto } from './dto';
@@ -39,13 +39,13 @@ import {
 } from './dto/payment-response.dto';
 
 import { ROLE } from '@prisma/client';
-import { OtpService } from 'src/modules/auth/otp/otp.service';
-import { OtpThrottle } from 'src/modules/shared/decorators/custom-throttler.decorator';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { OtpRequired } from 'src/modules/shared/decorators/otp-required.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { OtpService } from '@api/modules/auth/otp/otp.service';
+import { OtpThrottle } from '@api/modules/shared/decorators/custom-throttler.decorator';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('Payments')
 @ApiBearerAuth('JWT-auth')

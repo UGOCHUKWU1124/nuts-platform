@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaginationMetaDto } from 'src/modules/shared/dto/api-response.dto';
+import { PaginationMetaDto } from '@api/modules/shared/dto/api-response.dto';
 
 export class SearchResultDto {
   @ApiProperty({ description: 'Document id' })

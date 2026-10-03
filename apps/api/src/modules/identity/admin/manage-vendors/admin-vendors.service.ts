@@ -1,14 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { VendorProfileDto } from 'src/modules/identity/vendors/dto/vendor-response.dto';
-import { VendorStatusResponseDto } from 'src/modules/identity/vendors/dto/vendor-status-response.dto';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { VendorProfileDto } from '@api/modules/identity/vendors/dto/vendor-response.dto';
+import { VendorStatusResponseDto } from '@api/modules/identity/vendors/dto/vendor-status-response.dto';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import {
   AuditLogService,
   toAuditPayload,
-} from 'src/modules/shared/audit-log/audit-log.service';
-import { createPaginationMeta } from 'src/modules/shared/utils/pagination-meta.util';
-import { getPagination } from 'src/modules/shared/utils/pagination.util';
+} from '@api/modules/shared/audit-log/audit-log.service';
+import { createPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
+import { getPagination } from '@api/modules/shared/utils/pagination.util';
 import { QueryAdminVendorsDto } from './dto/query-admin-vendors.dto';
 
 const vendorSelect = {
@@ -121,7 +121,10 @@ export class AdminVendorsService {
 
     const vendor = await this.prisma.vendor.update({
       where: { id },
-      data: { isApproved: true },
+      data: {
+        isApproved: true,
+        tokenVersion: { increment: 1 },
+      },
       select: {
         id: true,
         isActive: true,
@@ -221,7 +224,12 @@ export class AdminVendorsService {
 
     const vendor = await this.prisma.vendor.update({
       where: { id },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        refreshToken: null,
+        refreshTokenId: null,
+        tokenVersion: { increment: 1 },
+      },
       select: {
         id: true,
         isActive: true,
@@ -271,7 +279,10 @@ export class AdminVendorsService {
 
     const vendor = await this.prisma.vendor.update({
       where: { id },
-      data: { isActive: true },
+      data: {
+        isActive: true,
+        tokenVersion: { increment: 1 },
+      },
       select: {
         id: true,
         isActive: true,

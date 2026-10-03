@@ -16,11 +16,11 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminAnalyticsQueryDto } from './dto/admin-analytics-query.dto';
 import {

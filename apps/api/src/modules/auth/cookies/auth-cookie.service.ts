@@ -7,12 +7,7 @@ import {
   authCookieNames,
   AuthCookieRole,
 } from '../constants/auth-cookies.constants';
-
-export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
-  refreshId: string;
-}
+import type { AuthTokens } from '../types/auth.types';
 
 @Injectable()
 export class AuthCookieService {

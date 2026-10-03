@@ -2,16 +2,16 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NotificationPriority, NotificationType, ROLE } from '@prisma/client';
 import Redis from 'ioredis';
-import { EmailTemplatesService } from 'src/modules/infrastructure/mail/email-templates.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { RABBITMQ_QUEUES } from 'src/modules/infrastructure/rabbitmq/rabbitmq.constants';
-import { RabbitMQService } from 'src/modules/infrastructure/rabbitmq/rabbitmq.service';
-import { REDIS_CLIENT } from 'src/modules/infrastructure/redis/redis.constants';
-import { ABANDONED_CART } from 'src/modules/shared/constants';
+import { EmailTemplatesService } from '@api/modules/infrastructure/mail/email-templates.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
+import { REDIS_CLIENT } from '@api/modules/infrastructure/redis/redis.constants';
+import { ABANDONED_CART } from '@api/modules/shared/constants';
 import {
   getErrorCode,
   getErrorMessage,
-} from 'src/modules/shared/utils/error-details.util';
+} from '@api/modules/shared/utils/error-details.util';
 
 @Injectable()
 export class AbandonedCartCron {
@@ -36,13 +36,17 @@ export class AbandonedCartCron {
     const firstThreshold = new Date(
       now.getTime() - ABANDONED_CART.FIRST_REMINDER_HOURS * 60 * 60 * 1000,
     );
+    // Upper bound cutoff: don't alert carts abandoned more than 7 days ago
+    const maxAgeCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     try {
       const carts = await this.prisma.cart.findMany({
         where: {
           checkedOut: false,
+          abandonedCartAlerted: false,
           updatedAt: {
             lte: firstThreshold,
+            gte: maxAgeCutoff,
           },
           cartItems: {
             some: {},
@@ -79,6 +83,12 @@ export class AbandonedCartCron {
         const dedupKey = `cart:reminder:${cart.id}:first`;
         const alreadySent = await this.redis.get(dedupKey);
         if (alreadySent) {
+          await this.prisma.cart
+            .update({
+              where: { id: cart.id },
+              data: { abandonedCartAlerted: true },
+            })
+            .catch(() => null);
           continue;
         }
 
@@ -121,7 +131,14 @@ export class AbandonedCartCron {
           metadata: { cartId: cart.id },
         });
 
-        // Set Redis dedup key for 72 hours
+        // Mark alerted in DB and set Redis dedup key for 72 hours
+        await this.prisma.cart
+          .update({
+            where: { id: cart.id },
+            data: { abandonedCartAlerted: true },
+          })
+          .catch(() => null);
+
         await this.redis.set(dedupKey, 'sent', 'EX', 72 * 60 * 60);
         queued++;
       }

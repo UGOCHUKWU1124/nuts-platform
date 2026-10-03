@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
-import { ToNumberDefault } from 'src/modules/shared/decorators/to-number.decorator';
+import { ToNumberDefault } from '@api/modules/shared/decorators/to-number.decorator';
 
 export class PaginationQueryDto {
   @ApiPropertyOptional({

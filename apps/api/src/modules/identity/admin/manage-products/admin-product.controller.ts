@@ -24,21 +24,21 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { AdminCreateProductDto } from 'src/modules/products/dto/admin-create-product.dto';
-import { AdminProductResponseDto } from 'src/modules/products/dto/admin-product-response.dto';
-import { ProductReactivateResponseDto } from 'src/modules/products/dto/product-reactivate-response.dto';
-import { ProductResponseDto } from 'src/modules/products/dto/product-response.dto';
-import { QueryProductDto } from 'src/modules/products/dto/query-product.dto';
-import { StockUpdateResponseDto } from 'src/modules/products/dto/stock-update-response.dto';
-import { UpdateProductDto } from 'src/modules/products/dto/update-product.dto';
-import { UpdateStockDto } from 'src/modules/products/dto/update-stock.dto';
-import { ProductsService } from 'src/modules/products/products.service';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { AdminCreateProductDto } from '@api/modules/products/dto/admin-create-product.dto';
+import { AdminProductResponseDto } from '@api/modules/products/dto/admin-product-response.dto';
+import { ProductReactivateResponseDto } from '@api/modules/products/dto/product-reactivate-response.dto';
+import { ProductResponseDto } from '@api/modules/products/dto/product-response.dto';
+import { QueryProductDto } from '@api/modules/products/dto/query-product.dto';
+import { StockUpdateResponseDto } from '@api/modules/products/dto/stock-update-response.dto';
+import { UpdateProductDto } from '@api/modules/products/dto/update-product.dto';
+import { UpdateStockDto } from '@api/modules/products/dto/update-stock.dto';
+import { ProductsService } from '@api/modules/products/products.service';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - PRODUCTS')
 @ApiBearerAuth('JWT-auth')

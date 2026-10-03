@@ -1,10 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import {
-  ANALYTICS_RANGES,
-  AnalyticsRange,
-} from '../../vendors/dto/vendor-analytics-query.dto';
+import { ANALYTICS_RANGES } from '../../vendors/dto/vendor-analytics-query.dto';
+import type { AnalyticsRange } from '../../vendors/dto/vendor-analytics-query.dto';
 
 export class AdminAnalyticsQueryDto {
   @ApiPropertyOptional({

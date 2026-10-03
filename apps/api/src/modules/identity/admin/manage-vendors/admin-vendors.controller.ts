@@ -25,18 +25,18 @@ import {
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import type { Request } from 'express';
-import { VendorProfileDto } from 'src/modules/identity/vendors/dto/vendor-response.dto';
-import { VendorStatusResponseDto } from 'src/modules/identity/vendors/dto/vendor-status-response.dto';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { VendorProfileDto } from '@api/modules/identity/vendors/dto/vendor-response.dto';
+import { VendorStatusResponseDto } from '@api/modules/identity/vendors/dto/vendor-status-response.dto';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import {
   extractIpAddress,
   extractUserAgent,
-} from 'src/modules/shared/utils/request.util';
+} from '@api/modules/shared/utils/request.util';
 import { AdminVendorsService } from './admin-vendors.service';
 import { QueryAdminVendorsDto } from './dto/query-admin-vendors.dto';
 

@@ -6,9 +6,9 @@ import {
 
 import { Prisma } from '@prisma/client';
 
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 import { WishlistResponseDto } from './dto/wishlist.dto';
 
@@ -71,7 +71,7 @@ export class WishlistService {
     productId: string,
     variantId?: string,
   ): Promise<WishlistResponseDto> {
-    const normalizedVariantId = this.normalizeVariantId(variantId);
+    let normalizedVariantId = this.normalizeVariantId(variantId);
 
     /*
      * One product query validates:
@@ -79,11 +79,9 @@ export class WishlistService {
      * 1. product exists
      * 2. product is active
      * 3. product is not deleted
-     * 4. requested variant belongs to this product
-     * 5. requested variant is active
-     * 6. requested variant is not deleted
-     *
-     * This is cleaner than doing separate product + variant queries.
+     * 4. requested variant belongs to this product (if specified)
+     * 5. requested variant is active (if specified)
+     * 6. requested variant is not deleted (if specified)
      */
     const product = await this.prisma.product.findFirst({
       where: {
@@ -133,26 +131,40 @@ export class WishlistService {
       throw new NotFoundException('Product not found or unavailable');
     }
 
-    if (product.hasVariants && !normalizedVariantId) {
-      throw new ConflictException('Please select a product variant');
-    }
-
+    // If client supplied a variant for a non-variant product, gracefully treat as null
     if (!product.hasVariants && normalizedVariantId) {
-      throw new ConflictException('This product does not support variants');
+      normalizedVariantId = null;
     }
 
     if (normalizedVariantId && product.variants.length === 0) {
       throw new NotFoundException('Product variant not found or unavailable');
     }
 
+    // Check if an item for this product already exists in user's wishlist
+    const existing = await this.prisma.wishlistItem.findFirst({
+      where: {
+        userId,
+        productId,
+        ...(normalizedVariantId ? { variantId: normalizedVariantId } : {}),
+      },
+      include: WISHLIST_ITEM_INCLUDE,
+    });
+
+    if (existing) {
+      // If user previously added product without variant, update to newly specified variant
+      if (normalizedVariantId && !existing.variantId) {
+        const updated = await this.prisma.wishlistItem.update({
+          where: { id: existing.id },
+          data: { variantId: normalizedVariantId },
+          include: WISHLIST_ITEM_INCLUDE,
+        });
+        await this.invalidateCache(userId);
+        return this.toResponseDto(updated);
+      }
+      return this.toResponseDto(existing);
+    }
+
     try {
-      /*
-       * The database unique constraint is the final authority for duplicate
-       * wishlist items.
-       *
-       * Do NOT rely on "find first, then create" because two concurrent
-       * requests could both pass the check.
-       */
       const item = await this.prisma.wishlistItem.create({
         data: {
           userId,
@@ -168,15 +180,22 @@ export class WishlistService {
       return this.toResponseDto(item);
     } catch (error) {
       /*
-       * Prisma P2002 = unique constraint violation.
-       *
-       * This handles concurrent duplicate requests safely.
+       * Prisma P2002 = unique constraint violation (concurrent duplicate request).
        */
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException('Item already in wishlist');
+        const fallback = await this.prisma.wishlistItem.findFirst({
+          where: {
+            userId,
+            productId,
+          },
+          include: WISHLIST_ITEM_INCLUDE,
+        });
+        if (fallback) {
+          return this.toResponseDto(fallback);
+        }
       }
 
       throw error;
@@ -239,25 +258,30 @@ export class WishlistService {
     const normalizedVariantId = this.normalizeVariantId(variantId);
 
     /*
-     * deleteMany is useful here because:
-     *
-     * - ownership is checked inside the DELETE query
-     * - there is no find-then-delete race
-     * - only one database round trip is required
+     * If a specific variantId is supplied, attempt to delete that variant.
+     * If no rows are deleted (or if variantId is omitted), delete any wishlist item
+     * for this product and user so the product is guaranteed removed.
      */
-    const result = await this.prisma.wishlistItem.deleteMany({
+    let result = await this.prisma.wishlistItem.deleteMany({
       where: {
         userId,
         productId,
-        variantId: normalizedVariantId,
+        ...(normalizedVariantId ? { variantId: normalizedVariantId } : {}),
       },
     });
 
-    if (result.count === 0) {
-      throw new NotFoundException('Item not found in wishlist');
+    if (result.count === 0 && normalizedVariantId) {
+      result = await this.prisma.wishlistItem.deleteMany({
+        where: {
+          userId,
+          productId,
+        },
+      });
     }
 
-    await this.invalidateCache(userId);
+    if (result.count > 0) {
+      await this.invalidateCache(userId);
+    }
   }
 
   // ---------------------------------------------------------------------------

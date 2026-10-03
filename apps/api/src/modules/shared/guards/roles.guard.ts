@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLE } from '@prisma/client';
-import { IS_PUBLIC_KEY } from 'src/modules/shared/decorators/public.decorator';
-import { ROLES_KEY } from 'src/modules/shared/decorators/role.decorator';
+import { IS_PUBLIC_KEY } from '@api/modules/shared/decorators/public.decorator';
+import { ROLES_KEY } from '@api/modules/shared/decorators/role.decorator';
 
 type AuthUser = {
   id: string;

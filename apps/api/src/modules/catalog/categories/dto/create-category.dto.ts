@@ -10,7 +10,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { Trim } from 'src/modules/shared/decorators/string-trim.decorator';
+import { Trim } from '@api/modules/shared/decorators/string-trim.decorator';
 
 export class CreateCategoryDto {
   @ApiProperty({

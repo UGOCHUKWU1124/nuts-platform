@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DiscountCodeModule } from 'src/modules/promotions/discount-code.module';
+import { DiscountCodeModule } from '@api/modules/promotions/discount-code.module';
 import { AdminDiscountCodesController } from './admin-discount-codes.controller';
 
 @Module({

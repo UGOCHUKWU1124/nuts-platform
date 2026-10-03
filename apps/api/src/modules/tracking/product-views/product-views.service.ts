@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
-import { RABBITMQ_QUEUES } from 'src/modules/infrastructure/rabbitmq/rabbitmq.constants';
-import { RabbitMQService } from 'src/modules/infrastructure/rabbitmq/rabbitmq.service';
-import { TRACKING } from 'src/modules/shared/constants';
+import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
+import { TRACKING } from '@api/modules/shared/constants';
 
 interface BufferedView {
   productId: string;

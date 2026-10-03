@@ -1,7 +1,7 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { ProductVariantsService } from './product-variants.service';
 
 const mockPrisma = {
@@ -26,8 +26,12 @@ const mockPrisma = {
 const mockCacheService = {
   get: jest.fn(),
   set: jest.fn(),
-  del: jest.fn(),
-  delByPattern: jest.fn(),
+  del: jest.fn().mockResolvedValue(undefined),
+  delByPattern: jest.fn().mockResolvedValue(undefined),
+  buildKey: jest.fn(
+    (prefix: string, ...parts: string[]) => `${prefix}:${parts.join(':')}`,
+  ),
+  invalidateProductCache: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('ProductVariantsService', () => {
@@ -151,18 +155,15 @@ describe('ProductVariantsService', () => {
       expect(result.id).toBe('variant-123');
     });
 
-    it('should throw ForbiddenException when vendor does not own product', async () => {
-      mockPrisma.product.findFirst.mockResolvedValue({
-        ...mockProduct,
-        vendor: { id: 'other-vendor' },
-      });
+    it('should throw NotFoundException when vendor does not own product', async () => {
+      mockPrisma.product.findFirst.mockResolvedValue(null);
 
       await expect(
         service.createForVendor('vendor-123', 'prod-456', {
-          options: [],
+          options: [{ name: 'Size', value: 'Large' }],
           stock: 10,
         }),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

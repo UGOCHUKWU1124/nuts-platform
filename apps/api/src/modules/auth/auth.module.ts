@@ -7,9 +7,10 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { OtpService } from './otp/otp.service';
 import { AuthSessionService } from './sessions/auth-session.service';
+import { RefreshSessionService } from './sessions/refresh-session.service';
 
-import { ReferralModule } from 'src/modules/referral/referral.module';
-import { SecurityModule } from 'src/modules/security/security.module';
+import { ReferralModule } from '@api/modules/referral/referral.module';
+import { SecurityModule } from '@api/modules/security/security.module';
 
 import { AuthCookiesModule } from './cookies/auth-cookie.module';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -42,6 +43,7 @@ import { JwtRefreshStrategy } from './strategies/refresh/jwt-refresh.strategy';
     AuthService,
     OtpService,
     AuthSessionService,
+    RefreshSessionService,
 
     JwtStrategy,
     JwtRefreshStrategy,
@@ -57,6 +59,7 @@ import { JwtRefreshStrategy } from './strategies/refresh/jwt-refresh.strategy';
     JwtStrategy,
     JwtRefreshStrategy,
     JwtRefreshGuard,
+    AuthSessionService,
   ],
 })
 export class AuthModule {}

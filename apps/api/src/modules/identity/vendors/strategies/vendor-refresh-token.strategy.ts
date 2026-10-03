@@ -6,9 +6,9 @@ import * as bcrypt from 'bcrypt';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { VENDOR_REFRESH_TOKEN_COOKIE } from 'src/modules/auth/constants/auth-cookies.constants';
-import { jwtFromCookie } from 'src/modules/auth/utils/jwt-cookie.extractor';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { VENDOR_REFRESH_TOKEN_COOKIE } from '@api/modules/auth/constants/auth-cookies.constants';
+import { jwtFromCookie } from '@api/modules/auth/utils/jwt-cookie.extractor';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 export type VendorRefreshTokenPayload = {
   sub: string;
@@ -40,6 +40,9 @@ export class VendorRefreshTokenStrategy extends PassportStrategy(
       secretOrKey: refreshSecret,
       ignoreExpiration: false,
       passReqToCallback: true,
+      issuer: configService.getOrThrow<string>('JWT_ISSUER'),
+      audience: configService.getOrThrow<string>('JWT_REFRESH_AUDIENCE'),
+      algorithms: ['HS256'],
     });
     this.refreshSecret = refreshSecret;
   }
@@ -109,7 +112,7 @@ export class VendorRefreshTokenStrategy extends PassportStrategy(
 
     return {
       id: payload.sub,
-      email: payload.email,
+      email: vendor.email,
       type: payload.type,
       refreshId: payload.refreshId,
     };

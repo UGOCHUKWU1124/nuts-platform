@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import Redlock, { Lock, RedlockAbortSignal } from 'redlock';
-import { getErrorMessage } from 'src/modules/shared/utils/error-details.util';
+import { getErrorMessage } from '@api/modules/shared/utils/error-details.util';
 import { REDIS_CLIENT } from './redis.constants';
 
 @Injectable()
@@ -18,7 +18,7 @@ export class RedlockService {
       automaticExtensionThreshold: 500,
     });
 
-    this.redlock.on('error', (error) => {
+    this.redlock.on('error', (error: unknown) => {
       this.logger.warn(`Redlock non-fatal error: ${getErrorMessage(error)}`);
     });
   }

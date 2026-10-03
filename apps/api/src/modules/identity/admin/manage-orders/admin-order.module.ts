@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { OrdersModule } from 'src/modules/orders/orders.module';
+import { OrdersModule } from '@api/modules/orders/orders.module';
 import { AdminOrdersController } from './admin-order.controller';
 
 @Module({

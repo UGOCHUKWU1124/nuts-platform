@@ -24,16 +24,16 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { AdminOrderResponseDto } from 'src/modules/orders/dto/admin-order-response.dto';
-import { QueryOrderDto } from 'src/modules/orders/dto/query-order.dto';
-import { UpdateOrderStatusDto } from 'src/modules/orders/dto/update-order-status.dto';
-import { OrdersService } from 'src/modules/orders/orders.service';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { AdminOrderResponseDto } from '@api/modules/orders/dto/admin-order-response.dto';
+import { QueryOrderDto } from '@api/modules/orders/dto/query-order.dto';
+import { UpdateOrderStatusDto } from '@api/modules/orders/dto/update-order-status.dto';
+import { OrdersService } from '@api/modules/orders/orders.service';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @Roles(ROLE.ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)

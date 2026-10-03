@@ -6,17 +6,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Category, CategoryStatus, Prisma } from '@prisma/client';
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { AuditLogService } from 'src/modules/shared/audit-log/audit-log.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
 import {
   CATEGORY_BY_PATH,
   CATEGORY_BY_SLUG,
   CATEGORY_TREE,
   CATEGORY_TTL,
-} from 'src/modules/shared/constants/cache.constant';
-import { mapPrismaError } from 'src/modules/shared/utils/prisma-error.util';
-import { generateSlug } from 'src/modules/shared/utils/slug.util';
+} from '@api/modules/shared/constants/cache.constant';
+import { mapPrismaError } from '@api/modules/shared/utils/prisma-error.util';
+import { generateSlug } from '@api/modules/shared/utils/slug.util';
 import {
   CategoryBreadcrumbDto,
   CategoryResponseDto,
@@ -449,7 +449,7 @@ export class CategoriesService {
   ): Promise<CategoryResponseDto> {
     const category = await this.resolveCategory(idOrSlug);
     const descendantIds = await this.getDescendantIds(category.id);
-    const allAffectedIds = [category.id, ...descendantIds];
+    const allAffectedIds = Array.from(new Set([category.id, ...descendantIds]));
 
     await this.prisma.$transaction([
       this.prisma.category.updateMany({

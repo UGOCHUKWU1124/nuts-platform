@@ -15,28 +15,28 @@ import * as bcrypt from 'bcrypt';
 import { createHmac, randomBytes } from 'crypto';
 import type { StringValue } from 'ms';
 
-import { AuthTokens } from 'src/modules/auth/cookies/auth-cookie.service';
-import { OtpService } from 'src/modules/auth/otp/otp.service';
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { EmailService } from 'src/modules/infrastructure/mail/email.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { resolveCategoryHierarchy } from 'src/modules/products/products.service';
-import { AccountLockService } from 'src/modules/security/services/account-lock.service';
+import type { AuthTokens } from '@api/modules/auth/types/auth.types';
+import { OtpService } from '@api/modules/auth/otp/otp.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { EmailService } from '@api/modules/infrastructure/mail/email.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { resolveCategoryHierarchy } from '@api/modules/products/products.service';
+import { AccountLockService } from '@api/modules/security/services/account-lock.service';
 import {
   AuditLogService,
   toAuditPayload,
   type AuditChanges,
-} from 'src/modules/shared/audit-log/audit-log.service';
+} from '@api/modules/shared/audit-log/audit-log.service';
 import {
-  BCRYPT_SALT_ROUNDS,
-  DUMMY_PASSWORD_HASH,
-} from 'src/modules/shared/constants/bcrypt.constants';
+  BCRYPT_COST_FACTOR,
+  UNKNOWN_ACCOUNT_PASSWORD_HASH,
+} from '@api/modules/shared/constants/bcrypt.constants';
 import {
   VENDOR_STORE,
   VENDOR_STORE_PRODUCTS,
   VENDOR_STORE_TTL,
-} from 'src/modules/shared/constants/cache.constant';
-import { generateSlug } from 'src/modules/shared/utils/slug.util';
+} from '@api/modules/shared/constants/cache.constant';
+import { generateSlug } from '@api/modules/shared/utils/slug.util';
 
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto, VendorLoginDto } from './dto/update-vendor.dto';
@@ -174,7 +174,7 @@ export class VendorsService {
 
     await this.otpService.verifyOtp(normalizedEmail, dto.otpCode);
 
-    const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
 
     /*
      * The wallet is created as part of the same database operation.
@@ -286,7 +286,7 @@ export class VendorsService {
 
     const passwordMatches = await bcrypt.compare(
       dto.password,
-      vendor?.password ?? DUMMY_PASSWORD_HASH,
+      vendor?.password ?? UNKNOWN_ACCOUNT_PASSWORD_HASH,
     );
 
     if (!vendor || !passwordMatches) {
@@ -327,9 +327,9 @@ export class VendorsService {
      */
     const hashCost = Number(vendor.password.split('$')[2]);
 
-    if (Number.isFinite(hashCost) && hashCost < BCRYPT_SALT_ROUNDS) {
+    if (Number.isFinite(hashCost) && hashCost < BCRYPT_COST_FACTOR) {
       void bcrypt
-        .hash(dto.password, BCRYPT_SALT_ROUNDS)
+        .hash(dto.password, BCRYPT_COST_FACTOR)
         .then((upgradedHash) =>
           this.prisma.vendor.update({
             where: {
@@ -569,6 +569,9 @@ export class VendorsService {
       data: {
         isActive: false,
         deactivatedAt: new Date(),
+        refreshToken: null,
+        refreshTokenId: null,
+        tokenVersion: { increment: 1 },
       },
       select: {
         id: true,
@@ -650,6 +653,7 @@ export class VendorsService {
         isActive: true,
         deactivatedAt: null,
         deactivatedReason: null,
+        tokenVersion: { increment: 1 },
       },
       select: {
         id: true,
@@ -1078,7 +1082,7 @@ export class VendorsService {
 
     const hashedPassword = await bcrypt.hash(
       dto.newPassword,
-      BCRYPT_SALT_ROUNDS,
+      BCRYPT_COST_FACTOR,
     );
 
     await this.prisma.vendor.update({
@@ -1089,6 +1093,7 @@ export class VendorsService {
         password: hashedPassword,
         refreshToken: null,
         refreshTokenId: null,
+        tokenVersion: { increment: 1 },
       },
     });
 
@@ -1122,6 +1127,7 @@ export class VendorsService {
       data: {
         refreshToken: null,
         refreshTokenId: null,
+        tokenVersion: { increment: 1 },
       },
     });
 

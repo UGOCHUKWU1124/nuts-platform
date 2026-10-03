@@ -11,7 +11,7 @@ import {
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 @Injectable()
 export class ReferralService {

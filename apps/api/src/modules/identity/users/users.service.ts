@@ -11,14 +11,14 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, ROLE } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import {
   AuditLogService,
   toAuditPayload,
   type AuditChanges,
-} from 'src/modules/shared/audit-log/audit-log.service';
-import { BCRYPT_SALT_ROUNDS } from 'src/modules/shared/constants/bcrypt.constants';
+} from '@api/modules/shared/audit-log/audit-log.service';
+import { BCRYPT_COST_FACTOR } from '@api/modules/shared/constants/bcrypt.constants';
 import { DEFAULT_ACCOUNT_DELETION_GRACE_DAYS } from './constants/account-lifecycle.constants';
 
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -28,14 +28,14 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserListItemResponseDto } from './dto/user-list-item-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
-import { PaginationMetaDto } from 'src/modules/shared/dto/pagination-meta.dto';
+import { PaginationMetaDto } from '@api/modules/shared/dto/pagination-meta.dto';
 import {
   buildCursorMeta,
   buildCursorWhere,
   getCursorPagination,
-} from 'src/modules/shared/utils/cursor-pagination.util';
-import { createPaginationMeta } from 'src/modules/shared/utils/pagination-meta.util';
-import { getPagination } from 'src/modules/shared/utils/pagination.util';
+} from '@api/modules/shared/utils/cursor-pagination.util';
+import { createPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
+import { getPagination } from '@api/modules/shared/utils/pagination.util';
 
 const USER_ACTIVE_CACHE_TTL = 45;
 const PURGE_BATCH_SIZE = 100;
@@ -484,7 +484,7 @@ export class UsersService {
       );
     }
 
-    const password = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);
+    const password = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
 
     await this.prisma.user.update({
       where: {
@@ -494,6 +494,7 @@ export class UsersService {
         password,
         refreshToken: null,
         refreshTokenId: null,
+        tokenVersion: { increment: 1 },
       },
     });
 
@@ -550,6 +551,7 @@ export class UsersService {
         deactivationReason: null,
         refreshToken: null,
         refreshTokenId: null,
+        tokenVersion: { increment: 1 },
       },
     });
 
@@ -622,6 +624,7 @@ export class UsersService {
         scheduledPermanentDeleteAt: null,
         deactivatedBy: null,
         deactivationReason: null,
+        tokenVersion: { increment: 1 },
       },
       select: this.userSelect,
     });
@@ -728,6 +731,7 @@ export class UsersService {
         deactivationReason: reason,
         refreshToken: null,
         refreshTokenId: null,
+        tokenVersion: { increment: 1 },
       },
     });
 
@@ -816,6 +820,7 @@ export class UsersService {
         scheduledPermanentDeleteAt: null,
         deactivatedBy: null,
         deactivationReason: null,
+        tokenVersion: { increment: 1 },
       },
       select: this.userSelect,
     });
