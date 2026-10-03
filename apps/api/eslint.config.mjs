@@ -28,7 +28,25 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
       "prettier/prettier": ["error", { endOfLine: "auto" }],
+    },
+  },
+  // ─── Test / Spec overrides ────────────────────────────────────────────────
+  // Jest mocks (jest.fn(), mockResolvedValue, etc.) are untyped by design.
+  // Enforcing no-unsafe-* inside test files creates noise without adding safety.
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', '**/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      // Service classes imported solely as type hints for jest mock generics
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   },
 );

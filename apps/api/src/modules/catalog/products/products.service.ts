@@ -551,7 +551,7 @@ export class ProductsService {
    * Eliminates recursive N+1 database queries when rendering product lists.
    */
   async getCategoryLookupMap(): Promise<CategoryLookupMap> {
-    const cacheKey = 'categories:lookup:map:v2';
+    const cacheKey = 'category:lookup:map:v2';
     const list = await this.cacheService.wrapStale(cacheKey, 300, async () => {
       return this.prisma.category.findMany({
         select: {
