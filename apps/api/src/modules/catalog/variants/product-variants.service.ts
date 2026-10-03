@@ -10,8 +10,8 @@ import { Prisma } from '@prisma/client';
 import {
   CacheKeys,
   CacheService,
-} from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+} from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 import {
   CreateVariantDto,

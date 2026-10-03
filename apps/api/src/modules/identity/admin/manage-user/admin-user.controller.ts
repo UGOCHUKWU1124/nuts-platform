@@ -30,24 +30,24 @@ import {
 import type { Request } from 'express';
 
 import { ROLE } from '@prisma/client';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { OtpRequired } from 'src/modules/shared/decorators/otp-required.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import {
   extractIpAddress,
   extractUserAgent,
-} from 'src/modules/shared/utils/request.util';
-import { AdminDeactivateDto } from 'src/modules/users/dto/admin-deactivate.dto';
-import { DeactivateAccountResponseDto } from 'src/modules/users/dto/deactivate-account-response.dto';
-import { QueryUserDto } from 'src/modules/users/dto/query-user.dto';
-import { UserListItemResponseDto } from 'src/modules/users/dto/user-list-item-response.dto';
-import { UserResponseDto } from 'src/modules/users/dto/user-response.dto';
-import { UsersService } from 'src/modules/users/users.service';
+} from '@api/modules/shared/utils/request.util';
+import { AdminDeactivateDto } from '@api/modules/users/dto/admin-deactivate.dto';
+import { DeactivateAccountResponseDto } from '@api/modules/users/dto/deactivate-account-response.dto';
+import { QueryUserDto } from '@api/modules/users/dto/query-user.dto';
+import { UserListItemResponseDto } from '@api/modules/users/dto/user-list-item-response.dto';
+import { UserResponseDto } from '@api/modules/users/dto/user-response.dto';
+import { UsersService } from '@api/modules/users/users.service';
 
 @Roles(ROLE.ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)

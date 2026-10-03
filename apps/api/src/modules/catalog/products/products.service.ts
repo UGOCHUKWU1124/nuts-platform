@@ -5,33 +5,33 @@ import {
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 import {
   PRODUCT_BY_SLUG,
   PRODUCT_TTL,
   VENDOR_STORE_PRODUCTS,
-} from 'src/modules/shared/constants/cache.constant';
+} from '@api/modules/shared/constants/cache.constant';
 
-import { resolveCategoryIdFromPath } from 'src/modules/shared/utils/category-path.util';
-import { mapPrismaError } from 'src/modules/shared/utils/prisma-error.util';
-import { generateSlug } from 'src/modules/shared/utils/slug.util';
-import { getStockStatus } from 'src/modules/shared/utils/stock-status.util';
-import { computeVariantCombinations } from 'src/modules/shared/utils/variant-combinations.util';
-import { normalizeOptions } from 'src/modules/shared/utils/variant-options.validator';
+import { resolveCategoryIdFromPath } from '@api/modules/shared/utils/category-path.util';
+import { mapPrismaError } from '@api/modules/shared/utils/prisma-error.util';
+import { generateSlug } from '@api/modules/shared/utils/slug.util';
+import { getStockStatus } from '@api/modules/shared/utils/stock-status.util';
+import { computeVariantCombinations } from '@api/modules/shared/utils/variant-combinations.util';
+import { normalizeOptions } from '@api/modules/shared/utils/variant-options.validator';
 
-import { createPaginationMeta } from 'src/modules/shared/utils/pagination-meta.util';
-import { getPagination } from 'src/modules/shared/utils/pagination.util';
+import { createPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
+import { getPagination } from '@api/modules/shared/utils/pagination.util';
 
 import {
   buildCursorMeta,
   buildCursorWhere,
   getCursorPagination,
-} from 'src/modules/shared/utils/cursor-pagination.util';
+} from '@api/modules/shared/utils/cursor-pagination.util';
 
-import { AuditLogService } from 'src/modules/shared/audit-log/audit-log.service';
-import { SearchService } from 'src/modules/shared/search/search.service';
+import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
+import { SearchService } from '@api/modules/shared/search/search.service';
 
 import { AdminCreateProductDto } from './dto/admin-create-product.dto';
 import { AdminProductResponseDto } from './dto/admin-product-response.dto';
@@ -45,8 +45,8 @@ import { StockUpdateResponseDto } from './dto/stock-update-response.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { VendorProductResponseDto } from './dto/vendor-product-response.dto';
 
-import type { CreateVariantDto } from 'src/modules/product-variants/dto/create-variant.dto';
-import type { VariantSummaryDto } from 'src/modules/product-variants/dto/variant-response.dto';
+import type { CreateVariantDto } from '@api/modules/product-variants/dto/create-variant.dto';
+import type { VariantSummaryDto } from '@api/modules/product-variants/dto/variant-response.dto';
 
 /* ============================================================================
  * SHARED SELECTS

@@ -10,9 +10,9 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NotificationType, ROLE } from '@prisma/client';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { NotificationsService } from './notifications.service';
 

@@ -1,21 +1,12 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ROLE } from '@prisma/client';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 import type { AuthenticatedUser } from '../types/authenticated-user.type';
 import type { JwtPayload } from '../types/jwt-payload.type';
 
 @Injectable()
 export class AuthSessionService {
-  /**
-   * Fast in-memory cache for validated sessions.
-   * Eliminates a 150ms roundtrip to PostgreSQL on every single authenticated request.
-   */
-  private readonly sessionCache = new Map<
-    string,
-    { user: AuthenticatedUser; expiresAt: number }
-  >();
-
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -27,8 +18,8 @@ export class AuthSessionService {
    * - the token has not been revoked through tokenVersion;
    * - the account still belongs to the expected role.
    *
-   * Therefore these checks remain authoritative in the database, with a 30s in-memory
-   * buffer to prevent thrashing remote database connections on sequential requests.
+   * Therefore these checks remain authoritative in the database on every request.
+   * This keeps revocation immediate and works consistently across API instances.
    */
   async validateAccessToken(
     payload: JwtPayload,
@@ -45,17 +36,17 @@ export class AuthSessionService {
       throw new UnauthorizedException('Invalid access token');
     }
 
-    const cacheKey = `${payload.role}:${payload.sub}:${payload.tokenVersion}`;
-    const cached = this.sessionCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.user;
-    }
-
     const account = await this.findAccount(payload.sub, payload.role);
 
     if (!account || !account.isActive) {
-      this.sessionCache.delete(cacheKey);
       throw new UnauthorizedException('Invalid authentication');
+    }
+
+    if (
+      payload.role === ROLE.VENDOR &&
+      (!('isApproved' in account) || !account.isApproved)
+    ) {
+      throw new UnauthorizedException('Vendor account is not approved');
     }
 
     /**
@@ -64,7 +55,6 @@ export class AuthSessionService {
      * The current database role remains the authoritative account state.
      */
     if (account.role !== payload.role) {
-      this.sessionCache.delete(cacheKey);
       throw new UnauthorizedException('Invalid authentication context');
     }
 
@@ -75,17 +65,10 @@ export class AuthSessionService {
      * increments tokenVersion and immediately invalidates old tokens.
      */
     if (account.tokenVersion !== payload.tokenVersion) {
-      this.sessionCache.delete(cacheKey);
       throw new UnauthorizedException('Session has been revoked');
     }
 
-    const user = this.toAuthenticatedUser(account);
-    this.sessionCache.set(cacheKey, {
-      user,
-      expiresAt: Date.now() + 30_000, // 30 seconds
-    });
-
-    return user;
+    return this.toAuthenticatedUser(account);
   }
 
   private async findAccount(userId: string, role: ROLE) {
@@ -120,6 +103,7 @@ export class AuthSessionService {
             firstName: true,
             lastName: true,
             isActive: true,
+            isApproved: true,
             tokenVersion: true,
           },
         });

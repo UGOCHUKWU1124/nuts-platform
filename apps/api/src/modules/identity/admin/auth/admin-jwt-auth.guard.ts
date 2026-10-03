@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ROLE } from '@prisma/client';
-import type { RequestWithUser } from 'src/modules/shared/interfaces/request-with-user.interface';
+import type { RequestWithUser } from '@api/modules/shared/interfaces/request-with-user.interface';
 
 @Injectable()
 export class AdminJwtAuthGuard extends AuthGuard('jwt') {

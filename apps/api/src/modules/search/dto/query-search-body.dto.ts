@@ -8,7 +8,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { SearchIndex } from 'src/modules/shared/search/search.service';
+import { SearchIndex } from '@api/modules/shared/search/search.service';
 
 const ALLOWED_SEARCH_TYPES: SearchIndex[] = [
   'products',

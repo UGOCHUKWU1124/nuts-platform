@@ -2,13 +2,13 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NotificationPriority, NotificationType, ROLE } from '@prisma/client';
 import Redis from 'ioredis';
-import { EmailTemplatesService } from 'src/modules/infrastructure/mail/email-templates.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { RABBITMQ_QUEUES } from 'src/modules/infrastructure/rabbitmq/rabbitmq.constants';
-import { RabbitMQService } from 'src/modules/infrastructure/rabbitmq/rabbitmq.service';
-import { REDIS_CLIENT } from 'src/modules/infrastructure/redis/redis.constants';
-import { VENDOR_SUMMARY } from 'src/modules/shared/constants';
-import { generateJobId } from 'src/modules/shared/utils';
+import { EmailTemplatesService } from '@api/modules/infrastructure/mail/email-templates.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
+import { REDIS_CLIENT } from '@api/modules/infrastructure/redis/redis.constants';
+import { VENDOR_SUMMARY } from '@api/modules/shared/constants';
+import { generateJobId } from '@api/modules/shared/utils';
 
 interface VendorWeeklySummaryRow {
   vendorId: string;

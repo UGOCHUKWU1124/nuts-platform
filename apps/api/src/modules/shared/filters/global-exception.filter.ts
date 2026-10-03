@@ -1,16 +1,10 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { SentryExceptionCaptured } from '@sentry/nestjs';
 import type { Request, Response } from 'express';
-import { getPrismaErrorDetail } from 'src/modules/shared/utils/prisma-error.util';
+import { getPrismaErrorDetail } from '@api/modules/shared/utils/prisma-error.util';
 
 /** Shape returned by NestJS HttpException.getResponse() when validation fails. */
 interface HttpExceptionBody {

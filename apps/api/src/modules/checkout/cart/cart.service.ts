@@ -9,10 +9,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { Prisma } from '@prisma/client';
 
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { DiscountCodeService } from 'src/modules/promotions/discount-code.service';
-import { UsersService } from 'src/modules/users/users.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { DiscountCodeService } from '@api/modules/promotions/discount-code.service';
+import { UsersService } from '@api/modules/users/users.service';
 
 import { AddedFromDto } from './dto/add-to-cart-quantity.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -227,7 +227,7 @@ export class CartService {
       throw new BadRequestException('Quantity must be a positive integer');
     }
 
-    const normalizedVariantId = this.normalizeVariantId(variantId);
+    let normalizedVariantId = this.normalizeVariantId(variantId);
 
     /*
      * Serializable transactions protect the read -> calculate -> update
@@ -280,7 +280,7 @@ export class CartService {
       }
 
       if (!product.hasVariants && normalizedVariantId) {
-        throw new BadRequestException('This product does not support variants');
+        normalizedVariantId = null;
       }
 
       if (normalizedVariantId && !variant) {
@@ -416,7 +416,7 @@ export class CartService {
     const normalizedVariantId = this.normalizeVariantId(variantId);
 
     await this.runSerializableTransaction(async (tx) => {
-      const cartItem = await tx.cartItem.findFirst({
+      let cartItem = await tx.cartItem.findFirst({
         where: {
           productId,
           variantId: normalizedVariantId,
@@ -448,6 +448,40 @@ export class CartService {
           },
         },
       });
+
+      if (!cartItem) {
+        const candidates = await tx.cartItem.findMany({
+          where: {
+            productId,
+            cart: {
+              userId,
+              checkedOut: false,
+            },
+          },
+          select: {
+            id: true,
+            quantity: true,
+            variant: {
+              select: {
+                stock: true,
+                isActive: true,
+                isDeleted: true,
+              },
+            },
+            product: {
+              select: {
+                stock: true,
+                isActive: true,
+                isDeleted: true,
+              },
+            },
+          },
+        });
+
+        if (candidates.length === 1) {
+          cartItem = candidates[0];
+        }
+      }
 
       if (!cartItem) {
         throw new NotFoundException('Cart item not found');
@@ -548,10 +582,10 @@ export class CartService {
 
     const normalizedVariantId = this.normalizeVariantId(variantId);
 
-    const result = await this.prisma.cartItem.deleteMany({
+    let result = await this.prisma.cartItem.deleteMany({
       where: {
         productId,
-        variantId: normalizedVariantId,
+        ...(normalizedVariantId ? { variantId: normalizedVariantId } : {}),
 
         cart: {
           userId,
@@ -560,11 +594,21 @@ export class CartService {
       },
     });
 
-    if (result.count === 0) {
-      throw new NotFoundException('Cart item not found');
+    if (result.count === 0 && normalizedVariantId) {
+      result = await this.prisma.cartItem.deleteMany({
+        where: {
+          productId,
+          cart: {
+            userId,
+            checkedOut: false,
+          },
+        },
+      });
     }
 
-    await this.invalidateCartCache(userId);
+    if (result.count > 0) {
+      await this.invalidateCartCache(userId);
+    }
 
     const cart = await this.getOrCreateActiveCart(userId);
 

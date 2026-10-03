@@ -28,10 +28,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 
 import { CartService } from './cart.service';
 
@@ -39,7 +39,7 @@ import { AddToCartQuantityDto } from './dto/add-to-cart-quantity.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 import { ROLE } from '@prisma/client';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { AddToCartResponseDto } from './dto/responses/add-to-cart.response';
 import { ClearCartResponseDto } from './dto/responses/clear-cart.response';
 import { GetCartResponseDto } from './dto/responses/get-cart.response';

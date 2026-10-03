@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from 'src/modules/auth/auth.module';
-import { MailModule } from 'src/modules/infrastructure/mail/mail.module';
-import { ReferralModule } from 'src/modules/referral/referral.module';
-import { UsersModule } from 'src/modules/users/users.module';
-import { WalletModule } from 'src/modules/wallet/wallet.module';
+import { AuthModule } from '@api/modules/auth/auth.module';
+import { MailModule } from '@api/modules/infrastructure/mail/mail.module';
+import { ReferralModule } from '@api/modules/referral/referral.module';
+import { UsersModule } from '@api/modules/users/users.module';
+import { WalletModule } from '@api/modules/wallet/wallet.module';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 

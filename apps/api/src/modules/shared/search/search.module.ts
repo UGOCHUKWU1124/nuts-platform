@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { RedisModule } from 'src/modules/infrastructure/redis/redis.module';
+import { RedisModule } from '@api/modules/infrastructure/redis/redis.module';
 import { SearchService } from './search.service';
 
 @Module({

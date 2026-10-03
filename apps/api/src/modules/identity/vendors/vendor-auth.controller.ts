@@ -19,22 +19,22 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { AuthCookieService } from 'src/modules/auth/cookies/auth-cookie.service';
-import { RequestOtpDto } from 'src/modules/auth/dto/request-otp.dto';
-import { OtpService } from 'src/modules/auth/otp/otp.service';
-import { AccountLockGuard } from 'src/modules/security/guards/account-lock.guard';
+import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
+import { RequestOtpDto } from '@api/modules/auth/dto/request-otp.dto';
+import { OtpService } from '@api/modules/auth/otp/otp.service';
+import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
 import {
   RefreshTokenThrottle,
   StrictThrottle,
-} from 'src/modules/shared/decorators/custom-throttler.decorator';
-import { GetVendor } from 'src/modules/shared/decorators/get-vendor.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+} from '@api/modules/shared/decorators/custom-throttler.decorator';
+import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import {
   extractIpAddress,
   extractUserAgent,
-} from 'src/modules/shared/utils/request.util';
+} from '@api/modules/shared/utils/request.util';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { VendorLoginDto } from './dto/update-vendor.dto';
 import { VendorResetPasswordDto } from './dto/vendor-reset-password.dto';

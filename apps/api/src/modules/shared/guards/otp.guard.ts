@@ -7,10 +7,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import type { OtpPurpose } from 'src/modules/auth/otp/otp.service';
-import { OtpService } from 'src/modules/auth/otp/otp.service';
-import { OTP_REQUIRED_KEY } from 'src/modules/shared/decorators/otp-required.decorator';
-import { JwtUser } from 'src/modules/shared/interfaces/jwt-user.interface';
+import type { OtpPurpose } from '@api/modules/auth/otp/otp.service';
+import { OtpService } from '@api/modules/auth/otp/otp.service';
+import { OTP_REQUIRED_KEY } from '@api/modules/shared/decorators/otp-required.decorator';
+import { JwtUser } from '@api/modules/shared/interfaces/jwt-user.interface';
 
 interface AuthenticatedRequest extends Request {
   user?: JwtUser;

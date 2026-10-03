@@ -19,17 +19,17 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 
-import { AdminCacheBypass } from 'src/modules/shared/decorators/admin-cache-bypass.decorator';
-import { ModerateThrottle } from 'src/modules/shared/decorators/custom-throttler.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Public } from 'src/modules/shared/decorators/public.decorator';
+import { AdminCacheBypass } from '@api/modules/shared/decorators/admin-cache-bypass.decorator';
+import { ModerateThrottle } from '@api/modules/shared/decorators/custom-throttler.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
 
 import {
   ApiResponseDto,
   PaginationMetaDto,
-} from 'src/modules/shared/dto/api-response.dto';
+} from '@api/modules/shared/dto/api-response.dto';
 
-import { CursorPaginationMetaDto } from 'src/modules/shared/utils/cursor-pagination.util';
+import { CursorPaginationMetaDto } from '@api/modules/shared/utils/cursor-pagination.util';
 
 import { ProductCardDto } from './dto/product-card.dto';
 import { PublicProductResponseDto } from './dto/public-product-response.dto';

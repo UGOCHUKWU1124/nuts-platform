@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PublicVariantSummaryDto } from 'src/modules/product-variants/dto/public-variant-response.dto';
-import type { VariantCombinations } from 'src/modules/shared/dto/variant-combinations.dto';
+import { PublicVariantSummaryDto } from '@api/modules/product-variants/dto/public-variant-response.dto';
+import type { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 import { VendorSummaryDto } from './vendor-summary.dto';
 
 class PublicProductCategoryRefDto {

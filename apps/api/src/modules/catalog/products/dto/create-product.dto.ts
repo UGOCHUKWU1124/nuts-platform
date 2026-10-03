@@ -16,9 +16,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { CreateVariantDto } from 'src/modules/product-variants/dto/create-variant.dto';
-import { Trim } from 'src/modules/shared/decorators/string-trim.decorator';
-import { TrimEmptyToUndefined } from 'src/modules/shared/decorators/trim-empty-to-undefined.decorator';
+import { CreateVariantDto } from '@api/modules/product-variants/dto/create-variant.dto';
+import { Trim } from '@api/modules/shared/decorators/string-trim.decorator';
+import { TrimEmptyToUndefined } from '@api/modules/shared/decorators/trim-empty-to-undefined.decorator';
 
 export class CreateProductDto {
   @ApiProperty()

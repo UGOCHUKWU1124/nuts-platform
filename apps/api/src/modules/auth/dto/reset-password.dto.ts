@@ -7,9 +7,9 @@ import {
   MinLength,
 } from 'class-validator';
 
-import { MaxPasswordBytes } from 'src/modules/shared/decorators/max-password-bytes.decorator';
-import { NormalizeEmail } from 'src/modules/shared/decorators/normalize-email.decorator';
-import { Trim } from 'src/modules/shared/decorators/string-trim.decorator';
+import { MaxPasswordBytes } from '@api/modules/shared/decorators/max-password-bytes.decorator';
+import { NormalizeEmail } from '@api/modules/shared/decorators/normalize-email.decorator';
+import { Trim } from '@api/modules/shared/decorators/string-trim.decorator';
 
 export class ResetPasswordDto {
   @ApiProperty({

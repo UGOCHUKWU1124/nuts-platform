@@ -8,12 +8,12 @@ import {
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 
-import { CacheService } from 'src/modules/infrastructure/cache/cache.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import {
   getErrorCode,
   getErrorMessage,
-} from 'src/modules/shared/utils/error-details.util';
+} from '@api/modules/shared/utils/error-details.util';
 import {
   CreateReviewDto,
   ProductReviewsResponseDto,

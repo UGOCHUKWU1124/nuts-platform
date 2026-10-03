@@ -25,18 +25,18 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { CategoriesService } from 'src/modules/category/categories.service';
-import { CategoryResponseDto } from 'src/modules/category/dto/category-response.dto';
-import { CreateCategoryDto } from 'src/modules/category/dto/create-category.dto';
-import { MoveCategoryDto } from 'src/modules/category/dto/move-category.dto';
-import { ReorderCategoriesDto } from 'src/modules/category/dto/reorder-categories.dto';
-import { UpdateCategoryDto } from 'src/modules/category/dto/update-category.dto';
-import { GetUser } from 'src/modules/shared/decorators/get-user.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+import { CategoriesService } from '@api/modules/category/categories.service';
+import { CategoryResponseDto } from '@api/modules/category/dto/category-response.dto';
+import { CreateCategoryDto } from '@api/modules/category/dto/create-category.dto';
+import { MoveCategoryDto } from '@api/modules/category/dto/move-category.dto';
+import { ReorderCategoriesDto } from '@api/modules/category/dto/reorder-categories.dto';
+import { UpdateCategoryDto } from '@api/modules/category/dto/update-category.dto';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - CATEGORY')
 @ApiBearerAuth('JWT-auth')

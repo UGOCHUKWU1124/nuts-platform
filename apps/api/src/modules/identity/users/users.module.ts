@@ -1,7 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { AuthCookiesModule } from 'src/modules/auth/auth-cookies.module';
-import { AuthModule } from 'src/modules/auth/auth.module';
-import { ReferralModule } from 'src/modules/referral/referral.module';
+import { AuthCookiesModule } from '@api/modules/auth/auth-cookies.module';
+import { AuthModule } from '@api/modules/auth/auth.module';
+import { ReferralModule } from '@api/modules/referral/referral.module';
 import { UserAccountCleanupService } from './user-account-cleanup.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';

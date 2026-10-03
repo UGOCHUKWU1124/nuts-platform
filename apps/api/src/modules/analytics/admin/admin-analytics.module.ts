@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { CacheModule } from 'src/modules/infrastructure/cache/cache.module';
-import { PrismaModule } from 'src/modules/infrastructure/prisma/prisma.module';
+import { CacheModule } from '@api/modules/infrastructure/cache/cache.module';
+import { PrismaModule } from '@api/modules/infrastructure/prisma/prisma.module';
 import { AdminAnalyticsAuditService } from './admin-analytics-audit.service';
 import { AdminAnalyticsProductsService } from './admin-analytics-products.service';
 import { AdminAnalyticsPromotionsService } from './admin-analytics-promotions.service';

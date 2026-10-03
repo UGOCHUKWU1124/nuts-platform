@@ -16,9 +16,9 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 
-import { Public } from 'src/modules/shared/decorators/public.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { SearchService } from 'src/modules/shared/search/search.service';
+import { Public } from '@api/modules/shared/decorators/public.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { SearchService } from '@api/modules/shared/search/search.service';
 import { QuerySearchBodyDto } from './dto/query-search-body.dto';
 import { QuerySearchDto } from './dto/query-search.dto';
 import { SearchProductHitDto } from './dto/search-product-hit.dto';

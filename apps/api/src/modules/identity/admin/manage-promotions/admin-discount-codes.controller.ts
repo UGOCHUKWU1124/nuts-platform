@@ -23,17 +23,17 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { DiscountCodeService } from 'src/modules/promotions/discount-code.service';
+import { DiscountCodeService } from '@api/modules/promotions/discount-code.service';
 import {
   CreateAdminDiscountCodeDto,
   DiscountCodeResponseDto,
   UpdateAdminDiscountCodeDto,
-} from 'src/modules/promotions/dto';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
+} from '@api/modules/promotions/dto';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - DISCOUNT CODES')
 @Controller('admin/discounts')

@@ -8,7 +8,7 @@ import {
   MinLength,
   NotEquals,
 } from 'class-validator';
-import { MaxPasswordBytes } from 'src/modules/shared/decorators/max-password-bytes.decorator';
+import { MaxPasswordBytes } from '@api/modules/shared/decorators/max-password-bytes.decorator';
 
 export class ChangePasswordDto {
   @ApiProperty({

@@ -11,11 +11,11 @@ import nodemailer, { SendMailOptions, Transporter } from 'nodemailer';
 import * as os from 'os';
 import * as path from 'path';
 
-import { CircuitBreakerService } from 'src/modules/infrastructure/resiliency/circuit-breaker.service';
+import { CircuitBreakerService } from '@api/modules/infrastructure/resiliency/circuit-breaker.service';
 import {
   generateInvoicePdf,
   PdfInvoiceData,
-} from 'src/modules/shared/utils/pdf-generator.util';
+} from '@api/modules/shared/utils/pdf-generator.util';
 
 @Injectable()
 export class EmailService implements OnModuleInit {

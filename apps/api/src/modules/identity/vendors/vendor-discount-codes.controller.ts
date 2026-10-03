@@ -26,16 +26,16 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
-import { DiscountCodeService } from 'src/modules/promotions/discount-code.service';
+import { DiscountCodeService } from '@api/modules/promotions/discount-code.service';
 import {
   CreateVendorDiscountCodeDto,
   DiscountCodeResponseDto,
   UpdateVendorDiscountCodeDto,
-} from 'src/modules/promotions/dto';
-import { AuthStrategy } from 'src/modules/shared/decorators/auth-strategy.decorator';
-import { GetVendor } from 'src/modules/shared/decorators/get-vendor.decorator';
-import { Message } from 'src/modules/shared/decorators/message.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
+} from '@api/modules/promotions/dto';
+import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - DISCOUNT CODES')

@@ -10,14 +10,14 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { customAlphabet } from 'nanoid';
 
-import { EmailService } from 'src/modules/infrastructure/mail/email.service';
-import { PrismaService } from 'src/modules/infrastructure/prisma/prisma.service';
-import { PaymentsService } from 'src/modules/payments/payments.service';
-import { DiscountCodeService } from 'src/modules/promotions/discount-code.service';
-import { ReferralService } from 'src/modules/referral/referral.service';
-import { AuditLogService } from 'src/modules/shared/audit-log/audit-log.service';
-import { UsersService } from 'src/modules/users/users.service';
-import { WalletService } from 'src/modules/wallet/wallet.service';
+import { EmailService } from '@api/modules/infrastructure/mail/email.service';
+import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { PaymentsService } from '@api/modules/payments/payments.service';
+import { DiscountCodeService } from '@api/modules/promotions/discount-code.service';
+import { ReferralService } from '@api/modules/referral/referral.service';
+import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
+import { UsersService } from '@api/modules/users/users.service';
+import { WalletService } from '@api/modules/wallet/wallet.service';
 
 import { AdminOrderResponseDto } from './dto/admin-order-response.dto';
 import { CheckoutResponseDto } from './dto/checkout-response.dto';
@@ -26,11 +26,11 @@ import { OrderResponseDto } from './dto/order-response.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 import { VendorOrderResponseDto } from './dto/vendor-order-response.dto';
 
-import { PaginationQueryDto } from 'src/modules/shared/dto/pagination-query.dto';
-import { createPaginationMeta } from 'src/modules/shared/utils/pagination-meta.util';
-import { getPagination } from 'src/modules/shared/utils/pagination.util';
+import { PaginationQueryDto } from '@api/modules/shared/dto/pagination-query.dto';
+import { createPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
+import { getPagination } from '@api/modules/shared/utils/pagination.util';
 
-import { CHECKOUT_IDEMPOTENCY_TTL_HOURS } from 'src/modules/shared/constants/checkout.constants';
+import { CHECKOUT_IDEMPOTENCY_TTL_HOURS } from '@api/modules/shared/constants/checkout.constants';
 
 import {
   assertValidOrderTransition,
@@ -38,15 +38,15 @@ import {
   shouldRestoreStock,
 } from './constants/order-status.constants';
 
-import { VENDOR_COMMISSION_RATE } from 'src/modules/shared/constants/commission.constants';
+import { VENDOR_COMMISSION_RATE } from '@api/modules/shared/constants/commission.constants';
 
-import { DomainEvents } from 'src/modules/shared/events/domain-events';
+import { DomainEvents } from '@api/modules/shared/events/domain-events';
 
 import type {
   OrderCancelledPayload,
   OrderDeliveredPayload,
   OrderShippedPayload,
-} from 'src/modules/shared/events/event-payloads';
+} from '@api/modules/shared/events/event-payloads';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

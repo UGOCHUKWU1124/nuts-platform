@@ -9,11 +9,11 @@ import {
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 
-import { Roles } from 'src/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from 'src/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from 'src/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/modules/shared/guards/roles.guard';
-import { SearchService } from 'src/modules/shared/search/search.service';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
+import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
+import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
+import { SearchService } from '@api/modules/shared/search/search.service';
 import { QuerySearchDto } from './dto/query-search.dto';
 import { SearchResponseDto, SearchResultDto } from './dto/search-result.dto';
 
