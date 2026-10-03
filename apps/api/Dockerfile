@@ -57,7 +57,7 @@ ENV NODE_ENV=development
 ENV PORT=3001
 EXPOSE 3001
 
-CMD ["npx", "nest", "start", "--watch"]
+CMD ["npm", "run", "dev"]
 
 # ─── Stage 3: Production Runtime ──────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -80,6 +80,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/database/schema.prisma ./packages/database/schema.prisma
 COPY --from=builder /app/packages/database/migrations ./packages/database/migrations
 COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
+COPY --from=builder /app/apps/api/tsconfig.runtime.json ./apps/api/tsconfig.runtime.json
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 # Fail the image build if the runtime entrypoint's local module was omitted.
 RUN test -s /app/apps/api/dist/main.js \
