@@ -36,7 +36,9 @@ export class AdminAnalyticsService {
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}${start.toISOString()}:${end.toISOString()}`;
 
-    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+    // Analytics summary runs 20 parallel DB queries — wrapWithLock ensures only
+    // one instance executes this aggregation per cache miss across the cluster.
+    return this.cacheService.wrapWithLock(cacheKey, ANALYTICS_CACHE_TTL, async () => {
       // Run independent queries in parallel
       const [
         totalUsers,
@@ -150,7 +152,7 @@ export class AdminAnalyticsService {
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}users:${start.toISOString()}:${end.toISOString()}`;
 
-    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+    return this.cacheService.wrapWithLock(cacheKey, ANALYTICS_CACHE_TTL, async () => {
       const [
         totalUsers,
         activeUsers,
@@ -193,7 +195,7 @@ export class AdminAnalyticsService {
       query.range ? RANGE_DAYS[query.range] : 30,
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}funnel:${start.toISOString()}:${end.toISOString()}`;
-    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+    return this.cacheService.wrapWithLock(cacheKey, ANALYTICS_CACHE_TTL, async () => {
       return this.users.getFunnel(start, end);
     });
   }
@@ -207,7 +209,7 @@ export class AdminAnalyticsService {
       query.range ? RANGE_DAYS[query.range] : 30,
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}activity:${start.toISOString()}:${end.toISOString()}`;
-    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+    return this.cacheService.wrapWithLock(cacheKey, ANALYTICS_CACHE_TTL, async () => {
       return this.audit.getActivityAnalytics(start, end);
     });
   }

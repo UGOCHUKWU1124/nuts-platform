@@ -623,7 +623,7 @@ export class CategoriesService {
     // Bump this suffix when the public tree shape changes so Redis cannot
     // keep serving the previous duplicated `subCategories` payload.
     const cacheKey = `${CATEGORY_TREE()}:v2:${includeInactive}:${includeArchived}`;
-    return this.cacheService.wrap(cacheKey, CATEGORY_TTL, async () => {
+    return this.cacheService.wrapStale(cacheKey, CATEGORY_TTL, async () => {
       // 1. Fetch all matching categories
       const categories = await this.prisma.category.findMany({
         where: includeArchived
@@ -793,7 +793,7 @@ export class CategoriesService {
       return response;
     };
 
-    return this.cacheService.wrap(cacheKey, CATEGORY_TTL, loadCategory);
+    return this.cacheService.wrapStale(cacheKey, CATEGORY_TTL, loadCategory);
   }
 
   /**
@@ -886,7 +886,7 @@ export class CategoriesService {
       return response;
     };
 
-    return this.cacheService.wrap(cacheKey, CATEGORY_TTL, loadCategory);
+    return this.cacheService.wrapStale(cacheKey, CATEGORY_TTL, loadCategory);
   }
 
   /**
