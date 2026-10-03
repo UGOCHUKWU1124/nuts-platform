@@ -27,7 +27,9 @@ describe('AccountLockService', () => {
       const attempts = await service.recordFailedAttempt('test@example.com');
 
       expect(attempts).toBe(1);
-      expect(mockRedis.incr).toHaveBeenCalledWith(expect.stringContaining('login:attempts:'));
+      expect(mockRedis.incr).toHaveBeenCalledWith(
+        expect.stringContaining('login:attempts:'),
+      );
       expect(mockRedis.expire).toHaveBeenCalledWith(
         expect.stringContaining('login:attempts:'),
         SECURITY.LOCKOUT_DURATION_MINUTES * 60,
@@ -50,7 +52,9 @@ describe('AccountLockService', () => {
     });
 
     it('locks account and resets attempt counter when reaching MAX_LOGIN_ATTEMPTS', async () => {
-      (mockRedis.incr as jest.Mock).mockResolvedValue(SECURITY.MAX_LOGIN_ATTEMPTS);
+      (mockRedis.incr as jest.Mock).mockResolvedValue(
+        SECURITY.MAX_LOGIN_ATTEMPTS,
+      );
       (mockRedis.ttl as jest.Mock).mockResolvedValue(300);
       (mockRedis.setex as jest.Mock).mockResolvedValue('OK');
       (mockRedis.del as jest.Mock).mockResolvedValue(1);
@@ -64,7 +68,9 @@ describe('AccountLockService', () => {
         '1',
       );
       // Confirms attempt counter was deleted to prevent immediate re-lock after lockout expires
-      expect(mockRedis.del).toHaveBeenCalledWith(expect.stringContaining('login:attempts:'));
+      expect(mockRedis.del).toHaveBeenCalledWith(
+        expect.stringContaining('login:attempts:'),
+      );
     });
   });
 
@@ -88,14 +94,16 @@ describe('AccountLockService', () => {
     it('returns remaining TTL in seconds', async () => {
       (mockRedis.ttl as jest.Mock).mockResolvedValue(450);
 
-      const remaining = await service.getLockoutTimeRemaining('test@example.com');
+      const remaining =
+        await service.getLockoutTimeRemaining('test@example.com');
       expect(remaining).toBe(450);
     });
 
     it('returns 0 when key has expired or negative TTL', async () => {
       (mockRedis.ttl as jest.Mock).mockResolvedValue(-2);
 
-      const remaining = await service.getLockoutTimeRemaining('test@example.com');
+      const remaining =
+        await service.getLockoutTimeRemaining('test@example.com');
       expect(remaining).toBe(0);
     });
   });
@@ -105,7 +113,9 @@ describe('AccountLockService', () => {
       (mockRedis.del as jest.Mock).mockResolvedValue(1);
 
       await service.resetAttempts('test@example.com');
-      expect(mockRedis.del).toHaveBeenCalledWith(expect.stringContaining('login:attempts:'));
+      expect(mockRedis.del).toHaveBeenCalledWith(
+        expect.stringContaining('login:attempts:'),
+      );
     });
   });
 });

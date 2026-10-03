@@ -19,19 +19,23 @@ describe('CircuitBreakerService', () => {
 
   describe('executePaystack resilience', () => {
     it('executes successful calls normally', async () => {
-      const result = await service.executePaystack(async () => 'paystack-ok');
+      const result = await service.executePaystack(() =>
+        Promise.resolve('paystack-ok'),
+      );
       expect(result).toBe('paystack-ok');
       expect(service.getStatus().paystack).toBe('CLOSED');
     });
 
     it('trips the breaker OPEN after 3 consecutive failures and fails fast', async () => {
-      const failingFn = jest.fn(async () => {
-        throw new Error('Paystack gateway timeout');
-      });
+      const failingFn = jest.fn(() =>
+        Promise.reject(new Error('Paystack gateway timeout')),
+      );
 
       // 3 consecutive failures
       for (let i = 0; i < 3; i++) {
-        await expect(service.executePaystack(failingFn)).rejects.toThrow('Paystack gateway timeout');
+        await expect(service.executePaystack(failingFn)).rejects.toThrow(
+          'Paystack gateway timeout',
+        );
       }
 
       // Circuit should now be OPEN
@@ -39,7 +43,9 @@ describe('CircuitBreakerService', () => {
 
       // Subsequent call should fail fast with BrokenCircuitError without executing the function
       failingFn.mockClear();
-      await expect(service.executePaystack(failingFn)).rejects.toThrow(BrokenCircuitError);
+      await expect(service.executePaystack(failingFn)).rejects.toThrow(
+        BrokenCircuitError,
+      );
       expect(failingFn).not.toHaveBeenCalled();
     });
   });

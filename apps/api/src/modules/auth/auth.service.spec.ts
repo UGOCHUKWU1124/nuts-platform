@@ -34,7 +34,9 @@ describe('AuthService', () => {
       shippingAddress: {
         create: jest.fn(),
       },
-      $transaction: jest.fn((callback: (tx: any) => Promise<unknown>) => callback(mockPrisma)),
+      $transaction: jest.fn((callback: (tx: any) => Promise<unknown>) =>
+        callback(mockPrisma),
+      ),
     };
 
     mockOtpService = {
@@ -72,13 +74,13 @@ describe('AuthService', () => {
     };
 
     service = new AuthService(
-      mockPrisma as unknown as PrismaService,
-      mockOtpService as unknown as OtpService,
-      mockEmailService as unknown as EmailService,
-      mockAuditLog as unknown as AuditLogService,
-      mockReferralService as unknown as ReferralService,
-      mockAccountLockService as unknown as AccountLockService,
-      mockRefreshSessionService as unknown as RefreshSessionService,
+      mockPrisma,
+      mockOtpService,
+      mockEmailService,
+      mockAuditLog,
+      mockReferralService,
+      mockAccountLockService,
+      mockRefreshSessionService,
     );
   });
 
@@ -137,7 +139,9 @@ describe('AuthService', () => {
 
       mockPrisma.user.create.mockRejectedValue(p2002Error);
 
-      await expect(service.register(registerDto)).rejects.toThrow(ConflictException);
+      await expect(service.register(registerDto)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -158,7 +162,9 @@ describe('AuthService', () => {
       });
 
       expect(session).toBeDefined();
-      expect(mockAccountLockService.resetAttempts).toHaveBeenCalledWith('email:test@example.com');
+      expect(mockAccountLockService.resetAttempts).toHaveBeenCalledWith(
+        'email:test@example.com',
+      );
       expect(mockRefreshSessionService.issueUserSession).toHaveBeenCalled();
     });
 
@@ -179,7 +185,9 @@ describe('AuthService', () => {
         }),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(mockAccountLockService.recordFailedAttempt).toHaveBeenCalledWith('email:test@example.com');
+      expect(mockAccountLockService.recordFailedAttempt).toHaveBeenCalledWith(
+        'email:test@example.com',
+      );
     });
 
     it('throws UnauthorizedException and protects against user enumeration when account does not exist', async () => {
@@ -192,7 +200,9 @@ describe('AuthService', () => {
         }),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(mockAccountLockService.recordFailedAttempt).toHaveBeenCalledWith('email:nonexistent@example.com');
+      expect(mockAccountLockService.recordFailedAttempt).toHaveBeenCalledWith(
+        'email:nonexistent@example.com',
+      );
     });
 
     it('throws UnauthorizedException when account is deactivated', async () => {

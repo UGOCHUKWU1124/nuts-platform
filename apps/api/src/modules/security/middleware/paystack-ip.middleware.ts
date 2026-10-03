@@ -35,7 +35,8 @@ export class PaystackIpMiddleware implements NestMiddleware {
     const forwardedFor = req.headers['x-forwarded-for'];
     const rawIp =
       (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor) || ip;
-    const clientIp = (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '') || ip;
+    const clientIp =
+      (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '') || ip;
 
     if (!this.allowedIps.has(clientIp)) {
       this.logger.warn(

@@ -1,5 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Prisma, WalletTransactionReason, WalletTransactionType } from '@prisma/client';
+import {
+  Prisma,
+  WalletTransactionReason,
+  WalletTransactionType,
+} from '@prisma/client';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { WalletService } from './wallet.service';
 
@@ -25,15 +29,21 @@ describe('WalletService', () => {
       vendorTransaction: {
         create: jest.fn(),
       },
-      $transaction: jest.fn((callback: (tx: any) => Promise<unknown>) => callback(mockPrisma)),
+      $transaction: jest.fn((callback: (tx: any) => Promise<unknown>) =>
+        callback(mockPrisma),
+      ),
     };
 
-    service = new WalletService(mockPrisma as unknown as PrismaService);
+    service = new WalletService(mockPrisma);
   });
 
   describe('getUserWallet', () => {
     it('returns wallet if found', async () => {
-      const mockWallet = { id: 'w-1', userId: 'u-1', balance: new Prisma.Decimal(5000) };
+      const mockWallet = {
+        id: 'w-1',
+        userId: 'u-1',
+        balance: new Prisma.Decimal(5000),
+      };
       mockPrisma.userWallet.findUnique.mockResolvedValue(mockWallet);
 
       const wallet = await service.getUserWallet('u-1');
@@ -43,24 +53,37 @@ describe('WalletService', () => {
     it('throws NotFoundException if user wallet does not exist', async () => {
       mockPrisma.userWallet.findUnique.mockResolvedValue(null);
 
-      await expect(service.getUserWallet('u-missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getUserWallet('u-missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('creditUserWallet', () => {
     it('rejects zero or negative amounts', async () => {
       await expect(
-        service.creditUserWallet('u-1', new Prisma.Decimal(0), WalletTransactionReason.REFERRAL),
+        service.creditUserWallet(
+          'u-1',
+          new Prisma.Decimal(0),
+          WalletTransactionReason.REFERRAL,
+        ),
       ).rejects.toThrow(BadRequestException);
 
       await expect(
-        service.creditUserWallet('u-1', new Prisma.Decimal(-100), WalletTransactionReason.REFERRAL),
+        service.creditUserWallet(
+          'u-1',
+          new Prisma.Decimal(-100),
+          WalletTransactionReason.REFERRAL,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('atomically increments wallet balance and writes transaction audit row', async () => {
       mockPrisma.userWallet.findUnique.mockResolvedValue({ id: 'w-1' });
-      mockPrisma.userWallet.update.mockResolvedValue({ id: 'w-1', balance: new Prisma.Decimal(1500) });
+      mockPrisma.userWallet.update.mockResolvedValue({
+        id: 'w-1',
+        balance: new Prisma.Decimal(1500),
+      });
       mockPrisma.walletTransaction.create.mockResolvedValue({ id: 'wt-1' });
 
       await service.creditUserWallet(

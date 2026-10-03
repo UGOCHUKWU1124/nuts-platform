@@ -1,6 +1,4 @@
 import { OutboxStatus } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { OutboxRelay } from './outbox.relay';
 
 describe('OutboxRelay', () => {
@@ -21,10 +19,7 @@ describe('OutboxRelay', () => {
       publish: jest.fn(),
     };
 
-    relay = new OutboxRelay(
-      mockPrisma as unknown as PrismaService,
-      mockRabbitMQ as unknown as RabbitMQService,
-    );
+    relay = new OutboxRelay(mockPrisma, mockRabbitMQ);
   });
 
   it('skips processing if RabbitMQ is not available', async () => {
@@ -60,7 +55,9 @@ describe('OutboxRelay', () => {
     });
 
     // 2. Published to RabbitMQ
-    expect(mockRabbitMQ.publish).toHaveBeenCalledWith('order.created', { orderId: 'ord-123' });
+    expect(mockRabbitMQ.publish).toHaveBeenCalledWith('order.created', {
+      orderId: 'ord-123',
+    });
 
     // 3. Marked as PUBLISHED
     expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith(

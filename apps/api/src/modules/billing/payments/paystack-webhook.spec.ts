@@ -57,13 +57,15 @@ describe('Paystack Webhook & Payment Verification Security', () => {
     };
 
     service = new PaymentsService(
-      mockPrisma as unknown as PrismaService,
+      mockPrisma,
       { assertActiveAccount: jest.fn() } as unknown as UsersService,
-      mockConfig as unknown as ConfigService,
+      mockConfig,
       { sendPaymentReceipt: jest.fn() } as unknown as EmailService,
-      mockWalletService as unknown as WalletService,
+      mockWalletService,
       { emit: jest.fn() } as unknown as EventEmitter2,
-      { executePaystack: jest.fn((fn: () => unknown) => fn()) } as unknown as CircuitBreakerService,
+      {
+        executePaystack: jest.fn((fn: () => unknown) => fn()),
+      } as unknown as CircuitBreakerService,
     );
   });
 
@@ -73,7 +75,10 @@ describe('Paystack Webhook & Payment Verification Security', () => {
 
   describe('Signature verification', () => {
     it('rejects webhooks with missing signature', async () => {
-      const rawBody = JSON.stringify({ event: 'charge.success', data: { reference: 'ref-1' } });
+      const rawBody = JSON.stringify({
+        event: 'charge.success',
+        data: { reference: 'ref-1' },
+      });
 
       await expect(service.handleWebhook(rawBody, undefined)).rejects.toThrow(
         BadRequestException,
@@ -81,22 +86,31 @@ describe('Paystack Webhook & Payment Verification Security', () => {
     });
 
     it('rejects webhooks with invalid or forged signature', async () => {
-      const rawBody = JSON.stringify({ event: 'charge.success', data: { reference: 'ref-1' } });
+      const rawBody = JSON.stringify({
+        event: 'charge.success',
+        data: { reference: 'ref-1' },
+      });
       const badSignature = generateSignature(rawBody, 'wrong-secret');
 
-      await expect(service.handleWebhook(rawBody, badSignature)).rejects.toThrow(
-        'Invalid Paystack webhook signature.',
-      );
+      await expect(
+        service.handleWebhook(rawBody, badSignature),
+      ).rejects.toThrow('Invalid Paystack webhook signature.');
     });
 
     it('rejects webhooks with tampered payload', async () => {
-      const originalBody = JSON.stringify({ event: 'charge.success', data: { reference: 'ref-1' } });
+      const originalBody = JSON.stringify({
+        event: 'charge.success',
+        data: { reference: 'ref-1' },
+      });
       const signature = generateSignature(originalBody);
-      const tamperedBody = JSON.stringify({ event: 'charge.success', data: { reference: 'ref-2' } });
+      const tamperedBody = JSON.stringify({
+        event: 'charge.success',
+        data: { reference: 'ref-2' },
+      });
 
-      await expect(service.handleWebhook(tamperedBody, signature)).rejects.toThrow(
-        'Invalid Paystack webhook signature.',
-      );
+      await expect(
+        service.handleWebhook(tamperedBody, signature),
+      ).rejects.toThrow('Invalid Paystack webhook signature.');
     });
   });
 
@@ -139,7 +153,9 @@ describe('Paystack Webhook & Payment Verification Security', () => {
       mockPrisma.order.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.order.findUnique.mockResolvedValue({
         orderNumber: 'ORD-1',
-        orderItems: [{ vendorId: 'v-1', quantity: 1, unitPrice: new Prisma.Decimal(100) }],
+        orderItems: [
+          { vendorId: 'v-1', quantity: 1, unitPrice: new Prisma.Decimal(100) },
+        ],
       });
       // confirmPayment fetches the refreshed payment entity after the transaction commits
       mockPrisma.payment.findUniqueOrThrow.mockResolvedValue({

@@ -35,8 +35,12 @@ describe('PerformanceInterceptor (Slow ms & Server-Timing)', () => {
       handle: jest.fn(() => of({ data: 'ok' })),
     };
 
-    loggerWarnSpy = jest.spyOn((interceptor as any).logger, 'warn').mockImplementation();
-    loggerErrorSpy = jest.spyOn((interceptor as any).logger, 'error').mockImplementation();
+    loggerWarnSpy = jest
+      .spyOn((interceptor as any).logger, 'warn')
+      .mockImplementation();
+    loggerErrorSpy = jest
+      .spyOn((interceptor as any).logger, 'error')
+      .mockImplementation();
   });
 
   afterEach(() => {
@@ -69,7 +73,9 @@ describe('PerformanceInterceptor (Slow ms & Server-Timing)', () => {
     (interceptor as any).logPerformance('GET', '/api/v1/products', 250, false);
 
     expect(loggerWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('SLOW REQUEST (>199ms): GET /api/v1/products - 250ms'),
+      expect.stringContaining(
+        'SLOW REQUEST (>199ms): GET /api/v1/products - 250ms',
+      ),
     );
   });
 

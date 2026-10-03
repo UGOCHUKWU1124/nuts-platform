@@ -1,4 +1,4 @@
-import { BadRequestException, HttpStatus, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { GlobalExceptionFilter } from './global-exception.filter';
@@ -30,7 +30,9 @@ describe('GlobalExceptionFilter', () => {
       }),
     };
 
-    filter = new GlobalExceptionFilter({ get: jest.fn() } as unknown as ConfigService);
+    filter = new GlobalExceptionFilter({
+      get: jest.fn(),
+    } as unknown as ConfigService);
   });
 
   it('formats standard HttpException correctly', () => {
@@ -49,7 +51,10 @@ describe('GlobalExceptionFilter', () => {
   });
 
   it('formats array of validation errors from class-validator', () => {
-    const exception = new BadRequestException(['Email is invalid', 'Password too short']);
+    const exception = new BadRequestException([
+      'Email is invalid',
+      'Password too short',
+    ]);
 
     filter.catch(exception, mockArgumentsHost);
 
@@ -101,11 +106,15 @@ describe('GlobalExceptionFilter', () => {
   });
 
   it('masks unhandled errors as 500 without leaking stack traces', () => {
-    const unexpectedError = new Error('Database password was exposed in raw query string');
+    const unexpectedError = new Error(
+      'Database password was exposed in raw query string',
+    );
 
     filter.catch(unexpectedError, mockArgumentsHost);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(mockResponse.status).toHaveBeenCalledWith(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
     expect(mockResponse.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: false,

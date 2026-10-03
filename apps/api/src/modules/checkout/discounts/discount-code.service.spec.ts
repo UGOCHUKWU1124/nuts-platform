@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DiscountCodeType, Prisma } from '@prisma/client';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { DiscountCodeService } from './discount-code.service';
@@ -28,7 +32,7 @@ describe('DiscountCodeService', () => {
       $queryRaw: jest.fn(),
     };
 
-    service = new DiscountCodeService(mockPrisma as unknown as PrismaService);
+    service = new DiscountCodeService(mockPrisma);
   });
 
   describe('Validation & Calculation rules', () => {
@@ -41,7 +45,7 @@ describe('DiscountCodeService', () => {
 
       // 20% of 10,000 = 2,000; capped at 1,000
       const calculated = service.calculateDiscount(
-        discount as any,
+        discount,
         new Prisma.Decimal(10000),
       );
       expect(calculated.toString()).toBe('1000');
@@ -56,7 +60,7 @@ describe('DiscountCodeService', () => {
 
       // Order total 300 < discount 500 => discount is 300
       const calculated = service.calculateDiscount(
-        discount as any,
+        discount,
         new Prisma.Decimal(300),
       );
       expect(calculated.toString()).toBe('300');
@@ -215,7 +219,9 @@ describe('DiscountCodeService', () => {
           create: jest.fn().mockResolvedValue({ id: 'dcu-1' }),
         },
         discountCodeUserUsage: {
-          findUnique: jest.fn().mockResolvedValue({ id: 'user-usage-1', usageCount: 1 }),
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ id: 'user-usage-1', usageCount: 1 }),
           update: jest.fn(),
           upsert: jest.fn(),
         },

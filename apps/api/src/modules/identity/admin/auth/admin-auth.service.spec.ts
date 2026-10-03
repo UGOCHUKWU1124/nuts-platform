@@ -77,11 +77,13 @@ describe('AdminAuthService', () => {
     };
 
     service = new AdminAuthService(
-      mockPrisma as unknown as PrismaService,
-      { signAsync: jest.fn().mockResolvedValue('signed-jwt') } as unknown as JwtService,
-      mockConfig as unknown as ConfigService,
-      mockAudit as unknown as AuditLogService,
-      mockAccountLock as unknown as AccountLockService,
+      mockPrisma,
+      {
+        signAsync: jest.fn().mockResolvedValue('signed-jwt'),
+      } as unknown as JwtService,
+      mockConfig,
+      mockAudit,
+      mockAccountLock,
     );
   });
 
@@ -244,18 +246,25 @@ describe('AdminVendorsService', () => {
       delByPattern: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new AdminVendorsService(
-      mockPrisma as unknown as PrismaService,
-      mockAudit as unknown as AuditLogService,
-      mockCache as unknown as CacheService,
-    );
+    service = new AdminVendorsService(mockPrisma, mockAudit, mockCache);
   });
 
   describe('findAll()', () => {
     it('issues count + page query in parallel and returns pagination meta', async () => {
       mockPrisma.vendor.count.mockResolvedValue(1);
       mockPrisma.vendor.findMany.mockResolvedValue([
-        { ...statusRow, storeDescription: '', businessPhone: '', businessEmail: '', storeLogoUrl: null, storeLogoAltText: null, firstName: '', lastName: '', phone: '', createdAt: new Date() },
+        {
+          ...statusRow,
+          storeDescription: '',
+          businessPhone: '',
+          businessEmail: '',
+          storeLogoUrl: null,
+          storeLogoAltText: null,
+          firstName: '',
+          lastName: '',
+          phone: '',
+          createdAt: new Date(),
+        },
       ]);
 
       const result = await service.findAll({ page: 1, limit: 10 });
@@ -295,7 +304,9 @@ describe('AdminVendorsService', () => {
   describe('findOne()', () => {
     it('throws 404 for an unknown vendor', async () => {
       mockPrisma.vendor.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -308,7 +319,10 @@ describe('AdminVendorsService', () => {
 
       expect(result.isApproved).toBe(true);
       expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'APPROVE_VENDOR', adminId: 'admin-1' }),
+        expect.objectContaining({
+          action: 'APPROVE_VENDOR',
+          adminId: 'admin-1',
+        }),
       );
       expect(mockCache.del).toHaveBeenCalledWith('vendor:store:nuts-store:v2');
     });
@@ -317,7 +331,10 @@ describe('AdminVendorsService', () => {
     // deactivated vendor stayed publicly visible for up to 1h.
     it('deactivate(): revokes sessions atomically and evicts store + public list caches', async () => {
       mockPrisma.vendor.findUnique.mockResolvedValue({ isActive: true });
-      mockPrisma.vendor.update.mockResolvedValue({ ...statusRow, isActive: false });
+      mockPrisma.vendor.update.mockResolvedValue({
+        ...statusRow,
+        isActive: false,
+      });
 
       await service.deactivate('admin-1', 'vendor-1');
 
@@ -361,7 +378,10 @@ describe('AdminVendorsService', () => {
 
     it('does not fail the request if cache eviction throws (DB already committed)', async () => {
       mockPrisma.vendor.findUnique.mockResolvedValue({ isActive: true });
-      mockPrisma.vendor.update.mockResolvedValue({ ...statusRow, isActive: false });
+      mockPrisma.vendor.update.mockResolvedValue({
+        ...statusRow,
+        isActive: false,
+      });
       mockCache.delByPattern.mockRejectedValue(new Error('redis down'));
 
       await expect(service.deactivate('admin-1', 'vendor-1')).resolves.toEqual(

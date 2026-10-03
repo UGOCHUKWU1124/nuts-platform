@@ -43,14 +43,13 @@ describe('WishlistService', () => {
     };
 
     mockCacheService = {
-      wrap: jest.fn((key: string, ttl: number, fn: () => Promise<unknown>) => fn()),
+      wrap: jest.fn((key: string, ttl: number, fn: () => Promise<unknown>) =>
+        fn(),
+      ),
       del: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new WishlistService(
-      mockPrisma as unknown as PrismaService,
-      mockCacheService as unknown as CacheService,
-    );
+    service = new WishlistService(mockPrisma, mockCacheService);
   });
 
   describe('add()', () => {
@@ -69,7 +68,9 @@ describe('WishlistService', () => {
 
       expect(result.productId).toBe('prod-1');
       expect(result.productName).toBe('Wireless Headphones');
-      expect(mockCacheService.del).toHaveBeenCalledWith('user:wishlist:v3:user-1');
+      expect(mockCacheService.del).toHaveBeenCalledWith(
+        'user:wishlist:v3:user-1',
+      );
     });
 
     // -------------------------------------------------------------------------
@@ -78,7 +79,9 @@ describe('WishlistService', () => {
     it('throws NotFoundException if product does not exist or is inactive/deleted', async () => {
       mockPrisma.product.findFirst.mockResolvedValue(null);
 
-      await expect(service.add('user-1', 'invalid-prod')).rejects.toThrow(NotFoundException);
+      await expect(service.add('user-1', 'invalid-prod')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockPrisma.wishlistItem.create).not.toHaveBeenCalled();
     });
 
@@ -92,9 +95,9 @@ describe('WishlistService', () => {
         variants: [], // Empty matching variants
       });
 
-      await expect(service.add('user-1', 'prod-1', 'non-existent-var')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.add('user-1', 'prod-1', 'non-existent-var'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     // -------------------------------------------------------------------------
@@ -172,7 +175,9 @@ describe('WishlistService', () => {
           productId: 'prod-1',
         },
       });
-      expect(mockCacheService.del).toHaveBeenCalledWith('user:wishlist:v3:user-1');
+      expect(mockCacheService.del).toHaveBeenCalledWith(
+        'user:wishlist:v3:user-1',
+      );
     });
 
     it('does not invalidate cache if no rows were deleted', async () => {

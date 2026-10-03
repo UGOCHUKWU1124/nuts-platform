@@ -62,10 +62,10 @@ describe('CartService', () => {
     };
 
     service = new CartService(
-      mockPrisma as unknown as PrismaService,
-      mockUsersService as unknown as UsersService,
-      mockDiscountService as unknown as DiscountCodeService,
-      mockCacheService as unknown as CacheService,
+      mockPrisma,
+      mockUsersService,
+      mockDiscountService,
+      mockCacheService,
     );
   });
 

@@ -44,7 +44,9 @@ describe('CacheService', () => {
     });
 
     it('returns undefined and fails open when Redis throws an error', async () => {
-      (mockRedis.get as jest.Mock).mockRejectedValue(new Error('Connection lost'));
+      (mockRedis.get as jest.Mock).mockRejectedValue(
+        new Error('Connection lost'),
+      );
 
       const result = await service.get('user:profile:123');
       expect(result).toBeUndefined();
@@ -99,9 +101,11 @@ describe('CacheService', () => {
     it('discards stale compute results if cache was invalidated during execution', async () => {
       const key = 'product:details:stale-check';
       let finishCompute!: () => void;
-      const computePromise = new Promise<{ id: string; price: number }>((resolve) => {
-        finishCompute = () => resolve({ id: '1', price: 100 });
-      });
+      const computePromise = new Promise<{ id: string; price: number }>(
+        (resolve) => {
+          finishCompute = () => resolve({ id: '1', price: 100 });
+        },
+      );
 
       (mockRedis.get as jest.Mock).mockResolvedValue(null);
       (mockRedis.set as jest.Mock).mockResolvedValue('OK');
@@ -150,7 +154,9 @@ describe('CacheService', () => {
   describe('invalidate & pattern deletion', () => {
     it('invalidates both local L1 cache and Redis L2 key', async () => {
       const key = 'product:card:item-1';
-      (mockRedis.get as jest.Mock).mockResolvedValue(JSON.stringify({ id: 'item-1' }));
+      (mockRedis.get as jest.Mock).mockResolvedValue(
+        JSON.stringify({ id: 'item-1' }),
+      );
       (mockRedis.del as jest.Mock).mockResolvedValue(1);
 
       // Populate L1

@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
@@ -67,7 +71,9 @@ describe('OrdersService', () => {
         }),
       },
       $queryRaw: jest.fn(),
-      $transaction: jest.fn((callback: (tx: any) => Promise<unknown>) => callback(mockPrisma)),
+      $transaction: jest.fn((callback: (tx: any) => Promise<unknown>) =>
+        callback(mockPrisma),
+      ),
     };
 
     mockUsersService = {
@@ -107,16 +113,19 @@ describe('OrdersService', () => {
     };
 
     service = new OrdersService(
-      mockPrisma as unknown as PrismaService,
-      mockUsersService as unknown as UsersService,
-      mockDiscountService as unknown as DiscountCodeService,
+      mockPrisma,
+      mockUsersService,
+      mockDiscountService,
       {} as unknown as ReferralService,
-      mockPaymentsService as unknown as PaymentsService,
-      { sendOrderConfirmation: jest.fn(), sendOrderDelivered: jest.fn() } as unknown as EmailService,
+      mockPaymentsService,
+      {
+        sendOrderConfirmation: jest.fn(),
+        sendOrderDelivered: jest.fn(),
+      } as unknown as EmailService,
       { log: jest.fn() } as unknown as AuditLogService,
-      mockWalletService as unknown as WalletService,
-      mockEventEmitter as unknown as EventEmitter2,
-      mockConfigService as unknown as ConfigService,
+      mockWalletService,
+      mockEventEmitter,
+      mockConfigService,
     );
   });
 
@@ -144,11 +153,21 @@ describe('OrdersService', () => {
       await expect(
         service.checkout(
           'u-1',
-          { shippingAddress: { fullName: 'John Doe', phone: '123', street: 'St', city: 'City', state: 'State' } } as any,
+          {
+            shippingAddress: {
+              fullName: 'John Doe',
+              phone: '123',
+              street: 'St',
+              city: 'City',
+              state: 'State',
+            },
+          } as any,
           'addr-1',
           'key-1',
         ),
-      ).rejects.toThrow('Provide either addressId or shippingAddress, not both.');
+      ).rejects.toThrow(
+        'Provide either addressId or shippingAddress, not both.',
+      );
     });
   });
 
@@ -178,7 +197,15 @@ describe('OrdersService', () => {
 
       const result = await service.checkout(
         'u-1',
-        { shippingAddress: { fullName: 'Jane', phone: '123', street: 'St', city: 'City', state: 'State' } } as any,
+        {
+          shippingAddress: {
+            fullName: 'Jane',
+            phone: '123',
+            street: 'St',
+            city: 'City',
+            state: 'State',
+          },
+        },
         undefined,
         'idempotent-key-repeat',
       );
@@ -210,19 +237,23 @@ describe('OrdersService', () => {
         status: OrderStatus.PENDING,
         stockRestored: false,
         payment: { id: 'pay-1', status: PaymentStatus.PENDING },
-        orderItems: [
-          { productId: 'p-1', variantId: null, quantity: 2 },
-        ],
+        orderItems: [{ productId: 'p-1', variantId: null, quantity: 2 }],
       };
 
       mockPrisma.order.findFirst.mockResolvedValue(order);
       mockPrisma.order.findUnique.mockResolvedValue(order);
       mockPrisma.order.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.order.update.mockResolvedValue({ ...order, status: OrderStatus.CANCELLED, stockRestored: true });
+      mockPrisma.order.update.mockResolvedValue({
+        ...order,
+        status: OrderStatus.CANCELLED,
+        stockRestored: true,
+      });
       mockPrisma.orderStatusHistory.create.mockResolvedValue({ id: 'osh-1' });
 
       // Stock restoration raw query mock
-      mockPrisma.$queryRaw.mockResolvedValue([{ id: 'p-1', oldStock: 5, newStock: 7 }]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { id: 'p-1', oldStock: 5, newStock: 7 },
+      ]);
 
       await service.cancelMine('u-1', 'ord-unpaid');
 

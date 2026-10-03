@@ -115,14 +115,14 @@ describe('VendorsService', () => {
     };
 
     service = new VendorsService(
-      mockPrisma as unknown as PrismaService,
-      mockJwt as unknown as JwtService,
-      mockConfig as unknown as ConfigService,
-      mockOtp as unknown as OtpService,
-      mockEmail as unknown as EmailService,
-      mockAudit as unknown as AuditLogService,
-      mockCache as unknown as CacheService,
-      mockAccountLock as unknown as AccountLockService,
+      mockPrisma,
+      mockJwt,
+      mockConfig,
+      mockOtp,
+      mockEmail,
+      mockAudit,
+      mockCache,
+      mockAccountLock,
     );
   });
 

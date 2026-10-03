@@ -43,7 +43,9 @@ describe('Nuts API (e2e)', () => {
       acquire: jest.fn().mockResolvedValue({
         release: jest.fn().mockResolvedValue(undefined),
       }),
-      using: jest.fn((_resources, _ttl, routine) => routine({ aborted: false })),
+      using: jest.fn((_resources, _ttl, routine) =>
+        routine({ aborted: false }),
+      ),
     };
 
     const mockOtpService = {
@@ -185,7 +187,10 @@ describe('Nuts API (e2e)', () => {
         updatedAt: new Date(),
       });
       mockPrisma.referralCode.findUnique.mockResolvedValue(null);
-      mockPrisma.referralCode.create.mockResolvedValue({ id: 'ref-1', code: 'REF123' });
+      mockPrisma.referralCode.create.mockResolvedValue({
+        id: 'ref-1',
+        code: 'REF123',
+      });
 
       return request(app.getHttpServer())
         .post('/api/v1/auth/register')
