@@ -77,10 +77,14 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
         return (serverItems ?? []).some(
           (item) =>
             item.productId === productId &&
-            (!variantId || item.variantId === variantId)
+            (!variantId || !item.variantId || item.variantId === variantId)
         );
       }
-      return guestItems.some((item) => item.productId === productId);
+      return guestItems.some(
+        (item) =>
+          item.productId === productId &&
+          (!variantId || !item.variantId || item.variantId === variantId)
+      );
     },
     [guestItems, isAuthenticated, serverItems]
   );
@@ -95,7 +99,7 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       variantId?: string;
     }) => {
       if (!isAuthenticated) {
-        useWishlistStore.getState().removeItem(productId);
+        useWishlistStore.getState().removeItem(productId, variantId);
         return;
       }
       await wishlistService.remove(productId, variantId);
@@ -126,7 +130,7 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
     }) => {
       // Handle guest users with local store
       if (!isAuthenticated) {
-        useWishlistStore.getState().toggleItem(product);
+        useWishlistStore.getState().toggleItem(product, variantId);
         return shouldAdd;
       }
 
@@ -149,10 +153,12 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       ) ?? null;
 
       const isTarget = (item: WishlistResponseDto) =>
-        item.productId === product.id && (item.variantId ?? null) === (variantId ?? null);
+        item.productId === product.id &&
+        (!variantId || !item.variantId || item.variantId === variantId);
+
       const next = shouldAdd
         ? [
-            ...current.filter((item) => !isTarget(item)),
+            ...current.filter((item) => item.productId !== product.id),
             {
               id: `optimistic:${product.id}:${variantId ?? "product"}`,
               productId: product.id,

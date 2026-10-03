@@ -11,6 +11,8 @@ type WishlistStoreProduct = {
   thumbnail?: string | null;
   images?: Array<{ url?: string } | string>;
   vendor?: { storeName?: string; storeSlug?: string; isVerified?: boolean };
+  variantId?: string | null;
+  variantName?: string | null;
 };
 
 export interface WishlistProduct {
@@ -21,14 +23,16 @@ export interface WishlistProduct {
   price: number;
   image?: string | null;
   vendorStore?: string | null;
+  variantId?: string | null;
+  variantName?: string | null;
 }
 
 interface WishlistState {
   items: WishlistProduct[];
-  addItem: (product: WishlistStoreProduct) => void;
-  removeItem: (productId: string) => void;
-  toggleItem: (product: WishlistStoreProduct) => boolean;
-  isInWishlist: (productId: string) => boolean;
+  addItem: (product: WishlistStoreProduct, variantId?: string | null) => void;
+  removeItem: (productId: string, variantId?: string | null) => void;
+  toggleItem: (product: WishlistStoreProduct, variantId?: string | null) => boolean;
+  isInWishlist: (productId: string, variantId?: string | null) => boolean;
   clearWishlist: () => void;
   count: () => number;
 }
@@ -51,9 +55,16 @@ export const useWishlistStore = create<WishlistState>()(
     (set, get) => ({
       items: [],
 
-      addItem: (product) => {
+      addItem: (product, variantId) => {
         const items = get().items;
-        if (items.some((i) => i.productId === product.id || i.id === product.id)) {
+        const targetVariantId = variantId ?? product.variantId ?? null;
+        if (
+          items.some(
+            (i) =>
+              i.productId === product.id &&
+              (targetVariantId ? i.variantId === targetVariantId : true)
+          )
+        ) {
           return;
         }
 
@@ -68,40 +79,49 @@ export const useWishlistStore = create<WishlistState>()(
           items: [
             ...items,
             {
-              id: product.id,
+              id: `${product.id}${targetVariantId ? `:${targetVariantId}` : ""}`,
               productId: product.id,
               name: product.name,
               slug: product.slug,
               price: Number(product.discountPrice ?? product.price ?? 0),
               image: img,
               vendorStore: product.vendor?.storeName,
+              variantId: targetVariantId,
+              variantName: product.variantName ?? null,
             },
           ],
         });
       },
 
-      removeItem: (productId) => {
+      removeItem: (productId, variantId) => {
         set({
-          items: get().items.filter(
-            (item) => item.productId !== productId && item.id !== productId
-          ),
+          items: get().items.filter((item) => {
+            if (item.productId !== productId && item.id !== productId) return true;
+            if (variantId && item.variantId && item.variantId !== variantId) return true;
+            return false;
+          }),
         });
       },
 
-      toggleItem: (product) => {
-        const inWishlist = get().isInWishlist(product.id);
+      toggleItem: (product, variantId) => {
+        const targetVariantId = variantId ?? product.variantId ?? null;
+        const inWishlist = get().isInWishlist(product.id, targetVariantId);
 
         if (inWishlist) {
-          get().removeItem(product.id);
+          get().removeItem(product.id, targetVariantId);
           return false;
         }
 
-        get().addItem(product);
+        get().addItem(product, targetVariantId);
         return true;
       },
 
-      isInWishlist: (productId) =>
-        get().items.some((item) => item.productId === productId || item.id === productId),
+      isInWishlist: (productId, variantId) =>
+        get().items.some(
+          (item) =>
+            (item.productId === productId || item.id === productId) &&
+            (!variantId || !item.variantId || item.variantId === variantId)
+        ),
 
       clearWishlist: () => set({ items: [] }),
 
