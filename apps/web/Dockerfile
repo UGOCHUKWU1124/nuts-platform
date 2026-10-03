@@ -12,9 +12,9 @@ RUN apk add --no-cache libc6-compat
 
 # 1. Copy workspace manifests for optimal caching
 COPY package*.json ./
-COPY apps/web/package*.json ./apps/web/
-COPY packages/types/package*.json ./packages/types/
-COPY packages/config/package*.json ./packages/config/
+COPY apps/web/package.json ./apps/web/
+COPY packages/types/package.json ./packages/types/
+COPY packages/config/package.json ./packages/config/
 
 # 2. Install workspace dependencies
 RUN npm ci
@@ -44,9 +44,9 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat curl
 
 COPY package*.json ./
-COPY apps/web/package*.json ./apps/web/
-COPY packages/types/package*.json ./packages/types/
-COPY packages/config/package*.json ./packages/config/
+COPY apps/web/package.json ./apps/web/
+COPY packages/types/package.json ./packages/types/
+COPY packages/config/package.json ./packages/config/
 
 RUN npm ci
 

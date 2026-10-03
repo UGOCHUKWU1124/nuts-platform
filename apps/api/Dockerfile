@@ -12,10 +12,10 @@ RUN apk add --no-cache python3 make g++ openssl
 
 # 1. Copy workspace manifests for optimal layer caching
 COPY package*.json ./
-COPY apps/api/package*.json ./apps/api/
-COPY packages/database/package*.json ./packages/database/
-COPY packages/types/package*.json ./packages/types/
-COPY packages/config/package*.json ./packages/config/
+COPY apps/api/package.json ./apps/api/
+COPY packages/database/package.json ./packages/database/
+COPY packages/types/package.json ./packages/types/
+COPY packages/config/package.json ./packages/config/
 
 # 2. Install workspace dependencies
 RUN npm ci
@@ -39,10 +39,10 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ openssl curl
 
 COPY package*.json ./
-COPY apps/api/package*.json ./apps/api/
-COPY packages/database/package*.json ./packages/database/
-COPY packages/types/package*.json ./packages/types/
-COPY packages/config/package*.json ./packages/config/
+COPY apps/api/package.json ./apps/api/
+COPY packages/database/package.json ./packages/database/
+COPY packages/types/package.json ./packages/types/
+COPY packages/config/package.json ./packages/config/
 
 RUN npm ci
 
