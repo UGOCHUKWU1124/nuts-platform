@@ -76,6 +76,7 @@ if (dsn) {
     tracesSampleRate,
     profileSessionSampleRate,
     profileLifecycle: 'trace',
+    traceLifecycle: 'static',
     release: process.env.SENTRY_RELEASE || process.env.npm_package_version,
   });
 }
