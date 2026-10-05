@@ -19,21 +19,6 @@
     ]
   },
   "moduleNameMapper": {
-    "^@api/modules/users/(.*)$": ["<rootDir>/../src/modules/identity/users/$1", "<rootDir>/../src/modules/users/$1"],
-    "^@api/modules/creators/(.*)$": ["<rootDir>/../src/modules/identity/creators/$1", "<rootDir>/../src/modules/creators/$1"],
-    "^@api/modules/admin/(.*)$": ["<rootDir>/../src/modules/identity/admin/$1", "<rootDir>/../src/modules/admin/$1"],
-    "^@api/modules/products/(.*)$": ["<rootDir>/../src/modules/catalog/products/$1", "<rootDir>/../src/modules/products/$1"],
-    "^@api/modules/category/(.*)$": ["<rootDir>/../src/modules/catalog/categories/$1", "<rootDir>/../src/modules/catalog/category/$1", "<rootDir>/../src/modules/catalog/category/$1"],
-    "^@api/modules/product-variants/(.*)$": ["<rootDir>/../src/modules/catalog/variants/$1", "<rootDir>/../src/modules/catalog/product-variants/$1", "<rootDir>/../src/modules/product-variants/$1"],
-    "^@api/modules/cart/(.*)$": ["<rootDir>/../src/modules/checkout/cart/$1", "<rootDir>/../src/modules/cart/$1"],
-    "^@api/modules/orders/(.*)$": ["<rootDir>/../src/modules/checkout/orders/$1", "<rootDir>/../src/modules/orders/$1"],
-    "^@api/modules/promotions/(.*)$": ["<rootDir>/../src/modules/checkout/discounts/$1", "<rootDir>/../src/modules/checkout/promotions/$1", "<rootDir>/../src/modules/promotions/$1"],
-    "^@api/modules/payments/(.*)$": ["<rootDir>/../src/modules/billing/payments/$1", "<rootDir>/../src/modules/payments/$1"],
-    "^@api/modules/wallet/(.*)$": ["<rootDir>/../src/modules/billing/wallets/$1", "<rootDir>/../src/modules/billing/wallet/$1", "<rootDir>/../src/modules/wallet/$1"],
-    "^@api/modules/reviews/(.*)$": ["<rootDir>/../src/modules/engagement/reviews/$1", "<rootDir>/../src/modules/reviews/$1"],
-    "^@api/modules/wishlist/(.*)$": ["<rootDir>/../src/modules/engagement/wishlist/$1", "<rootDir>/../src/modules/wishlist/$1"],
-    "^@api/modules/referral/(.*)$": ["<rootDir>/../src/modules/engagement/referral/$1", "<rootDir>/../src/modules/referral/$1"],
-    "^@api/(.*)$": "<rootDir>/../src/$1",
     "^src/(.*)$": "<rootDir>/../src/$1"
   }
 }

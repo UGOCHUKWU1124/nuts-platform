@@ -293,6 +293,7 @@ describe('AdminVendorsService', () => {
       });
 
       const { where } = mockPrisma.vendor.findMany.mock.calls[0][0];
+      // Whitespace-only search is trimmed to empty string, so no OR clause added
       expect(where).toEqual({
         isActive: true,
         isApproved: false,
@@ -356,7 +357,6 @@ describe('AdminVendorsService', () => {
       expect(mockCache.delByPattern).toHaveBeenCalledWith('products:public:*');
     });
 
-    // REGRESSION: unknown IDs used to bubble up as Prisma P2025 → HTTP 500.
     it('returns 404 (not 500) when the vendor does not exist', async () => {
       mockPrisma.vendor.findUnique.mockResolvedValue(null);
 
@@ -368,7 +368,11 @@ describe('AdminVendorsService', () => {
     });
 
     it('returns 404 when the vendor is deleted between read and write (P2025)', async () => {
-      mockPrisma.vendor.findUnique.mockResolvedValue({ isActive: false });
+      mockPrisma.vendor.findUnique.mockResolvedValue({
+        isActive: false,
+        isApproved: false,
+        isVerified: false,
+      });
       mockPrisma.vendor.update.mockRejectedValue(p2025());
 
       await expect(service.reactivate('admin-1', 'vendor-1')).rejects.toThrow(

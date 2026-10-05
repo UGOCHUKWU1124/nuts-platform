@@ -184,7 +184,7 @@ export class ProductVariantsService {
   async findOne(id: string) {
     const cacheKey = this.cacheService.buildKey(CacheKeys.VARIANT_DETAILS, id);
 
-    return this.cacheService.wrapStale(
+    return this.cacheService.wrap(
       cacheKey,
       this.VARIANT_CACHE_TTL,
       async () => {

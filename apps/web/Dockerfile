@@ -4,17 +4,16 @@
 # ==============================================================================
 
 # ─── Stage 1: Builder ─────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
-
-RUN apk add --no-cache libc6-compat
 
 # 1. Copy workspace manifests for optimal caching
 COPY package*.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+COPY tsconfig.base.json tsconfig.node.json tsconfig.web.json ./
 
 # 2. Install workspace dependencies
 RUN npm ci
@@ -37,16 +36,19 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build:web
 
 # ─── Stage 2: Dev ─────────────────────────────────────────────────────────────
-FROM node:22-alpine AS dev
+FROM node:22-slim AS dev
 
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat curl
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+COPY tsconfig.base.json tsconfig.node.json tsconfig.web.json ./
 
 RUN npm ci
 
@@ -63,11 +65,13 @@ EXPOSE 3000
 CMD ["npx", "next", "dev", "-p", "3000"]
 
 # ─── Stage 3: Production Runtime ──────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache dumb-init curl
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends dumb-init curl \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

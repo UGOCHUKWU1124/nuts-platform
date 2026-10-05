@@ -17,9 +17,12 @@ jobs:
     outputs:
       env_name: ${{ steps.set-env.outputs.env_name }}
       docker_tag: ${{ steps.set-env.outputs.docker_tag }}
+      image_repository: ${{ steps.set-env.outputs.image_repository }}
     steps:
       - id: set-env
         run: |
+          image_repository="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "image_repository=$image_repository" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
             echo "docker_tag=latest" >> $GITHUB_OUTPUT
@@ -32,8 +35,13 @@ jobs:
     name: Build & Deploy to ${{ needs.resolve-environment.outputs.env_name }}
     needs: resolve-environment
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     environment:
       name: ${{ needs.resolve-environment.outputs.env_name }}
+    env:
+      HAS_DATABASE_URL: ${{ secrets.DATABASE_URL != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,7 +60,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        if: ${{ secrets.DATABASE_URL != '' }}
+        if: ${{ env.HAS_DATABASE_URL == 'true' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -72,8 +80,8 @@ jobs:
           target: runner
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/api:${{ needs.resolve-environment.outputs.docker_tag }}
-            ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ needs.resolve-environment.outputs.docker_tag }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ github.sha }}
 
       - name: Build & Push Web Client Container Image
         uses: docker/build-push-action@v5
@@ -86,5 +94,5 @@ jobs:
             NEXT_PUBLIC_BACKEND_URL=${{ vars.NEXT_PUBLIC_BACKEND_URL || 'https://api.nuts-commerce.com' }}
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || '/api/v1' }}
           tags: |
-            ghcr.io/${{ github.repository }}/web:${{ needs.resolve-environment.outputs.docker_tag }}
-            ghcr.io/${{ github.repository }}/web:${{ github.sha }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ needs.resolve-environment.outputs.docker_tag }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ github.sha }}
