@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { Prisma } from '@prisma/client';
 
@@ -43,7 +47,6 @@ const WISHLIST_ITEM_INCLUDE = {
     select: {
       id: true,
       options: true,
-      images: true,
     },
   },
 } satisfies Prisma.WishlistItemInclude;
@@ -187,7 +190,6 @@ export class WishlistService {
           where: {
             userId,
             productId,
-            variantId: normalizedVariantId,
           },
           include: WISHLIST_ITEM_INCLUDE,
         });
@@ -217,22 +219,13 @@ export class WishlistService {
           userId,
 
           /*
-           * Don't expose deleted/inactive products or variants in the wishlist.
+           * Don't expose deleted/inactive products in the wishlist.
            * They can remain in the DB until the user removes them.
            */
           product: {
             isActive: true,
             isDeleted: false,
           },
-          OR: [
-            { variantId: null },
-            {
-              variant: {
-                isActive: true,
-                isDeleted: false,
-              },
-            },
-          ],
         },
 
         include: WISHLIST_ITEM_INCLUDE,
@@ -309,8 +302,7 @@ export class WishlistService {
 
       productPrice: Number(item.product.price),
 
-      productImage:
-        item.variant?.images?.[0] ?? item.product.images[0]?.url ?? null,
+      productImage: item.product.images[0]?.url ?? null,
 
       variantName: this.getVariantName(item.variant?.options),
 

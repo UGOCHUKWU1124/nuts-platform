@@ -1461,52 +1461,29 @@ export class OrdersService {
 
           discountCode = discountRecord.code;
 
-          let eligibleAmount = totalAmount;
-
           /**
-           * Vendor-scoped discounts must only discount items from that vendor
-           * or specifically listed product IDs.
+           * Product-scoped vendor discounts must match at least one
+           * product in this cart.
            */
           if (
             discountRecord.scope === 'VENDOR' &&
-            !discountRecord.platformwide
+            !discountRecord.platformwide &&
+            discountRecord.applicableProductIds.length > 0
           ) {
-            if (discountRecord.applicableProductIds.length > 0) {
-              const eligibleItems = cart.cartItems.filter((item) =>
-                discountRecord!.applicableProductIds.includes(item.productId),
-              );
+            const applicable = cart.cartItems.some((item) =>
+              discountRecord!.applicableProductIds.includes(item.productId),
+            );
 
-              if (eligibleItems.length === 0) {
-                throw new BadRequestException(
-                  'This discount code does not apply to any products in your cart.',
-                );
-              }
-
-              eligibleAmount = eligibleItems.reduce(
-                (sum, item) => sum.add(item.totalPrice),
-                new Prisma.Decimal(0),
-              );
-            } else if (discountRecord.vendorId) {
-              const eligibleItems = cart.cartItems.filter(
-                (item) => item.product.vendorId === discountRecord!.vendorId,
-              );
-
-              if (eligibleItems.length === 0) {
-                throw new BadRequestException(
-                  'This discount code does not apply to any products from this vendor in your cart.',
-                );
-              }
-
-              eligibleAmount = eligibleItems.reduce(
-                (sum, item) => sum.add(item.totalPrice),
-                new Prisma.Decimal(0),
+            if (!applicable) {
+              throw new BadRequestException(
+                'This discount code does not apply to any products in your cart.',
               );
             }
           }
 
           discountAmount = this.discountCodeService.calculateDiscount(
             discountRecord,
-            eligibleAmount,
+            totalAmount,
           );
 
           discountAmount = discountAmount.toDecimalPlaces(2);
@@ -1526,20 +1503,13 @@ export class OrdersService {
         /**
          * Deduct stock one inventory row at a time.
          *
-         * We sort items deterministically by variantId/productId to enforce
-         * consistent lock acquisition order across concurrent checkout transactions.
-         * This mathematically eliminates PostgreSQL row-level lock deadlocks (40P01).
-         *
          * We use PostgreSQL UPDATE ... RETURNING because Prisma's
          * updateMany() does not return the old/new stock values.
+         *
+         * This means StockHistory contains the actual committed values,
+         * not values guessed from a stale SELECT.
          */
-        const sortedItems = [...cart.cartItems].sort((a, b) => {
-          const keyA = a.variantId || a.productId;
-          const keyB = b.variantId || b.productId;
-          return keyA.localeCompare(keyB);
-        });
-
-        for (const item of sortedItems) {
+        for (const item of cart.cartItems) {
           const variantLabel = item.variant
             ? this.variantLabel(item.variant.options)
             : null;
@@ -1650,6 +1620,14 @@ export class OrdersService {
             totalAmount,
             discountAmount,
             finalAmount,
+
+            /**
+             * Your current checkout implementation does not actually
+             * calculate a referral discount.
+             *
+             * Therefore we leave this at its DB default of zero rather
+             * than pretending a referral discount was applied.
+             */
             discountCode,
 
             shippingAddress: shipping.formattedAddress,

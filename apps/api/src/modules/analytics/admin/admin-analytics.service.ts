@@ -36,81 +36,75 @@ export class AdminAnalyticsService {
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}${start.toISOString()}:${end.toISOString()}`;
 
-    // Analytics summary runs 20 parallel DB queries — wrapWithLock ensures only
-    // one instance executes this aggregation per cache miss across the cluster.
-    return this.cacheService.wrapWithLock(
-      cacheKey,
-      ANALYTICS_CACHE_TTL,
-      async () => {
-        // Run independent queries in parallel
-        const [
-          totalUsers,
-          activeUsers,
-          totalOrders,
-          totalRevenue,
-          revenueInPeriod,
-          orderStatusCounts,
-          revenueTrend,
-          orderTrend,
-          totalProducts,
-          totalVariants,
-          totalDiscountCodes,
-          totalShippingAddresses,
-          totalVendors,
-          activeVendors,
-          verifiedVendors,
-          approvedVendors,
-          totalVendorOrderItems,
-          newVendors,
-          newUsers,
-          newOrders,
-        ] = await Promise.all([
-          this.users.getTotalUsers(),
-          this.users.getActiveUsers(),
-          this.revenue.getTotalOrders(),
-          this.revenue.getTotalRevenue(),
-          this.revenue.getRevenueInPeriod(start, end),
-          this.revenue.getOrderStatusCounts(),
-          this.revenue.getRevenueTrend(start, end),
-          this.revenue.getOrderTrend(start, end),
-          this.products.getTotalProducts(),
-          this.products.getTotalVariants(),
-          this.promotions.getDiscountAnalytics().then((d) => d.totalCodes),
-          this.prisma.shippingAddress.count(),
-          this.products.getTotalVendors(),
-          this.products.getActiveVendors(),
-          this.products.getVerifiedVendors(),
-          this.products.getApprovedVendors(),
-          this.products.getTotalVendorOrderItems(),
-          this.products.getNewVendorsInPeriod(start, end),
-          this.users.getNewUsersInPeriod(start, end),
-          this.revenue.getNewOrdersInPeriod(start, end),
-        ]);
+    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+      // Run independent queries in parallel
+      const [
+        totalUsers,
+        activeUsers,
+        totalOrders,
+        totalRevenue,
+        revenueInPeriod,
+        orderStatusCounts,
+        revenueTrend,
+        orderTrend,
+        totalProducts,
+        totalVariants,
+        totalDiscountCodes,
+        totalShippingAddresses,
+        totalVendors,
+        activeVendors,
+        verifiedVendors,
+        approvedVendors,
+        totalVendorOrderItems,
+        newVendors,
+        newUsers,
+        newOrders,
+      ] = await Promise.all([
+        this.users.getTotalUsers(),
+        this.users.getActiveUsers(),
+        this.revenue.getTotalOrders(),
+        this.revenue.getTotalRevenue(),
+        this.revenue.getRevenueInPeriod(start, end),
+        this.revenue.getOrderStatusCounts(),
+        this.revenue.getRevenueTrend(start, end),
+        this.revenue.getOrderTrend(start, end),
+        this.products.getTotalProducts(),
+        this.products.getTotalVariants(),
+        this.promotions.getDiscountAnalytics().then((d) => d.totalCodes),
+        this.prisma.shippingAddress.count(),
+        this.products.getTotalVendors(),
+        this.products.getActiveVendors(),
+        this.products.getVerifiedVendors(),
+        this.products.getApprovedVendors(),
+        this.products.getTotalVendorOrderItems(),
+        this.products.getNewVendorsInPeriod(start, end),
+        this.users.getNewUsersInPeriod(start, end),
+        this.revenue.getNewOrdersInPeriod(start, end),
+      ]);
 
-        return {
-          totalUsers,
-          activeUsers,
-          totalOrders,
-          totalRevenue: totalRevenue.toFixed(2),
-          revenueInPeriod: revenueInPeriod.toFixed(2),
-          totalProducts,
-          totalVariants,
-          totalDiscountCodes,
-          totalShippingAddresses,
-          totalVendors,
-          activeVendors,
-          verifiedVendors,
-          approvedVendors,
-          totalVendorOrderItems,
-          newVendorsInPeriod: newVendors,
-          newUsersInPeriod: newUsers,
-          newOrdersInPeriod: newOrders,
-          orderStatusCounts,
-          revenueTrend,
-          orderTrend,
-        };
-      },
-    );
+      return {
+        totalUsers,
+        activeUsers,
+        totalOrders,
+        totalRevenue: totalRevenue.toFixed(2),
+        revenueInPeriod: revenueInPeriod.toFixed(2),
+        totalProducts,
+        totalVariants,
+        totalDiscountCodes,
+        totalShippingAddresses,
+        totalVendors,
+        activeVendors,
+        verifiedVendors,
+        approvedVendors,
+        totalVendorOrderItems,
+        newVendorsInPeriod: newVendors,
+        newUsersInPeriod: newUsers,
+        newOrdersInPeriod: newOrders,
+        orderStatusCounts,
+        revenueTrend,
+        orderTrend,
+      };
+    });
   }
 
   async getTopProducts(
@@ -156,42 +150,38 @@ export class AdminAnalyticsService {
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}users:${start.toISOString()}:${end.toISOString()}`;
 
-    return this.cacheService.wrapWithLock(
-      cacheKey,
-      ANALYTICS_CACHE_TTL,
-      async () => {
-        const [
-          totalUsers,
-          activeUsers,
-          deactivatedUsers,
-          newUsersInPeriod,
-          usersWithOrders,
-          repeatCustomers,
-          aov,
-          registrationTrend,
-        ] = await Promise.all([
-          this.users.getTotalUsers(),
-          this.users.getActiveUsers(),
-          this.users.getDeactivatedUsers(),
-          this.users.getNewUsersInPeriod(start, end),
-          this.users.getUsersWithOrders(),
-          this.users.getRepeatCustomers(),
-          this.revenue.getAverageOrderValue(start, end),
-          this.users.getRegistrationTrend(start, end),
-        ]);
+    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+      const [
+        totalUsers,
+        activeUsers,
+        deactivatedUsers,
+        newUsersInPeriod,
+        usersWithOrders,
+        repeatCustomers,
+        aov,
+        registrationTrend,
+      ] = await Promise.all([
+        this.users.getTotalUsers(),
+        this.users.getActiveUsers(),
+        this.users.getDeactivatedUsers(),
+        this.users.getNewUsersInPeriod(start, end),
+        this.users.getUsersWithOrders(),
+        this.users.getRepeatCustomers(),
+        this.revenue.getAverageOrderValue(start, end),
+        this.users.getRegistrationTrend(start, end),
+      ]);
 
-        return {
-          totalUsers,
-          activeUsers,
-          deactivatedUsers,
-          newUsersInPeriod,
-          usersWithOrders,
-          repeatCustomers,
-          averageOrderValue: aov.toFixed(2),
-          registrationTrend,
-        };
-      },
-    );
+      return {
+        totalUsers,
+        activeUsers,
+        deactivatedUsers,
+        newUsersInPeriod,
+        usersWithOrders,
+        repeatCustomers,
+        averageOrderValue: aov.toFixed(2),
+        registrationTrend,
+      };
+    });
   }
 
   async getFunnelAnalytics(
@@ -203,13 +193,9 @@ export class AdminAnalyticsService {
       query.range ? RANGE_DAYS[query.range] : 30,
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}funnel:${start.toISOString()}:${end.toISOString()}`;
-    return this.cacheService.wrapWithLock(
-      cacheKey,
-      ANALYTICS_CACHE_TTL,
-      async () => {
-        return this.users.getFunnel(start, end);
-      },
-    );
+    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+      return this.users.getFunnel(start, end);
+    });
   }
 
   async getActivityAnalytics(
@@ -221,12 +207,8 @@ export class AdminAnalyticsService {
       query.range ? RANGE_DAYS[query.range] : 30,
     );
     const cacheKey = `${ANALYTICS_CACHE_PREFIX}activity:${start.toISOString()}:${end.toISOString()}`;
-    return this.cacheService.wrapWithLock(
-      cacheKey,
-      ANALYTICS_CACHE_TTL,
-      async () => {
-        return this.audit.getActivityAnalytics(start, end);
-      },
-    );
+    return this.cacheService.wrap(cacheKey, ANALYTICS_CACHE_TTL, async () => {
+      return this.audit.getActivityAnalytics(start, end);
+    });
   }
 }

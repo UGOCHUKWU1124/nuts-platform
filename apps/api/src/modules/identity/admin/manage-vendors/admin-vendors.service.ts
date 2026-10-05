@@ -1,17 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { VendorProfileDto } from '@api/modules/identity/vendors/dto/vendor-response.dto';
 import { VendorStatusResponseDto } from '@api/modules/identity/vendors/dto/vendor-status-response.dto';
-import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import {
   AuditLogService,
   toAuditPayload,
 } from '@api/modules/shared/audit-log/audit-log.service';
-import {
-  VENDOR_STORE,
-  VENDOR_STORE_PRODUCTS,
-} from '@api/modules/shared/constants/cache.constant';
 import { createPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
 import { getPagination } from '@api/modules/shared/utils/pagination.util';
 import { QueryAdminVendorsDto } from './dto/query-admin-vendors.dto';
@@ -40,45 +35,13 @@ type VendorSelectPayload = Prisma.VendorGetPayload<{
   select: typeof vendorSelect;
 }>;
 
-/** Columns returned by every status transition — enough for the response, audit and cache keys. */
-const statusSelect = {
-  id: true,
-  isActive: true,
-  isApproved: true,
-  isVerified: true,
-  updatedAt: true,
-  email: true,
-  storeName: true,
-  storeSlug: true,
-} as const;
-
-type StatusField = 'isActive' | 'isApproved' | 'isVerified';
-
-interface StatusTransition {
-  action: string;
-  field: StatusField;
-  value: boolean;
-  /** Extra columns written atomically with the flag (e.g. session revocation). */
-  extraData?: Prisma.VendorUpdateInput;
-}
-
-/**
- * Public listing caches (`VendorsService.getPublicVendors`) and product listings
- * embed vendor visibility. Any moderation change must evict them, otherwise a
- * deactivated/deleted vendor stays publicly visible until the TTL (1h in prod).
- */
-const PUBLIC_VENDOR_LIST_PATTERN = 'vendors:public:*';
-const PUBLIC_PRODUCT_LIST_PATTERN = 'products:public:*';
-
 @Injectable()
 export class AdminVendorsService {
-  private readonly logger = new Logger(AdminVendorsService.name);
   private readonly vendorSelect = vendorSelect;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
-    private readonly cacheService: CacheService,
   ) {}
 
   async findAll(query: QueryAdminVendorsDto): Promise<{
@@ -96,12 +59,11 @@ export class AdminVendorsService {
 
     const where: Prisma.VendorWhereInput = {};
 
-    const trimmedSearch = search?.trim();
-    if (trimmedSearch) {
+    if (search) {
       where.OR = [
-        { email: { contains: trimmedSearch, mode: 'insensitive' } },
-        { storeName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { storeSlug: { contains: trimmedSearch, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { storeName: { contains: search, mode: 'insensitive' } },
+        { storeSlug: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -122,8 +84,7 @@ export class AdminVendorsService {
       this.prisma.vendor.findMany({
         where,
         select: this.vendorSelect,
-        // Secondary key keeps pagination stable when createdAt collides.
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: { createdAt: 'desc' },
         ...getPagination(page, limit),
       }),
     ]);
@@ -147,183 +108,49 @@ export class AdminVendorsService {
     return this.toVendorProfile(vendor);
   }
 
-  approve(
+  async approve(
     adminId: string,
     id: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<VendorStatusResponseDto> {
-    return this.transitionStatus(
-      adminId,
-      id,
-      {
-        action: 'APPROVE_VENDOR',
-        field: 'isApproved',
-        value: true,
-        extraData: { tokenVersion: { increment: 1 } },
-      },
-      ipAddress,
-      userAgent,
-    );
-  }
-
-  verify(
-    adminId: string,
-    id: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<VendorStatusResponseDto> {
-    return this.transitionStatus(
-      adminId,
-      id,
-      { action: 'VERIFY_VENDOR', field: 'isVerified', value: true },
-      ipAddress,
-      userAgent,
-    );
-  }
-
-  deactivate(
-    adminId: string,
-    id: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<VendorStatusResponseDto> {
-    return this.transitionStatus(
-      adminId,
-      id,
-      {
-        action: 'DEACTIVATE_VENDOR',
-        field: 'isActive',
-        value: false,
-        // Revoke every live session atomically with the flag flip.
-        extraData: {
-          refreshToken: null,
-          refreshTokenId: null,
-          tokenVersion: { increment: 1 },
-        },
-      },
-      ipAddress,
-      userAgent,
-    );
-  }
-
-  reactivate(
-    adminId: string,
-    id: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<VendorStatusResponseDto> {
-    return this.transitionStatus(
-      adminId,
-      id,
-      {
-        action: 'REACTIVATE_VENDOR',
-        field: 'isActive',
-        value: true,
-        extraData: { tokenVersion: { increment: 1 } },
-      },
-      ipAddress,
-      userAgent,
-    );
-  }
-
-  async delete(
-    adminId: string,
-    id: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<void> {
-    let vendor: {
-      id: string;
-      email: string;
-      storeName: string;
-      storeSlug: string;
-    };
-    try {
-      vendor = await this.prisma.vendor.delete({
-        where: { id },
-        select: { id: true, email: true, storeName: true, storeSlug: true },
-      });
-    } catch (error) {
-      this.rethrowNotFound(error);
-    }
-
-    await Promise.all([
-      this.invalidateVendorCaches(vendor.storeSlug),
-      this.auditLog.log({
-        action: 'DELETE_VENDOR',
-        entity: 'Vendor',
-        entityId: id,
-        adminId,
-        payload: toAuditPayload({
-          email: vendor.email,
-          storeName: vendor.storeName,
-        }),
-        ipAddress,
-        userAgent,
-      }),
-    ]);
-  }
-
-  /**
-   * Single code path for every moderation flag change:
-   *   1. read previous value (for the audit diff)
-   *   2. atomic update (flag + any session-revocation columns)
-   *   3. evict public caches + write audit log in parallel
-   *
-   * A missing vendor surfaces as 404 rather than an unhandled Prisma P2025 (500).
-   */
-  private async transitionStatus(
-    adminId: string,
-    id: string,
-    transition: StatusTransition,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<VendorStatusResponseDto> {
-    const { action, field, value, extraData } = transition;
-
     const before = await this.prisma.vendor.findUnique({
       where: { id },
-      select: { [field]: true } as Record<StatusField, true>,
+      select: { isApproved: true },
     });
 
-    if (!before) {
-      throw new NotFoundException('Vendor not found');
-    }
+    const vendor = await this.prisma.vendor.update({
+      where: { id },
+      data: {
+        isApproved: true,
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        isActive: true,
+        isApproved: true,
+        isVerified: true,
+        updatedAt: true,
+        email: true,
+        storeName: true,
+      },
+    });
 
-    let vendor: Prisma.VendorGetPayload<{ select: typeof statusSelect }>;
-    try {
-      vendor = await this.prisma.vendor.update({
-        where: { id },
-        data: { ...extraData, [field]: value },
-        select: statusSelect,
-      });
-    } catch (error) {
-      // Vendor deleted between the read and the write.
-      this.rethrowNotFound(error);
-    }
-
-    await Promise.all([
-      this.invalidateVendorCaches(vendor.storeSlug),
-      this.auditLog.log({
-        action,
-        entity: 'Vendor',
-        entityId: id,
-        adminId,
-        payload: toAuditPayload({
-          email: vendor.email,
-          storeName: vendor.storeName,
-          changes: {
-            [field]: {
-              old: (before as Record<StatusField, boolean>)[field],
-              new: value,
-            },
-          },
-        }),
-        ipAddress,
-        userAgent,
+    await this.auditLog.log({
+      action: 'APPROVE_VENDOR',
+      entity: 'Vendor',
+      entityId: id,
+      adminId,
+      payload: toAuditPayload({
+        email: vendor.email,
+        storeName: vendor.storeName,
+        changes: {
+          isApproved: { old: before?.isApproved ?? false, new: true },
+        },
       }),
-    ]);
+      ipAddress,
+      userAgent,
+    });
 
     return {
       id: vendor.id,
@@ -334,37 +161,198 @@ export class AdminVendorsService {
     };
   }
 
-  /**
-   * Cache eviction is best-effort: the DB write has already committed, so a
-   * Redis outage must not turn a successful moderation action into a 500.
-   * CacheService already logs Redis failures; this guards against anything else.
-   */
-  private async invalidateVendorCaches(storeSlug: string): Promise<void> {
-    const results = await Promise.allSettled([
-      this.cacheService.del(VENDOR_STORE(storeSlug)),
-      this.cacheService.del(VENDOR_STORE_PRODUCTS(storeSlug)),
-      this.cacheService.delByPattern(PUBLIC_VENDOR_LIST_PATTERN),
-      this.cacheService.delByPattern(PUBLIC_PRODUCT_LIST_PATTERN),
-    ]);
+  async verify(
+    adminId: string,
+    id: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorStatusResponseDto> {
+    const before = await this.prisma.vendor.findUnique({
+      where: { id },
+      select: { isVerified: true },
+    });
 
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        this.logger.warn(
-          `Vendor cache invalidation failed for "${storeSlug}"`,
-          result.reason,
-        );
-      }
-    }
+    const vendor = await this.prisma.vendor.update({
+      where: { id },
+      data: { isVerified: true },
+      select: {
+        id: true,
+        isActive: true,
+        isApproved: true,
+        isVerified: true,
+        updatedAt: true,
+        email: true,
+        storeName: true,
+      },
+    });
+
+    await this.auditLog.log({
+      action: 'VERIFY_VENDOR',
+      entity: 'Vendor',
+      entityId: id,
+      adminId,
+      payload: toAuditPayload({
+        email: vendor.email,
+        storeName: vendor.storeName,
+        changes: {
+          isVerified: { old: before?.isVerified ?? false, new: true },
+        },
+      }),
+      ipAddress,
+      userAgent,
+    });
+
+    return {
+      id: vendor.id,
+      isActive: vendor.isActive,
+      isApproved: vendor.isApproved,
+      isVerified: vendor.isVerified,
+      updatedAt: vendor.updatedAt,
+    };
   }
 
-  private rethrowNotFound(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2025'
-    ) {
-      throw new NotFoundException('Vendor not found');
+  async deactivate(
+    adminId: string,
+    id: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorStatusResponseDto> {
+    const before = await this.prisma.vendor.findUnique({
+      where: { id },
+      select: { isActive: true },
+    });
+
+    const vendor = await this.prisma.vendor.update({
+      where: { id },
+      data: {
+        isActive: false,
+        refreshToken: null,
+        refreshTokenId: null,
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        isActive: true,
+        isApproved: true,
+        isVerified: true,
+        updatedAt: true,
+        email: true,
+        storeName: true,
+      },
+    });
+
+    await this.auditLog.log({
+      action: 'DEACTIVATE_VENDOR',
+      entity: 'Vendor',
+      entityId: id,
+      adminId,
+      payload: toAuditPayload({
+        email: vendor.email,
+        storeName: vendor.storeName,
+        changes: {
+          isActive: { old: before?.isActive ?? true, new: false },
+        },
+      }),
+      ipAddress,
+      userAgent,
+    });
+
+    return {
+      id: vendor.id,
+      isActive: vendor.isActive,
+      isApproved: vendor.isApproved,
+      isVerified: vendor.isVerified,
+      updatedAt: vendor.updatedAt,
+    };
+  }
+
+  async reactivate(
+    adminId: string,
+    id: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<VendorStatusResponseDto> {
+    const before = await this.prisma.vendor.findUnique({
+      where: { id },
+      select: { isActive: true },
+    });
+
+    const vendor = await this.prisma.vendor.update({
+      where: { id },
+      data: {
+        isActive: true,
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        isActive: true,
+        isApproved: true,
+        isVerified: true,
+        updatedAt: true,
+        email: true,
+        storeName: true,
+      },
+    });
+
+    await this.auditLog.log({
+      action: 'REACTIVATE_VENDOR',
+      entity: 'Vendor',
+      entityId: id,
+      adminId,
+      payload: toAuditPayload({
+        email: vendor.email,
+        storeName: vendor.storeName,
+        changes: {
+          isActive: { old: before?.isActive ?? false, new: true },
+        },
+      }),
+      ipAddress,
+      userAgent,
+    });
+
+    return {
+      id: vendor.id,
+      isActive: vendor.isActive,
+      isApproved: vendor.isApproved,
+      isVerified: vendor.isVerified,
+      updatedAt: vendor.updatedAt,
+    };
+  }
+
+  async delete(
+    adminId: string,
+    id: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    let vendor: { id: string; email: string; storeName: string };
+    try {
+      vendor = await this.prisma.vendor.delete({
+        where: { id },
+        select: { id: true, email: true, storeName: true },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new NotFoundException('Vendor not found');
+      }
+      throw error;
     }
-    throw error;
+
+    await this.auditLog.log({
+      action: 'DELETE_VENDOR',
+      entity: 'Vendor',
+      entityId: id,
+      adminId,
+      payload: toAuditPayload({
+        email: vendor.email,
+        storeName: vendor.storeName,
+      }),
+      ipAddress,
+      userAgent,
+    });
   }
 
   private toVendorProfile(vendor: VendorSelectPayload): VendorProfileDto {

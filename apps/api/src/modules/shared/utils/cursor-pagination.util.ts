@@ -86,11 +86,7 @@ export function buildCursorMeta<T>(
   limit: number,
   cursorFor: (lastItem: T) => CursorPayload,
 ): CursorPaginationMetaDto {
-  const parsedLimit = Number(limit);
-  const safeLimit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.min(Math.floor(parsedLimit), 100)
-      : 20;
+  const safeLimit = Math.min(Math.max(1, limit), 100);
   const hasNextPage = fetched.length > safeLimit;
   const page = hasNextPage ? fetched.slice(0, safeLimit) : fetched;
   const lastItem = page.length > 0 ? page[page.length - 1] : null;
@@ -107,12 +103,8 @@ export function buildCursorMeta<T>(
  * Convenience: prepare a cursor page for Prisma.
  * Fetches `limit + 1` rows so `hasNextPage` can be derived without a count.
  */
-export function getCursorPagination(limit?: number | null, cursor?: string) {
-  const parsedLimit = Number(limit);
-  const safeLimit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.min(Math.floor(parsedLimit), 100)
-      : 20;
+export function getCursorPagination(limit: number, cursor?: string) {
+  const safeLimit = Math.min(Math.max(1, limit), 100);
   return {
     take: safeLimit + 1,
     decodedCursor: decodeCursor(cursor),
