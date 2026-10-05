@@ -3,10 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
-  // Enable Next 16.3 instant navigation and route-segment `instant` settings.
-  cacheComponents: true,
-  partialPrefetching: true,
-
   // Enable standalone output for minimal Docker image
   output: "standalone",
 
