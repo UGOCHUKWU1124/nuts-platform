@@ -1,17 +1,20 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
-import nodemailer, { SendMailOptions, Transporter } from 'nodemailer';
 import * as os from 'os';
 import * as path from 'path';
 
 import { CircuitBreakerService } from '@api/modules/infrastructure/resiliency/circuit-breaker.service';
+import {
+  EmailProvider,
+  SendEmailOptions,
+} from '@api/modules/shared/interfaces/email-provider.interface';
 import {
   generateInvoicePdf,
   PdfInvoiceData,
@@ -21,90 +24,26 @@ import {
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
 
-  /**
-   * Nodemailer maintains the SMTP connection pool for us.
-   *
-   * Keeping one transporter for the lifetime of the application is important.
-   * Creating a new transporter for every email would repeatedly establish SMTP
-   * connections and can exhaust provider connection limits.
-   */
-  private transporter: Transporter | null = null;
-
-  private readonly smtpHost: string | undefined;
-  private readonly smtpPort: number | undefined;
-  private readonly smtpUser: string | undefined;
-  private readonly smtpPass: string | undefined;
-  private readonly smtpService: string | undefined;
-  private readonly smtpSecure: boolean;
-  private readonly fromAddress: string;
-
   constructor(
-    private readonly configService: ConfigService,
+    @Inject('EMAIL_PROVIDER')
+    private readonly emailProvider: EmailProvider,
     private readonly circuitBreaker: CircuitBreakerService,
-  ) {
-    this.smtpHost = this.configService.get<string>('SMTP_HOST');
-    this.smtpUser = this.configService.get<string>('SMTP_USER');
-    this.smtpPass = this.configService.get<string>('SMTP_PASS');
-    this.smtpService = this.configService.get<string>('SMTP_SERVICE');
-
-    const portRaw = this.configService.get<string>('SMTP_PORT');
-
-    if (portRaw !== undefined && portRaw !== '') {
-      const parsedPort = Number(portRaw);
-
-      if (
-        !Number.isInteger(parsedPort) ||
-        parsedPort < 1 ||
-        parsedPort > 65535
-      ) {
-        throw new Error(
-          `Invalid SMTP_PORT "${portRaw}". SMTP_PORT must be a valid TCP port.`,
-        );
-      }
-
-      this.smtpPort = parsedPort;
-    }
-
-    /**
-     * SMTP_SECURE should explicitly control TLS when supplied.
-     *
-     * Otherwise:
-     * - Port 465 normally uses implicit TLS.
-     * - Ports such as 587 normally start unencrypted and upgrade through STARTTLS.
-     */
-    const secureRaw = this.configService.get<string>('SMTP_SECURE');
-
-    if (secureRaw !== undefined) {
-      const normalized = secureRaw.trim().toLowerCase();
-
-      if (normalized === 'true') {
-        this.smtpSecure = true;
-      } else if (normalized === 'false') {
-        this.smtpSecure = false;
-      } else {
-        throw new Error(
-          `Invalid SMTP_SECURE "${secureRaw}". Use "true" or "false".`,
-        );
-      }
-    } else {
-      this.smtpSecure = this.smtpPort === 465;
-    }
-
-    this.fromAddress =
-      this.configService.get<string>('EMAIL_FROM')?.trim() ||
-      'no-reply@example.com';
-
-    this.createTransporter();
-  }
+  ) {}
 
   /**
-   * Verify SMTP connectivity after Nest has initialized the provider.
-   *
-   * This is intentionally separate from the constructor because constructors
-   * should not perform asynchronous I/O.
+   * Verify provider credentials after Nest initializes the provider.
    */
   async onModuleInit(): Promise<void> {
-    await this.verifyTransporter();
+    const verified = await this.emailProvider.verifyConnection();
+    if (verified) {
+      this.logger.log(
+        `${this.emailProvider.name} email provider verified successfully`,
+      );
+    } else {
+      this.logger.warn(
+        `${this.emailProvider.name} email provider verification failed; email delivery may be unavailable`,
+      );
+    }
   }
 
   /**
@@ -204,126 +143,19 @@ export class EmailService implements OnModuleInit {
   }
 
   /**
-   * Creates the SMTP transporter once during application startup.
-   *
-   * A connection pool is used so multiple emails can reuse SMTP connections
-   * instead of opening a new connection for every message.
-   */
-  private createTransporter(): void {
-    const hasAnySmtpSetting =
-      Boolean(this.smtpHost) ||
-      this.smtpPort !== undefined ||
-      Boolean(this.smtpUser) ||
-      Boolean(this.smtpPass) ||
-      Boolean(this.smtpService);
-
-    if (!hasAnySmtpSetting) {
-      this.logger.warn('SMTP is not configured. Email sending is disabled.');
-
-      return;
-    }
-
-    /**
-     * If SMTP configuration is partially supplied, fail immediately.
-     *
-     * Silently running with a broken SMTP configuration makes production
-     * failures much harder to diagnose.
-     */
-    if (!this.smtpUser || !this.smtpPass || this.smtpPort === undefined) {
-      throw new Error(
-        'Incomplete SMTP configuration. SMTP_PORT, SMTP_USER and SMTP_PASS are required.',
-      );
-    }
-
-    /**
-     * Nodemailer allows a service configuration instead of an SMTP host.
-     * If SMTP_SERVICE is configured, it can provide the provider-specific
-     * connection details.
-     */
-    if (!this.smtpService && !this.smtpHost) {
-      throw new Error(
-        'SMTP_HOST is required when SMTP_SERVICE is not configured.',
-      );
-    }
-
-    this.transporter = nodemailer.createTransport({
-      ...(this.smtpService
-        ? { service: this.smtpService }
-        : { host: this.smtpHost }),
-      port: this.smtpPort,
-      secure: this.smtpSecure,
-
-      /**
-       * Connection pooling prevents repeatedly creating SMTP connections.
-       */
-      pool: true,
-
-      /**
-       * Keep the pool deliberately bounded.
-       * The correct value depends on the SMTP provider's limits.
-       */
-      maxConnections: 5,
-
-      /**
-       * Prevent an idle connection from staying around forever.
-       */
-      maxMessages: 100,
-
-      auth: {
-        user: this.smtpUser,
-        pass: this.smtpPass,
-      },
-    });
-  }
-
-  /**
-   * Verifies SMTP connectivity once during application startup.
-   *
-   * Verification does not send an email. It checks whether the transporter
-   * can establish/authenticate an SMTP connection.
-   */
-  private async verifyTransporter(): Promise<void> {
-    if (!this.transporter) {
-      return;
-    }
-
-    try {
-      await this.transporter.verify();
-
-      this.logger.log('SMTP transporter verified successfully');
-    } catch (error) {
-      this.transporter = null;
-
-      this.logger.error(
-        'SMTP transporter verification failed',
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
-  }
-
-  /**
    * Centralized email sending.
    *
-   * Keeping sendMail in one place ensures every outgoing email uses the same
-   * configured sender and transporter.
+   * Keeping provider calls in one place ensures every outgoing email uses the
+   * same provider, circuit breaker, and safe error handling.
    */
-  public async sendEmail(options: SendMailOptions): Promise<void> {
-    if (!this.transporter) {
-      throw new ServiceUnavailableException(
-        'Email service is currently unavailable.',
-      );
-    }
-
+  public async sendEmail(options: SendEmailOptions): Promise<void> {
     try {
-      await this.circuitBreaker.executeSmtp(async () => {
-        await this.transporter!.sendMail({
-          from: this.fromAddress,
-          ...options,
-        });
+      await this.circuitBreaker.executeEmail(async () => {
+        await this.emailProvider.send(options);
       });
     } catch (error) {
       /**
-       * Do not expose SMTP credentials or the raw provider response to the
+       * Do not expose provider credentials or raw provider responses to the
        * caller. Log the technical error internally and return a safe error.
        */
       this.logger.error(

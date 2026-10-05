@@ -24,13 +24,13 @@ export class CircuitBreakerService {
     this.paystackCircuit,
   );
 
-  // SMTP Policy: 3 consecutive failures trips the breaker, reset after 30s
-  private readonly smtpCircuit = circuitBreaker(handleAll, {
+  // Email API policy: 3 consecutive failures trips the breaker, reset after 30s
+  private readonly emailCircuit = circuitBreaker(handleAll, {
     halfOpenAfter: 30_000,
     breaker: new ConsecutiveBreaker(3),
   });
-  private readonly smtpTimeout = timeout(10_000, TimeoutStrategy.Aggressive);
-  private readonly smtpPolicy = wrap(this.smtpTimeout, this.smtpCircuit);
+  private readonly emailTimeout = timeout(10_000, TimeoutStrategy.Aggressive);
+  private readonly emailPolicy = wrap(this.emailTimeout, this.emailCircuit);
 
   // Cloudinary Policy: 3 consecutive failures trips the breaker, reset after 15s
   private readonly cloudinaryCircuit = circuitBreaker(handleAll, {
@@ -54,11 +54,11 @@ export class CircuitBreakerService {
       this.logger.log('Paystack Circuit Breaker RESET to CLOSED.'),
     );
 
-    this.smtpCircuit.onBreak(() =>
-      this.logger.error('CRITICAL: SMTP Email Circuit Breaker tripped OPEN!'),
+    this.emailCircuit.onBreak(() =>
+      this.logger.error('CRITICAL: Email Circuit Breaker tripped OPEN!'),
     );
-    this.smtpCircuit.onReset(() =>
-      this.logger.log('SMTP Circuit Breaker RESET to CLOSED.'),
+    this.emailCircuit.onReset(() =>
+      this.logger.log('Email Circuit Breaker RESET to CLOSED.'),
     );
 
     this.cloudinaryCircuit.onBreak(() =>
@@ -73,8 +73,8 @@ export class CircuitBreakerService {
     return this.paystackPolicy.execute(fn);
   }
 
-  public async executeSmtp<T>(fn: () => Promise<T>): Promise<T> {
-    return this.smtpPolicy.execute(fn);
+  public async executeEmail<T>(fn: () => Promise<T>): Promise<T> {
+    return this.emailPolicy.execute(fn);
   }
 
   public async executeCloudinary<T>(fn: () => Promise<T>): Promise<T> {
@@ -85,7 +85,8 @@ export class CircuitBreakerService {
     return {
       paystack:
         this.paystackCircuit.state === CircuitState.Closed ? 'CLOSED' : 'OPEN',
-      smtp: this.smtpCircuit.state === CircuitState.Closed ? 'CLOSED' : 'OPEN',
+      email:
+        this.emailCircuit.state === CircuitState.Closed ? 'CLOSED' : 'OPEN',
       cloudinary:
         this.cloudinaryCircuit.state === CircuitState.Closed
           ? 'CLOSED'
