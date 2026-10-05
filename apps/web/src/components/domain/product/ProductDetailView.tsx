@@ -121,7 +121,7 @@ export function ProductDetailView({
     return { ...defaultOptions, ...selectedOptions };
   }, [defaultOptions, selectedOptions]);
 
-  const variants = useMemo(() => product?.variants ?? [], [product?.variants]);
+  const variants = product?.variants ?? [];
 
   const selectedVariant = useMemo(() => {
     if (!variants.length || variantOptionGroups.length === 0) return null;
