@@ -56,7 +56,7 @@ jobs:
         run: npm ci
 
       - name: Run Prisma Database Migrations
-        run: npx prisma migrate deploy --schema=packages/database/schema.prisma
+        run: npm run migrate:deploy --workspace=@nuts/api
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
