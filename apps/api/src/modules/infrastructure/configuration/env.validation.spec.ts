@@ -21,10 +21,7 @@ describe('validateEnv', () => {
         PAYSTACK_CALLBACK_URL: 'https://example.com/order-success',
         ADMIN_SETUP_SECRET: '12345678901234567890123456789012',
         EMAIL_FROM: 'test@example.com',
-        SMTP_HOST: 'smtp.example.com',
-        SMTP_PORT: '587',
-        SMTP_USER: 'user@example.com',
-        SMTP_PASS: 'secret',
+        BREVO_API_KEY: 'brevo-api-key',
         OTP_PEPPER: '12345678901234567890123456789012',
       }),
     ).not.toThrow();
@@ -52,10 +49,7 @@ describe('validateEnv', () => {
         ADMIN_SETUP_SECRET: 'admin-bootstrap-secret-at-least-32-chars',
         OTP_PEPPER: 'otp-pepper-secret-which-is-at-least-32-characters',
         EMAIL_FROM: 'support@nuts.example',
-        SMTP_HOST: 'smtp.example.com',
-        SMTP_PORT: '587',
-        SMTP_USER: 'support@nuts.example',
-        SMTP_PASS: 'smtp-app-password',
+        BREVO_API_KEY: 'brevo-api-key',
       }),
     ).toThrow(
       /ALLOWED_ORIGINS must contain only exact HTTPS storefront origins/,
@@ -84,10 +78,7 @@ describe('validateEnv', () => {
         ADMIN_SETUP_SECRET: 'admin-bootstrap-secret-at-least-32-chars',
         OTP_PEPPER: 'otp-pepper-secret-which-is-at-least-32-characters',
         EMAIL_FROM: 'support@nuts.example',
-        SMTP_HOST: 'smtp.example.com',
-        SMTP_PORT: '587',
-        SMTP_USER: 'support@nuts.example',
-        SMTP_PASS: 'smtp-app-password',
+        BREVO_API_KEY: 'brevo-api-key',
       }),
     ).not.toThrow();
   });

@@ -46,8 +46,7 @@ Payments
 
 Email & Notifications
 
-* Nodemailer — SMTP email delivery
-* SMTP Configuration — Host, port, username, password, secure connection
+* Brevo — Transactional email delivery over HTTPS (`BREVO_API_KEY`, `EMAIL_FROM`)
 
 Input Sanitization
 

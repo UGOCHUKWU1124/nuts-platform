@@ -42,7 +42,7 @@ export class EmailConsumer implements OnModuleInit {
           );
 
           // Delegate to EmailService
-          // sendEmail handles circuit-breaker protection and SMTP delivery
+          // sendEmail handles circuit-breaker protection and Brevo delivery.
           await this.emailService.sendEmail({
             to: payload.to,
             subject: payload.subject,

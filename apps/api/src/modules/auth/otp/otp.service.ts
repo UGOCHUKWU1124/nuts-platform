@@ -174,7 +174,7 @@ export class OtpService {
           .sendOtpEmail(normalizedEmail, otp, options)
           .catch((error) => {
             this.logger.warn(
-              `[DEV] Background SMTP delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
+              `[DEV] Background email delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
             );
           });
 
@@ -188,7 +188,7 @@ export class OtpService {
 
       if (isDevelopment) {
         this.logger.warn(
-          `[DEV] SMTP delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
+          `[DEV] Email delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
         );
         return;
       }

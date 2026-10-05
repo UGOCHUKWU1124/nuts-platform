@@ -196,7 +196,7 @@ export class EnvironmentVariables {
   @IsOptional()
   DEFAULT_CURRENCY = 'ngn';
 
-  // ─── Mail / SMTP ─────────────────────────────────────────────────────────────
+  // ─── Email delivery ──────────────────────────────────────────────────────────
 
   @IsString()
   @IsOptional()
@@ -204,29 +204,7 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  SMTP_HOST?: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  @IsOptional()
-  SMTP_PORT?: number;
-
-  @IsString()
-  @IsOptional()
-  SMTP_SERVICE?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_USER?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_PASS?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_SECURE?: string;
+  BREVO_API_KEY?: string;
 
   // ─── OTP ─────────────────────────────────────────────────────────────────────
 
@@ -335,10 +313,7 @@ const PROD_REQUIRED: Array<keyof EnvironmentVariables> = [
   'PAYSTACK_CALLBACK_URL',
   'ADMIN_SETUP_SECRET',
   'EMAIL_FROM',
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_USER',
-  'SMTP_PASS',
+  'BREVO_API_KEY',
   'ALLOWED_ORIGINS',
   'REDIS_URL',
   'JWT_ISSUER',
@@ -352,7 +327,7 @@ const PROD_SECRET_KEYS: Array<keyof EnvironmentVariables> = [
   'ADMIN_SETUP_SECRET',
   'OTP_PEPPER',
   'PAYSTACK_SECRET_KEY',
-  'SMTP_PASS',
+  'BREVO_API_KEY',
 ];
 
 const PLACEHOLDER_SECRET_PATTERN =

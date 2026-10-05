@@ -478,7 +478,7 @@ export class OrdersService {
 
     /**
      * Email is non-critical to checkout.
-     * Do not make the customer wait for SMTP.
+     * Do not make the customer wait for email delivery.
      */
     this.sendOrderConfirmationEmail(userId, response).catch((error) => {
       this.logger.error(
