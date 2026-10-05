@@ -16,6 +16,7 @@ COPY apps/api/package.json ./apps/api/
 COPY packages/database/package.json ./packages/database/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+COPY tsconfig.node.json ./
 
 # 2. Install workspace dependencies
 RUN npm ci
@@ -43,6 +44,7 @@ COPY apps/api/package.json ./apps/api/
 COPY packages/database/package.json ./packages/database/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+COPY tsconfig.node.json ./
 
 RUN npm ci
 

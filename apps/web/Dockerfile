@@ -15,6 +15,7 @@ COPY package*.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+COPY tsconfig.base.json tsconfig.node.json tsconfig.web.json ./
 
 # 2. Install workspace dependencies
 RUN npm ci
@@ -47,6 +48,7 @@ COPY package*.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+COPY tsconfig.base.json tsconfig.node.json tsconfig.web.json ./
 
 RUN npm ci
 
