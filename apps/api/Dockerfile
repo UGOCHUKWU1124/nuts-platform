@@ -79,15 +79,18 @@ ENV UV_THREADPOOL_SIZE=16
 # Copy required production node_modules and built output from builder
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/packages/database/schema.prisma ./packages/database/schema.prisma
 COPY --from=builder /app/packages/database/migrations ./packages/database/migrations
 COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 COPY --from=builder /app/apps/api/tsconfig.runtime.json ./apps/api/tsconfig.runtime.json
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
-# Fail the image build if the runtime entrypoint's local module was omitted.
-RUN test -s /app/apps/api/dist/main.js \
-  && test -s /app/apps/api/dist/app.module.js
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+# Fail the image build if the entrypoint or an API runtime dependency is missing.
+RUN test -s /app/apps/api/dist/main.js \
+  && test -s /app/apps/api/dist/app.module.js \
+  && cd /app/apps/api \
+  && node -e 'for (const name of Object.keys(require("./package.json").dependencies)) require.resolve(name)'
 COPY apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
 COPY apps/api/docker-migrate.sh ./apps/api/docker-migrate.sh
 RUN chmod +x ./apps/api/docker-entrypoint.sh ./apps/api/docker-migrate.sh
