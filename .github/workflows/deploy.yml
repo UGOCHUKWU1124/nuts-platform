@@ -21,7 +21,7 @@ jobs:
     steps:
       - id: set-env
         run: |
-          image_repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          image_repository="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           echo "image_repository=$image_repository" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
@@ -35,6 +35,9 @@ jobs:
     name: Build & Deploy to ${{ needs.resolve-environment.outputs.env_name }}
     needs: resolve-environment
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     environment:
       name: ${{ needs.resolve-environment.outputs.env_name }}
     env:
