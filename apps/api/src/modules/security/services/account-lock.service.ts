@@ -17,13 +17,19 @@ export class AccountLockService {
     const key = `login:attempts:${this.hashIdentifier(identifier)}`;
     const attempts = await this.redis.incr(key);
 
-    // Set TTL on first attempt
+    // Set TTL on first attempt, or ensure TTL is present if missing
     if (attempts === 1) {
       await this.redis.expire(key, SECURITY.LOCKOUT_DURATION_MINUTES * 60);
+    } else {
+      const ttl = await this.redis.ttl(key);
+      if (ttl === -1) {
+        await this.redis.expire(key, SECURITY.LOCKOUT_DURATION_MINUTES * 60);
+      }
     }
 
     if (attempts >= SECURITY.MAX_LOGIN_ATTEMPTS) {
       await this.lockAccount(identifier);
+      await this.redis.del(key);
     }
 
     return attempts;
