@@ -68,3 +68,7 @@ desktop.ini
 # Certificates and private keys
 *.pem
 *.key
+
+gitfix.ps1
+git-diagnose.ps1
+git-diagnose-output.txt
