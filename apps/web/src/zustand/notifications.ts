@@ -1,4 +1,6 @@
 import { notificationsApi } from "@/api/notifications";
+import { getAuthToken } from "@/api/core/token-storage";
+import { performTokenRefresh } from "@/api/core/client";
 import type { AppNotification, ListNotificationsParams } from "@/api/notifications";
 import { useAuthStore, type AuthRole } from "@/zustand/auth";
 import { notificationDetailPath } from "@/lib/notification-path";
@@ -29,9 +31,10 @@ interface NotificationsState {
   initStream: (role: AuthRole, sessionKey: string) => () => void;
 }
 
-let globalEventSource: EventSource | null = null;
+let globalStreamController: AbortController | null = null;
 let globalStreamKey: string | null = null;
 let streamRefCount = 0;
+let streamGeneration = 0;
 let listRequestSequence = 0;
 let listRequestController: AbortController | null = null;
 const unreadCountCache = new Map<string, number>();
@@ -55,6 +58,187 @@ function showIncomingNotification(notification: AppNotification): void {
         window.location.assign(notificationDetailPath(role, notification.id)),
     },
   });
+}
+
+function getSseUrl(role: AuthRole): string {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+  const routeByRole: Record<AuthRole, string> = {
+    user: "notifications/sse",
+    admin: "admin/notifications/sse",
+    vendor: "vendors/notifications/sse",
+  };
+  const apiPath = new URL(apiUrl, window.location.origin).pathname.replace(
+    /\/+$/,
+    "",
+  );
+  return `${apiPath}/${routeByRole[role]}`;
+}
+
+function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", cancel);
+      resolve();
+    }, delay);
+    const cancel = () => {
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", cancel);
+      resolve();
+    };
+    signal.addEventListener("abort", cancel, { once: true });
+  });
+}
+
+function parseSseFrame(
+  frame: string,
+  onData: (data: string) => void,
+): void {
+  const data = frame
+    .split(/\r\n|\r|\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""))
+    .join("\n");
+  if (data) onData(data);
+}
+
+async function readSseResponse(
+  response: Response,
+  signal: AbortSignal,
+  onData: (data: string) => void,
+): Promise<void> {
+  if (!response.body) throw new Error("SSE response has no readable body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let separator: RegExpExecArray | null;
+      while ((separator = /(?:\r\n|\r|\n){2}/.exec(buffer)) !== null) {
+        parseSseFrame(buffer.slice(0, separator.index), onData);
+        buffer = buffer.slice(separator.index + separator[0].length);
+      }
+    }
+    if (buffer.trim()) parseSseFrame(buffer, onData);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+async function consumeNotificationStream(
+  role: AuthRole,
+  signal: AbortSignal,
+  isCurrent: () => boolean,
+  onNotification: (notification: AppNotification) => void,
+  onConnectionChange: (connected: boolean) => void,
+): Promise<void> {
+  const url = getSseUrl(role);
+  let retryAttempt = 0;
+  let refreshedAfterUnauthorized = false;
+
+  while (!signal.aborted && isCurrent()) {
+    const headers = new Headers({ Accept: "text/event-stream" });
+    const token = getAuthToken(role);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        headers,
+        credentials: "include",
+        cache: "no-store",
+        signal,
+      });
+    } catch (error) {
+      if (signal.aborted) return;
+      console.error("Notification stream request failed", error);
+      retryAttempt++;
+      onConnectionChange(false);
+      await waitForRetry(
+        Math.min(1000 * 2 ** Math.min(retryAttempt, 5), 30_000),
+        signal,
+      );
+      continue;
+    }
+
+    if (response.status === 401 && !refreshedAfterUnauthorized) {
+      refreshedAfterUnauthorized = true;
+      const refresh = await performTokenRefresh(undefined, role);
+      if (refresh.success) continue;
+      console.error("Notification stream unauthorized; session refresh failed");
+      onConnectionChange(false);
+      return;
+    }
+
+    if ([401, 403, 404].includes(response.status)) {
+      console.error(
+        `Notification stream stopped with HTTP ${response.status}; check the session and deployed API route`,
+      );
+      onConnectionChange(false);
+      return;
+    }
+
+    if (!response.ok) {
+      console.error(`Notification stream returned HTTP ${response.status}`);
+      retryAttempt++;
+      onConnectionChange(false);
+      await waitForRetry(
+        Math.min(1000 * 2 ** Math.min(retryAttempt, 5), 30_000),
+        signal,
+      );
+      continue;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("text/event-stream")) {
+      console.error("Notification stream returned an unexpected content type", contentType);
+      onConnectionChange(false);
+      return;
+    }
+
+    refreshedAfterUnauthorized = false;
+    onConnectionChange(true);
+    const connectedAt = Date.now();
+    try {
+      await readSseResponse(response, signal, (data) => {
+        try {
+          const parsed: unknown = JSON.parse(data);
+          if (!parsed || typeof parsed !== "object") return;
+          const value = parsed as Record<string, unknown>;
+          const notification = (value.notification ?? value) as Partial<AppNotification> & {
+            link?: string | null;
+          };
+          if (typeof notification.id !== "string") return;
+          onNotification({
+            ...notification,
+            actionUrl: notification.actionUrl ?? notification.link ?? null,
+          } as AppNotification);
+        } catch {
+          console.warn("Ignoring malformed notification stream event");
+        }
+      });
+    } catch (error) {
+      if (signal.aborted) return;
+      console.error("Notification stream closed unexpectedly", error);
+    }
+
+    onConnectionChange(false);
+    retryAttempt = Date.now() - connectedAt >= 30_000 ? 0 : retryAttempt + 1;
+    await waitForRetry(
+      Math.min(1000 * 2 ** Math.min(retryAttempt, 5), 30_000),
+      signal,
+    );
+  }
 }
 
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
@@ -295,71 +479,43 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     if (typeof window === "undefined") return () => {};
 
     if (globalStreamKey !== null && globalStreamKey !== sessionKey) {
-      globalEventSource?.close();
-      globalEventSource = null;
+      globalStreamController?.abort();
+      globalStreamController = null;
       globalStreamKey = null;
       streamRefCount = 0;
       set({ sseConnected: false });
     }
 
     streamRefCount++;
-    if (globalEventSource) {
+    if (globalStreamController) {
       return createStreamCleanup(sessionKey, set);
     }
 
     globalStreamKey = sessionKey;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-    const routeByRole: Record<AuthRole, string> = {
-      user: "notifications/sse",
-      admin: "admin/notifications/sse",
-      vendor: "vendors/notifications/sse",
-    };
-    const route = routeByRole[role];
-    const apiPath = new URL(apiUrl, window.location.origin).pathname.replace(
-      /\/+$/,
-      "",
+    const controller = new AbortController();
+    globalStreamController = controller;
+    const generation = ++streamGeneration;
+    const isCurrent = () =>
+      globalStreamController === controller &&
+      globalStreamKey === sessionKey &&
+      streamGeneration === generation;
+
+    void consumeNotificationStream(
+      role,
+      controller.signal,
+      isCurrent,
+      (notification) => {
+        if (get().addNotification(notification)) {
+          showIncomingNotification(notification);
+        }
+      },
+      (connected) => {
+        if (isCurrent()) {
+          set({ sseConnected: connected });
+          if (connected) void get().fetchUnreadCount();
+        }
+      },
     );
-    const sseUrl = `${apiPath}/${route}`;
-
-    const connect = () => {
-      try {
-        const eventSource = new EventSource(sseUrl, { withCredentials: true });
-        globalEventSource = eventSource;
-
-        eventSource.onopen = () => {
-          if (globalEventSource !== eventSource) return;
-          set({ sseConnected: true });
-          void get().fetchUnreadCount();
-        };
-
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            const notification = data?.notification ?? data;
-            if (notification?.id) {
-              const incomingNotification = {
-                ...notification,
-                actionUrl: notification.actionUrl ?? notification.link ?? null,
-              } as AppNotification;
-              if (get().addNotification(incomingNotification)) {
-                showIncomingNotification(incomingNotification);
-              }
-            }
-          } catch {
-            // Non-JSON or keep-alive ping
-          }
-        };
-
-        eventSource.onerror = () => {
-          if (globalEventSource !== eventSource) return;
-          set({ sseConnected: false });
-        };
-      } catch {
-        set({ sseConnected: false });
-      }
-    };
-
-    connect();
 
     return createStreamCleanup(sessionKey, set);
   },
@@ -376,9 +532,10 @@ function createStreamCleanup(
     if (globalStreamKey !== sessionKey) return;
     streamRefCount = Math.max(0, streamRefCount - 1);
     if (streamRefCount === 0) {
-      globalEventSource?.close();
-      globalEventSource = null;
+      globalStreamController?.abort();
+      globalStreamController = null;
       globalStreamKey = null;
+      streamGeneration++;
       set({ sseConnected: false });
     }
   };
