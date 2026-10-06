@@ -161,7 +161,7 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
           const poll = window.setInterval(async () => {
             try {
               const { data: verification }: { data: PaymentResponseDto } = await paymentService.verify(reference);
-              if (verification.status !== "COMPLETED") return;
+              if (verification.status !== "SUCCESS") return;
               window.clearInterval(poll); queryClient.removeQueries({ queryKey: queryKey.cart }); await queryClient.invalidateQueries({ queryKey: queryKey.order.all }); router.push(`/order-success?orderId=${encodeURIComponent(order.id)}`);
             } catch { /* Paystack has not confirmed the transaction yet. */ }
           }, POLL_MS);
@@ -176,7 +176,7 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
         const reference = initialized.reference; const poll = window.setInterval(async () => {
           try {
             const { data: verification }: { data: PaymentResponseDto } = await paymentService.verify(reference);
-            if (verification.status !== "COMPLETED") return;
+            if (verification.status !== "SUCCESS") return;
             window.clearInterval(poll); queryClient.removeQueries({ queryKey: queryKey.cart }); await queryClient.invalidateQueries({ queryKey: queryKey.order.all }); router.push(`/order-success?orderId=${encodeURIComponent(order.id)}`);
           } catch { /* Paystack has not confirmed the transaction yet. */ }
         }, POLL_MS);
