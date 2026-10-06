@@ -39,8 +39,8 @@ services:
       NODE_ENV: development
       SWAGGER_ENABLED: "true"
     volumes:
-      - ./apps/api/src:/app/src
-      - ./apps/api/prisma.config.ts:/app/prisma.config.ts:ro
+      - ./apps/api/src:/app/apps/api/src
+      - ./apps/api/prisma.config.ts:/app/apps/api/prisma.config.ts:ro
     networks:
       nuts_net:
         aliases:
@@ -131,8 +131,8 @@ services:
       NEXT_PUBLIC_BACKEND_URL: http://localhost:${API_PORT:-3001}
       NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-3001}/api/v1
     volumes:
-      - ./apps/web/src:/app/src
-      - ./apps/web/public:/app/public:ro
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public:ro
     depends_on:
       api:
         condition: service_healthy
