@@ -4,9 +4,13 @@ import { RemoteImage } from "@/component/ui/RemoteImage";
 import { productService } from "@/api";
 import type { AddedFromType } from "@/api/dto/cart";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import type { PublicProductResponseDto,PublicVariantSummaryDto } from "@/api/dto/product";
+import type {
+  PublicProductResponseDto,
+  PublicVariantSummaryDto,
+} from "@/api/dto/product";
 import type { ProductReviewsMetaDto, ReviewResponseDto } from "@/api/dto/review";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
+import { ProductCard } from "@/component/product/ProductCard";
 import { ProductReviews } from "@/component/review/ProductReviews";
 import { Button } from "@/component/ui/button";
 import { useCart } from "@/hook/use-cart";
@@ -88,6 +92,38 @@ export function ProductDetailView({
     initialData: initialProduct || undefined,
     staleTime: 1000 * 60 * 5,
     enabled: !!slug,
+  });
+
+  const recommendationCategoryId =
+    product?.subcategory?.id ||
+    product?.parentSubcategory?.id ||
+    product?.category?.id;
+  const recommendationCategorySlug =
+    product?.subcategory?.slug ||
+    product?.parentSubcategory?.slug ||
+    product?.category?.slug;
+  const recommendationKey =
+    recommendationCategoryId ??
+    (product?.vendor?.id ? `vendor:${product.vendor.id}` : "");
+  const relatedProductsQuery = useQuery({
+    queryKey: queryKey.product.related(product?.id ?? "", recommendationKey),
+    queryFn: async ({ signal }) => {
+      if (!product) {
+        throw new Error("Cannot load related products without a product");
+      }
+
+      const params = {
+        ...(recommendationCategoryId
+          ? { categoryId: recommendationCategoryId }
+          : { vendorId: product.vendor.id }),
+        limit: 9,
+        sort: "newest",
+      };
+      const { data } = await productService.getCards(params, signal);
+      return data.filter((item) => item.id !== product.id).slice(0, 8);
+    },
+    enabled: Boolean(product && recommendationKey),
+    staleTime: 1000 * 60 * 5,
   });
 
   const getVariantLabel = (v?: PublicVariantSummaryDto | null) => {
@@ -747,6 +783,88 @@ export function ProductDetailView({
           reviewCount={p.reviewCount}
           initialReviews={initialReviews}
         />
+
+        <section
+          className="mt-12 border-t border-border/60 pt-10 sm:mt-16 sm:pt-12"
+          aria-labelledby="related-products-heading"
+          aria-busy={relatedProductsQuery.isPending}
+        >
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Keep exploring
+              </p>
+              <h2
+                id="related-products-heading"
+                className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
+              >
+                You may also like
+              </h2>
+            </div>
+            {recommendationCategorySlug && (
+              <Link
+                href={`/category/${recommendationCategorySlug}`}
+                className="shrink-0 text-sm font-semibold text-primary hover:underline"
+              >
+                Browse category
+              </Link>
+            )}
+          </div>
+
+          {recommendationKey && relatedProductsQuery.isPending && (
+            <div
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
+              role="status"
+            >
+              <span className="sr-only">Loading similar products</span>
+              {Array.from({ length: 4 }, (_, index) => (
+                <div key={index} className="animate-pulse">
+                  <div className="aspect-[3/4] rounded-2xl bg-muted" />
+                  <div className="mt-3 h-4 w-3/4 rounded bg-muted" />
+                  <div className="mt-2 h-4 w-1/3 rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {relatedProductsQuery.isError && (
+            <div className="rounded-xl border border-border bg-card px-4 py-5 text-center">
+              <p className="text-sm text-muted-foreground">
+                Similar products could not be loaded.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => void relatedProductsQuery.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          )}
+
+          {relatedProductsQuery.isSuccess && relatedProductsQuery.data.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+              {relatedProductsQuery.data.map((relatedProduct) => (
+                <ProductCard
+                  key={relatedProduct.id}
+                  product={relatedProduct}
+                  aspectRatio="portrait"
+                  size="default"
+                  addedFrom="PRODUCT_PAGE"
+                />
+              ))}
+            </div>
+          )}
+
+          {(relatedProductsQuery.isSuccess && relatedProductsQuery.data.length === 0) ||
+          !recommendationKey ? (
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              No similar products are available right now.
+            </p>
+          ) : null}
+        </section>
 
       </div>
   );
