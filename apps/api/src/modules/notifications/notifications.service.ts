@@ -68,6 +68,7 @@ export class NotificationsService {
       limit?: number;
       unreadOnly?: boolean;
       type?: NotificationType;
+      category?: 'orders' | 'payments';
     } = {},
   ): Promise<{
     data: (Prisma.NotificationGetPayload<Record<string, never>> & {
@@ -83,6 +84,29 @@ export class NotificationsService {
       role,
       ...(params.unreadOnly ? { isRead: false } : {}),
       ...(params.type ? { type: params.type } : {}),
+      ...(params.category === 'orders'
+        ? {
+            type: {
+              in: [
+                NotificationType.ORDER_PLACED,
+                NotificationType.ORDER_CONFIRMED,
+                NotificationType.ORDER_SHIPPED,
+                NotificationType.ORDER_DELIVERED,
+                NotificationType.ORDER_CANCELLED,
+              ],
+            },
+          }
+        : {}),
+      ...(params.category === 'payments'
+        ? {
+            type: {
+              in: [
+                NotificationType.PAYMENT_RECEIVED,
+                NotificationType.PAYOUT_PROCESSED,
+              ],
+            },
+          }
+        : {}),
     };
 
     const cursorId = decodedCursor?.id;
@@ -144,12 +168,25 @@ export class NotificationsService {
     });
   }
 
-  async markAsRead(id: string, userId: string) {
-    const notification = await this.prisma.notification.findUnique({
-      where: { id },
+  async getById(id: string, userId: string, role: ROLE) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId, role },
     });
 
-    if (!notification || notification.userId !== userId) {
+    if (!notification) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    return { ...notification, actionUrl: notification.link ?? null };
+  }
+
+  async markAsRead(id: string, userId: string, role: ROLE) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId, role },
+      select: { id: true },
+    });
+
+    if (!notification) {
       throw new NotFoundException('Notification not found');
     }
 
@@ -176,12 +213,12 @@ export class NotificationsService {
     });
   }
 
-  async delete(id: string, userId: string) {
-    const notification = await this.prisma.notification.findUnique({
-      where: { id },
+  async delete(id: string, userId: string, role: ROLE) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId, role },
     });
 
-    if (!notification || notification.userId !== userId) {
+    if (!notification) {
       throw new NotFoundException('Notification not found');
     }
 

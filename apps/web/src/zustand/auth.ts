@@ -18,6 +18,7 @@ import type { VendorAuthSessionDto } from "@/api/dto/vendor";
 import type { ShippingInformation,UserResponseDto } from "@/api/dto/user";
 import { authBootstrap,resetAuthBootstrap } from "@/lib/auth-bootstrap";
 import { authBroadcast } from "@/lib/auth-events";
+import { clearBrowserQueryClient } from "@/lib/query-client";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 import { create } from "zustand";
 import { createJSONStorage,persist } from "zustand/middleware";
@@ -270,6 +271,7 @@ export const useAuthStore = create<AuthState>()(
 
           const rawUser = "vendor" in responseData ? responseData.vendor : responseData.user;
           if (!rawUser) throw new Error("Authentication response did not include a user profile");
+          clearBrowserQueryClient();
           get().setSession(rawUser, role);
 
           authBroadcast.broadcast({ type: "LOGIN", role });
@@ -303,12 +305,7 @@ export const useAuthStore = create<AuthState>()(
           clearWishlistOnLogout();
         }
 
-        try {
-          const { queryClient } = await import("@/lib/query-client");
-          queryClient.clear();
-        } catch {
-          // Ignore
-        }
+        clearBrowserQueryClient();
 
         get().clearSession(currentRole);
         authBroadcast.broadcast({ type: "LOGOUT", role: currentRole });

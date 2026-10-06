@@ -30,6 +30,11 @@ export const queryKey = {
     detail: (id: string) => ["order", "detail", id] as const,
   },
   wishlist: ["wishlist"] as const,
+  notification: {
+    all: ["notification"] as const,
+    detail: (sessionKey: string, id: string) =>
+      ["notification", "detail", sessionKey, id] as const,
+  },
   wallet: ["wallet"] as const,
   review: {
     all: ["review"] as const,

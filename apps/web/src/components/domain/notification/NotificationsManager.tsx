@@ -3,7 +3,8 @@
 import type { AppNotification,NotificationType } from "@/api/notifications";
 import { Button } from "@/component/ui/button";
 import { useNotifications } from "@/hook/use-notifications";
-import { safeInternalPath } from "@/lib/safe-internal-path";
+import { notificationDetailPath } from "@/lib/notification-path";
+import { useAuthStore } from "@/zustand/auth";
 import {
 AlertTriangle,
 Bell,
@@ -65,6 +66,7 @@ export function NotificationsManager({
   backLabel,
 }: NotificationsManagerProps) {
   const router = useRouter();
+  const role = useAuthStore((state) => state.role ?? state.user?.role ?? "user");
   const [filter, setFilter] = useState<"all" | "unread" | "orders" | "payments">("all");
   const {
     notifications,
@@ -80,34 +82,19 @@ export function NotificationsManager({
   } = useNotifications();
 
   useEffect(() => {
-    void fetchNotifications(undefined, 20);
-  }, [fetchNotifications]);
+    void fetchNotifications(undefined, 20, false, {
+      ...(filter === "unread" ? { unreadOnly: true } : {}),
+      ...(filter === "orders" || filter === "payments" ? { category: filter } : {}),
+    });
+  }, [fetchNotifications, filter]);
 
-  const filteredNotifications = notifications.filter((item) => {
-    if (filter === "unread") return !item.isRead;
-    if (filter === "orders") {
-      return [
-        "ORDER_PLACED",
-        "ORDER_CONFIRMED",
-        "ORDER_SHIPPED",
-        "ORDER_DELIVERED",
-        "ORDER_CANCELLED",
-      ].includes(item.type);
-    }
-    if (filter === "payments") {
-      return ["PAYMENT_RECEIVED", "PAYOUT_PROCESSED"].includes(
-        item.type
-      );
-    }
-    return true;
-  });
+  const filteredNotifications = notifications;
 
   const handleAction = async (notif: AppNotification) => {
     if (!notif.isRead) {
       await markAsRead(notif.id);
     }
-    const actionPath = safeInternalPath(notif.actionUrl, "");
-    if (actionPath) router.push(actionPath);
+    router.push(notificationDetailPath(role, notif.id));
   };
 
   return (
@@ -236,6 +223,15 @@ export function NotificationsManager({
           filteredNotifications.map((notif) => (
             <div
               key={notif.id}
+              role="link"
+              tabIndex={0}
+              onClick={() => handleAction(notif)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  void handleAction(notif);
+                }
+              }}
               className={`group relative flex flex-col sm:flex-row sm:items-start justify-between gap-4 p-5 rounded-2xl border transition-all ${
                 !notif.isRead
                   ? "bg-card border-primary/20 shadow-xs"
@@ -278,7 +274,10 @@ export function NotificationsManager({
                   {notif.actionUrl && (
                     <button
                       type="button"
-                      onClick={() => handleAction(notif)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleAction(notif);
+                      }}
                       className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
                     >
                       View details <ExternalLink className="h-3 w-3" />
@@ -293,7 +292,10 @@ export function NotificationsManager({
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => markAsRead(notif.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void markAsRead(notif.id);
+                    }}
                     title="Mark as read"
                     className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   >
@@ -303,7 +305,10 @@ export function NotificationsManager({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => deleteNotification(notif.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void deleteNotification(notif.id);
+                  }}
                   title="Delete notification"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
                 >
@@ -320,7 +325,14 @@ export function NotificationsManager({
           <Button
             variant="outline"
             disabled={isLoading}
-            onClick={() => fetchNotifications(nextCursor, 20, true)}
+            onClick={() =>
+              fetchNotifications(nextCursor, 20, true, {
+                ...(filter === "unread" ? { unreadOnly: true } : {}),
+                ...(filter === "orders" || filter === "payments"
+                  ? { category: filter }
+                  : {}),
+              })
+            }
             className="rounded-full px-6 py-2 text-xs font-semibold"
           >
             {isLoading ? "Loading..." : "Load More Notifications"}

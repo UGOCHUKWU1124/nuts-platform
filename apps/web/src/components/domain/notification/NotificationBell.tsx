@@ -2,7 +2,7 @@
 
 import type { AppNotification,NotificationType } from "@/api/notifications";
 import { useNotifications } from "@/hook/use-notifications";
-import { safeInternalPath } from "@/lib/safe-internal-path";
+import { notificationDetailPath } from "@/lib/notification-path";
 import { useAuthStore } from "@/zustand/auth";
 import {
 AlertTriangle,
@@ -88,7 +88,8 @@ export function NotificationBell() {
 
   if (!isAuthenticated) return null;
 
-  const userRole = (role ?? user?.role ?? "").toLowerCase();
+  const activeRole = role ?? user?.role ?? "user";
+  const userRole = activeRole.toLowerCase();
   const allNotificationsHref =
     userRole === "admin"
       ? "/admin/notifications"
@@ -103,8 +104,7 @@ export function NotificationBell() {
       await markAsRead(notif.id);
     }
     setOpen(false);
-    const actionPath = safeInternalPath(notif.actionUrl, "");
-    if (actionPath) router.push(actionPath);
+    router.push(notificationDetailPath(activeRole, notif.id));
   };
 
   return (
@@ -164,7 +164,15 @@ export function NotificationBell() {
               recentNotifications.map((notif) => (
                 <div
                   key={notif.id}
-                  onClick={() => handleNotificationClick(notif)}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => void handleNotificationClick(notif)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void handleNotificationClick(notif);
+                    }
+                  }}
                   className={`flex items-start gap-3 p-3.5 transition-colors cursor-pointer hover:bg-secondary/60 ${
                     !notif.isRead ? "bg-primary/5" : ""
                   }`}

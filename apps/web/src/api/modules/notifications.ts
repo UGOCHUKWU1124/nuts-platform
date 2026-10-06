@@ -33,6 +33,7 @@ export interface ListNotificationsParams {
   limit?: number;
   unreadOnly?: boolean;
   type?: NotificationType;
+  category?: "orders" | "payments";
 }
 
 export interface CursorPaginationMeta {
@@ -47,9 +48,16 @@ export interface NotificationsListResponse {
 }
 
 export const notificationsApi = {
-  list(params?: ListNotificationsParams) {
+  list(params?: ListNotificationsParams, signal?: AbortSignal) {
     return api.get<AppNotification[], CursorPaginationMeta>("/notifications", {
       params,
+      signal,
+    });
+  },
+
+  getById(id: string, signal?: AbortSignal) {
+    return api.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`, {
+      signal,
     });
   },
 
