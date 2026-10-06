@@ -29,15 +29,19 @@ describe('NotificationsService', () => {
         where: {
           userId: 'vendor-1',
           role: ROLE.VENDOR,
-          type: {
-            in: [
-              NotificationType.ORDER_PLACED,
-              NotificationType.ORDER_CONFIRMED,
-              NotificationType.ORDER_SHIPPED,
-              NotificationType.ORDER_DELIVERED,
-              NotificationType.ORDER_CANCELLED,
-            ],
-          },
+          AND: [
+            {
+              type: {
+                in: [
+                  NotificationType.ORDER_PLACED,
+                  NotificationType.ORDER_CONFIRMED,
+                  NotificationType.ORDER_SHIPPED,
+                  NotificationType.ORDER_DELIVERED,
+                  NotificationType.ORDER_CANCELLED,
+                ],
+              },
+            },
+          ],
         },
       }),
     );
@@ -55,12 +59,47 @@ describe('NotificationsService', () => {
           userId: 'user-1',
           role: ROLE.USER,
           isRead: false,
-          type: {
-            in: [
-              NotificationType.PAYMENT_RECEIVED,
-              NotificationType.PAYOUT_PROCESSED,
-            ],
-          },
+          AND: [
+            {
+              type: {
+                in: [
+                  NotificationType.PAYMENT_RECEIVED,
+                  NotificationType.PAYMENT_FAILED,
+                  NotificationType.PAYOUT_PROCESSED,
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('intersects an explicit notification type with the category filter', async () => {
+    await service.list('user-1', ROLE.USER, {
+      category: 'orders',
+      type: NotificationType.PAYMENT_RECEIVED,
+    });
+
+    expect(prisma.notification.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: 'user-1',
+          role: ROLE.USER,
+          AND: [
+            {
+              type: {
+                in: [
+                  NotificationType.ORDER_PLACED,
+                  NotificationType.ORDER_CONFIRMED,
+                  NotificationType.ORDER_SHIPPED,
+                  NotificationType.ORDER_DELIVERED,
+                  NotificationType.ORDER_CANCELLED,
+                ],
+              },
+            },
+            { type: NotificationType.PAYMENT_RECEIVED },
+          ],
         },
       }),
     );
