@@ -18,8 +18,8 @@ function createQueryClient() {
         },
         retryDelay: (attempt) => Math.min(250 * 2 ** attempt, 1000),
         refetchOnWindowFocus: false,
-        refetchOnMount: false,
-        refetchOnReconnect: false,
+        refetchOnMount: true,
+        refetchOnReconnect: true,
       },
     },
   });

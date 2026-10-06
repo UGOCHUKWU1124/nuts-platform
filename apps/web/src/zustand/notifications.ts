@@ -96,7 +96,7 @@ function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
 
 function getStreamRetryDelay(attempt: number): number {
   const backoff = Math.min(1000 * 2 ** Math.min(attempt, 6), 60_000);
-  return Math.round(backoff * (0.8 + Math.random() * 0.4));
+  return Math.min(Math.round(backoff * (0.8 + Math.random() * 0.4)), 60_000);
 }
 
 function parseSseFrame(
