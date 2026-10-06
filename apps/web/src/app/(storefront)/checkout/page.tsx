@@ -23,7 +23,7 @@ ShoppingBag,
 Tag,
 Truck
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect,useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";

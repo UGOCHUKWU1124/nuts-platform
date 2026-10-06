@@ -9,7 +9,7 @@ import { useAuthStore } from "@/zustand/auth";
 import { useNotificationsStore } from "@/zustand/notifications";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Bell, ExternalLink } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useEffect, useRef } from "react";
 
 export function NotificationDetail({ id }: { id: string }) {

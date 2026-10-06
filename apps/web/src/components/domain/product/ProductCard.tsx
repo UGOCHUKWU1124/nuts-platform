@@ -9,7 +9,7 @@ import { formatPrice } from "@/lib/util";
 import { useAuthStore } from "@/zustand/auth";
 import { Heart,Plus,ShoppingBag } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -192,7 +192,7 @@ export function ProductCard({
           aspectRatio === "square" ? "aspect-square" : "aspect-[3/4]"
         }`}
       >
-        <Link href={targetHref} prefetch={false} className="block relative h-full w-full">
+        <Link href={targetHref} className="block relative h-full w-full">
           {img ? (
             <Image
               src={img}
@@ -239,7 +239,7 @@ export function ProductCard({
       <div className="pt-2.5 pb-1 flex flex-col gap-0.5">
         {/* Title & Wishlist Row */}
         <div className="flex items-start justify-between gap-2">
-          <Link href={targetHref} prefetch={false} className="flex-1 min-w-0">
+          <Link href={targetHref} className="flex-1 min-w-0">
             <h3
               className={
                 titleClassName ||
@@ -271,7 +271,6 @@ export function ProductCard({
         {store?.storeName && (
           <Link
             href={`/vendor/${store.storeSlug || ""}`}
-            prefetch={false}
             className={`${
               size === "lg" ? "text-xs sm:text-sm" : "text-xs"
             } font-medium text-muted-foreground hover:text-foreground transition-colors truncate`}

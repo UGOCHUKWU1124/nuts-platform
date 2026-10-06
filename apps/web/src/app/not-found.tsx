@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 
 export default function NotFound() {
   return (

@@ -13,7 +13,7 @@ Menu,
 Settings,
 Shield
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
 

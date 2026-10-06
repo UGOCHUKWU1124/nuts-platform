@@ -20,7 +20,7 @@ ShoppingBag,
 Tag,
 Trash2,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useMemo,useState } from "react";
 import { toast } from "sonner";
 

@@ -24,7 +24,7 @@ ShoppingBag,
 SlidersHorizontal,
 X,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useParams } from "next/navigation";
 import { useDeferredValue,useMemo,useState } from "react";
 

@@ -23,7 +23,7 @@ Store,
 Trash2,
 UserCheck,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { toast } from "sonner";
 

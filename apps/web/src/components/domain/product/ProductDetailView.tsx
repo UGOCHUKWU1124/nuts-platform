@@ -29,7 +29,7 @@ Share2,
 ShoppingBag,
 Truck
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useMemo,useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";

@@ -4,7 +4,7 @@ import { useHydrated } from "../../hook/use-hydrated";
 import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
 import { Grid,Heart,Home,Search,ShoppingBag } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 
 export function BottomNav() {

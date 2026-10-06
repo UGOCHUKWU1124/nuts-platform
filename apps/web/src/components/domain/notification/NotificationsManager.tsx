@@ -17,7 +17,7 @@ Info,
 Package,
 Trash2,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
 

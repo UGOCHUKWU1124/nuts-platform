@@ -7,7 +7,7 @@ import { FormInput } from "@/component/form/FormInput";
 import { Button } from "@/component/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft,KeyRound,Mail,RefreshCw } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";

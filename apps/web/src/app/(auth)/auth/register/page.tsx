@@ -13,7 +13,7 @@ import { Button } from "@/component/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosError } from "axios";
 import { CheckCircle2,Gift,Loader2,MapPin,RefreshCw,Send,User,UserPlus,XCircle } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter,useSearchParams } from "next/navigation";
 import { useCallback,useEffect,useRef,useState } from "react";
 import { FormProvider,useForm,useWatch } from "react-hook-form";

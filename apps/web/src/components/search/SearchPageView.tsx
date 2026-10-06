@@ -16,7 +16,7 @@ import { queryKey } from "@/lib/query-key";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight,Search as SearchIcon,Sparkles,Store,Tag } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import type { PaginationMeta } from "@/api/core/types";
 

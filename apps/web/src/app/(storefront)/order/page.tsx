@@ -12,7 +12,7 @@ import { queryKey } from "@/lib/query-key";
 import { formatDate,formatPrice } from "@/lib/util";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight,Package } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 
 export default function OrderPage() {

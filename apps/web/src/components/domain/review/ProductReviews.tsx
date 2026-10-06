@@ -8,7 +8,7 @@ import { queryKey } from "@/lib/query-key";
 import { useAuthStore } from "@/zustand/auth";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2,MessageSquarePlus,Star,Trash2,X } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { toast } from "sonner";
 

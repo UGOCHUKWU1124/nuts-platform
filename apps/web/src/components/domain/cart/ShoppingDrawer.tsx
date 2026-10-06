@@ -23,7 +23,7 @@ import { formatPrice } from "@/lib/util";
 import { useShoppingDrawerStore } from "@/zustand/shopping-drawer";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import { Heart,Minus,Plus,ShoppingBag,Trash2,X } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";

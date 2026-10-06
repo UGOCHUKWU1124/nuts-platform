@@ -7,7 +7,7 @@ import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { Button } from "@/component/ui/button";
 import { formatPrice } from "@/lib/util";
 import { CheckCircle2 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useSearchParams } from "next/navigation";
 import { Suspense,useEffect,useState } from "react";
 
