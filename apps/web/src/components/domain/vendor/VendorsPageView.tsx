@@ -118,12 +118,16 @@ export function VendorsPageView({
         {/* Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[230px_minmax(0,1fr)] gap-8 items-start">
           {/* Left Column: Vertical Category Filter Pills */}
-          <aside className="space-y-2 lg:sticky lg:top-24">
+          <aside
+            aria-label="Filter vendors by category"
+            className="flex gap-2 overflow-x-auto pb-2 lg:sticky lg:top-24 lg:flex-col lg:overflow-visible lg:pb-0"
+          >
             {/* "All Stores" Pill */}
             <button
               type="button"
               onClick={() => setSelectedCategoryId("ALL")}
-              className={`w-full flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-medium transition-all ${
+              aria-pressed={selectedCategoryId === "ALL"}
+              className={`w-max max-w-[75vw] shrink-0 flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-medium transition-all lg:w-full lg:max-w-none ${
                 selectedCategoryId === "ALL"
                   ? "bg-primary text-primary-foreground border-primary shadow-xs"
                   : "bg-card text-foreground border-border hover:bg-secondary"
@@ -132,7 +136,7 @@ export function VendorsPageView({
               <div className="flex h-5 w-5 items-center justify-center shrink-0">
                 <Sparkles className="h-4 w-4" />
               </div>
-              <span className="truncate">All Stores</span>
+              <span className="min-w-0 truncate">All Stores</span>
             </button>
 
             {/* Dynamic Root Categories from DB */}
@@ -143,7 +147,8 @@ export function VendorsPageView({
                   key={cat.id}
                   type="button"
                   onClick={() => setSelectedCategoryId(cat.id)}
-                  className={`w-full flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all ${
+                  aria-pressed={isSelected}
+                  className={`w-max max-w-[75vw] shrink-0 flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all lg:w-full lg:max-w-none ${
                     isSelected
                       ? "bg-primary text-primary-foreground border-primary shadow-xs"
                       : "bg-card text-foreground border-border hover:bg-secondary"
@@ -160,7 +165,7 @@ export function VendorsPageView({
                       <span className="text-xs font-bold">{cat.name.charAt(0)}</span>
                     )}
                   </div>
-                  <span className="truncate">{cat.name}</span>
+                  <span className="min-w-0 truncate">{cat.name}</span>
                 </button>
               );
             })}
