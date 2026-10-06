@@ -1,6 +1,7 @@
 "use client";
 
 import { orderService } from "@/api";
+import { paymentService } from "@/api/payment";
 import type { OrderResponseDto } from "@/api/dto/order";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { Button } from "@/component/ui/button";
@@ -12,8 +13,39 @@ import { Suspense,useEffect,useState } from "react";
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
-  const orderId = searchParams.get("orderId");
+  const callbackReference =
+    searchParams.get("reference")?.trim() ||
+    searchParams.get("trxref")?.trim() ||
+    null;
+  const [verifiedOrderId, setVerifiedOrderId] = useState<string | null>(null);
+  const [paymentState, setPaymentState] = useState<
+    "idle" | "verifying" | "success" | "pending" | "failed"
+  >(callbackReference ? "verifying" : "idle");
+  const orderId = searchParams.get("orderId") || verifiedOrderId;
   const [order, setOrder] = useState<OrderResponseDto | null>(null);
+
+  useEffect(() => {
+    if (!callbackReference) return;
+    let active = true;
+    paymentService
+      .verify(callbackReference)
+      .then(({ data }) => {
+        if (!active) return;
+        if (data.status === "SUCCESS") {
+          setVerifiedOrderId(data.orderId);
+          setPaymentState("success");
+        } else {
+          setPaymentState("pending");
+        }
+      })
+      .catch(() => {
+        if (active) setPaymentState("failed");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [callbackReference]);
 
   useEffect(() => {
     if (!orderId) return;
@@ -27,13 +59,38 @@ function OrderSuccessContent() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-20 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+      <div
+        className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
+          paymentState === "failed"
+            ? "bg-destructive/10 text-destructive"
+            : "bg-emerald-500/10 text-emerald-500"
+        }`}
+      >
         <CheckCircle2 className="h-10 w-10" />
       </div>
 
       <h1 className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-        Order Placed Successfully!
+        {paymentState === "verifying"
+          ? "Verifying your payment…"
+          : paymentState === "pending"
+            ? "Payment is processing"
+            : paymentState === "failed"
+              ? "Payment confirmation unavailable"
+              : "Order Placed Successfully!"}
       </h1>
+
+      {paymentState === "pending" && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your payment has not been confirmed yet. Check your orders again in a
+          moment.
+        </p>
+      )}
+      {paymentState === "failed" && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          We could not verify the payment. Your order status will update when
+          Paystack confirms it; please check your orders before trying again.
+        </p>
+      )}
 
       {order ? (
         <div className="mt-6 rounded-2xl border border-border bg-card p-5 text-left shadow-xs">

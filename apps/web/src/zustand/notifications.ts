@@ -223,7 +223,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     }
 
     let sseRetryCount = 0;
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
     const routeByRole: Record<AuthRole, string> = {
       user: "notifications/sse",
@@ -231,10 +230,11 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       vendor: "vendors/notifications/sse",
     };
     const route = routeByRole[role];
-    const sseUrl =
-      typeof window !== "undefined" && backendUrl
-        ? `${backendUrl}/api/v1/${route}`
-        : `${apiUrl}/${route}`;
+    const apiPath = new URL(apiUrl, window.location.origin).pathname.replace(
+      /\/+$/,
+      "",
+    );
+    const sseUrl = `${apiPath}/${route}`;
 
     const connect = () => {
       try {
