@@ -8,7 +8,7 @@ import { useCart } from "@/hook/use-cart";
 import { resolveCartItemProductHref } from "@/lib/cart-path";
 import { formatPrice } from "@/lib/util";
 import { Minus,Plus,ShoppingBag,Trash2 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { toast } from "sonner";
 
 export function CartItemList({

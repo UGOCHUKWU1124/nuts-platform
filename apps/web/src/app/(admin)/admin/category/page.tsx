@@ -47,7 +47,7 @@ Table as TableIcon,
 Trash2,
 XCircle
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { toast } from "sonner";
 
 interface FlatAdminCategory {

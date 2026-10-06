@@ -11,7 +11,7 @@ import { useWishlist } from "@/hook/use-wishlist";
 import { formatPrice } from "@/lib/util";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { ArrowRight,Heart,ShoppingBag,Trash2 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";

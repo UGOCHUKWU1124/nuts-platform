@@ -15,7 +15,7 @@ Wallet,
 X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { type ReactNode,useState } from "react";
 import { VendorHeader } from "./VendorHeader";

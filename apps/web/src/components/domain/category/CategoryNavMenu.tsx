@@ -6,7 +6,7 @@ import { getNodeChildren } from "@/lib/cart-path";
 import {
 ChevronRight
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
 

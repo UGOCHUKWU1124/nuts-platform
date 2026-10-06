@@ -8,7 +8,7 @@ import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { Input } from "@/component/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Search,Sparkles,Store,X } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useDeferredValue,useMemo,useState } from "react";
 
 const EMPTY_VENDORS: VendorResponseDto[] = [];
