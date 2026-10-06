@@ -4,36 +4,20 @@ import {
   ArrayMinSize,
   IsArray,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { VariantOptionDto } from '@api/modules/shared/dto/variant-option.dto';
 
-export class VariantOptionItemDto {
-  @ApiProperty({
-    description: 'Option name, for example size or color.',
-    example: 'size',
-  })
-  @IsString()
-  @IsNotEmpty()
-  name!: string;
-
-  @ApiProperty({
-    description: 'Option value, for example M or Black.',
-    example: 'M',
-  })
-  @IsString()
-  @IsNotEmpty()
-  value!: string;
-}
+export { VariantOptionDto as VariantOptionItemDto };
 
 export class CreateVariantDto {
   @ApiProperty({
     description:
       'Variant options. Option names must be unique within the variant.',
-    type: () => VariantOptionItemDto,
+    type: () => VariantOptionDto,
     isArray: true,
     example: [
       {
@@ -49,8 +33,8 @@ export class CreateVariantDto {
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => VariantOptionItemDto)
-  options!: VariantOptionItemDto[];
+  @Type(() => VariantOptionDto)
+  options!: VariantOptionDto[];
 
   @ApiProperty({
     description: 'Initial stock quantity.',

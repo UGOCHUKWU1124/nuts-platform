@@ -36,6 +36,8 @@ export default function AdminUserPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey.admin.user, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminUserService.list({

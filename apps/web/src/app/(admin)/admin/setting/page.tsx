@@ -27,6 +27,8 @@ export default function AdminSettingPage() {
       return res.data;
     },
     refetchInterval: 30000,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   const { refetch: refetchSearch } = useQuery({
@@ -35,6 +37,8 @@ export default function AdminSettingPage() {
       const res = await adminSystemService.getSearchStatus();
       return res.data;
     },
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   // Mutations

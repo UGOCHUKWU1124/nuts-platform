@@ -1,25 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 import { VariantSummaryDto } from '@api/modules/product-variants/dto/variant-response.dto';
 
-class VendorProductCategoryDto {
-  @ApiProperty({
-    description: 'Unique identifier of the category',
-    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Display name of the category',
-    example: 'Leather Goods',
-  })
-  name!: string;
-
-  @ApiProperty({
-    description: 'URL-friendly category slug',
-    example: 'leather-goods',
-  })
-  slug!: string;
-}
+export { CategoryRefDto as VendorProductCategoryDto };
 
 export class VendorProductDto {
   @ApiProperty({
@@ -73,9 +56,9 @@ export class VendorProductDto {
 
   @ApiProperty({
     description: 'Category this product belongs to',
-    type: VendorProductCategoryDto,
+    type: CategoryRefDto,
   })
-  category!: VendorProductCategoryDto;
+  category!: CategoryRefDto;
 
   @ApiProperty({
     description: 'List of variants associated with the product',

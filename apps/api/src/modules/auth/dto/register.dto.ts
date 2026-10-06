@@ -14,63 +14,9 @@ import {
 import { MaxPasswordBytes } from '@api/modules/shared/decorators/max-password-bytes.decorator';
 import { NormalizeEmail } from '@api/modules/shared/decorators/normalize-email.decorator';
 import { Trim } from '@api/modules/shared/decorators/string-trim.decorator';
+import { ShippingAddressDto } from '@api/modules/shared/dto/shipping-address.dto';
 
-export class ShippingAddressRegistrationDto {
-  @ApiProperty({
-    example: 'John Doe',
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'Full name is required' })
-  @MaxLength(100)
-  fullName!: string;
-
-  @ApiProperty({
-    example: '+2348012345678',
-  })
-  @Trim()
-  @IsString()
-  @IsNotEmpty({ message: 'Phone number is required' })
-  @MaxLength(30)
-  phone!: string;
-
-  @ApiProperty({
-    example: '123 Main Street, Victoria Island',
-  })
-  @Trim()
-  @IsString()
-  @IsNotEmpty({ message: 'Street address is required' })
-  @MaxLength(255)
-  street!: string;
-
-  @ApiProperty({
-    example: 'Lagos',
-  })
-  @Trim()
-  @IsString()
-  @IsNotEmpty({ message: 'City is required' })
-  @MaxLength(100)
-  city!: string;
-
-  @ApiProperty({
-    example: 'Lagos State',
-  })
-  @Trim()
-  @IsString()
-  @IsNotEmpty({ message: 'State is required' })
-  @MaxLength(100)
-  state!: string;
-
-  @ApiPropertyOptional({
-    example: 'Nigeria',
-    default: 'Nigeria',
-  })
-  @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  country?: string;
-}
+export { ShippingAddressDto as ShippingAddressRegistrationDto };
 
 export class RegisterDto {
   @ApiProperty({
@@ -144,10 +90,10 @@ export class RegisterDto {
 
   @ApiPropertyOptional({
     description: 'Optional shipping address collected during registration',
-    type: ShippingAddressRegistrationDto,
+    type: ShippingAddressDto,
   })
   @IsOptional()
   @ValidateNested()
-  @Type(() => ShippingAddressRegistrationDto)
-  shippingAddress?: ShippingAddressRegistrationDto;
+  @Type(() => ShippingAddressDto)
+  shippingAddress?: ShippingAddressDto;
 }

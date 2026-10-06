@@ -81,6 +81,8 @@ export default function DashboardDiscountPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: queryKey.vendor.discount,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await api.get<VendorDiscount[]>("/vendors/discounts");
       return res.data;

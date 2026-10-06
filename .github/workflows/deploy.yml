@@ -32,7 +32,7 @@ jobs:
           fi
 
   deploy:
-    name: Build & Deploy to ${{ needs.resolve-environment.outputs.env_name }}
+    name: Build & Publish Images to ${{ needs.resolve-environment.outputs.env_name }}
     needs: resolve-environment
     runs-on: ubuntu-latest
     permissions:

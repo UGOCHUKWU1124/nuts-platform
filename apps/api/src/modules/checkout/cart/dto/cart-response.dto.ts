@@ -1,4 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
+import { VariantOptionDto } from '@api/modules/shared/dto/variant-option.dto';
+
+export { VariantOptionDto };
 
 // ─── Shared building blocks for all cart response DTOs ───
 
@@ -52,13 +56,6 @@ export class ProductAvailabilityDto {
   @ApiProperty() sku!: string;
 }
 
-export class VariantOptionDto {
-  @ApiProperty({ description: 'Option name (e.g. size, color)' })
-  name!: string;
-  @ApiProperty({ description: 'Option value (e.g. M, Black)' })
-  value!: string;
-}
-
 export class CartItemVariantDto {
   @ApiProperty() id!: string;
   @ApiProperty({
@@ -75,11 +72,7 @@ export class CartItemVariantDto {
   @ApiProperty() isDeleted!: boolean;
 }
 
-export class CartItemProductCategoryDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() name!: string;
-  @ApiProperty() slug!: string;
-}
+export { CategoryRefDto as CartItemProductCategoryDto };
 
 export class CartItemProductDto {
   @ApiProperty() id!: string;
@@ -103,11 +96,11 @@ export class CartItemProductDto {
   @ApiPropertyOptional()
   images?: { url: string }[];
 
-  @ApiPropertyOptional({ type: () => CartItemProductCategoryDto })
-  category?: CartItemProductCategoryDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  category?: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => CartItemProductCategoryDto })
-  subcategory?: CartItemProductCategoryDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  subcategory?: CategoryRefDto;
 
   @ApiPropertyOptional()
   vendor?: { id: string; name: string };

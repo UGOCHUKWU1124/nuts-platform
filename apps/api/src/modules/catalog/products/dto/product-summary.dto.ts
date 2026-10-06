@@ -1,24 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 
-export class ProductCategorySummaryDto {
-  @ApiProperty({
-    description: 'Unique identifier of the category',
-    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Display name of the category',
-    example: 'Leather Goods',
-  })
-  name!: string;
-
-  @ApiProperty({
-    description: 'URL-friendly category slug',
-    example: 'leather-goods',
-  })
-  slug!: string;
-}
+export { CategoryRefDto as ProductCategorySummaryDto };
 
 export class ProductSummaryDto {
   @ApiProperty({
@@ -65,9 +48,9 @@ export class ProductSummaryDto {
 
   @ApiProperty({
     description: 'Subcategory the product belongs to',
-    type: ProductCategorySummaryDto,
+    type: CategoryRefDto,
   })
-  subcategory!: ProductCategorySummaryDto;
+  subcategory!: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'URL of the primary product image (nullable)',

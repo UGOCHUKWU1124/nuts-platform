@@ -46,6 +46,8 @@ export default function DashboardOrderPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey.vendor.order, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await dashboardOrderService.list({

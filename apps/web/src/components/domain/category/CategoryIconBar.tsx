@@ -24,6 +24,7 @@ export function CategoryIconBar({ categories = [] }: CategoryIconBarProps) {
             <Link
               key={category.id}
               href={`/category/${category.slug}`}
+              prefetch={false}
               className="group flex flex-col items-center gap-2.5 shrink-0 text-center transition-transform hover:-translate-y-0.5"
             >
               <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl bg-secondary/60 border border-border/60 transition-all duration-200 group-hover:scale-105 group-hover:bg-secondary group-hover:border-primary/40 shadow-2xs overflow-hidden p-2.5">

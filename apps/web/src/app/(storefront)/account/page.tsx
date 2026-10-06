@@ -30,16 +30,22 @@ export default function AccountPage() {
   const { data: user, isLoading: userLoading } = useQuery({
     queryKey: queryKey.user.profile,
     queryFn: async () => (await userService.me()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { data: walletData } = useQuery({
     queryKey: ["wallet"],
     queryFn: async () => (await walletService.getUserWallet()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { data: ordersData } = useQuery({
     queryKey: queryKey.order.list({ page: 1, limit: 1 }),
     queryFn: async () => await orderService.list({ page: 1, limit: 1 }),
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { items: wishlistItems } = useWishlist();

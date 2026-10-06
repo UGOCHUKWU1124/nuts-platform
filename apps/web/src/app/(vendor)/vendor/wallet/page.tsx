@@ -23,6 +23,8 @@ export default function DashboardWalletPage() {
 
   const { data: wallet } = useQuery({
     queryKey: ["vendor", "wallet"],
+    staleTime: 1000 * 60,
+    gcTime: 1000 * 60 * 5,
     queryFn: async () => {
       const res = await vendorWalletService.get();
       return res.data;
@@ -31,6 +33,8 @@ export default function DashboardWalletPage() {
 
   const { data: paginatedTx } = useQuery({
     queryKey: ["vendor", "wallet", "transactions", page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       return (await vendorWalletService.getTransactions({ page, limit: 15 })).data;
     },

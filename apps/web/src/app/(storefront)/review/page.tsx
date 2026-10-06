@@ -21,6 +21,8 @@ export default function ReviewPage() {
   const { data: orders, isLoading } = useQuery({
     queryKey: queryKey.order.list(),
     queryFn: async () => (await orderService.list()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { data: delivered = [] } = useQuery({
@@ -37,6 +39,8 @@ export default function ReviewPage() {
       );
       return results;
     },
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   // Collect unique products eligible for review from delivered orders

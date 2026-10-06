@@ -1,16 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PublicVariantSummaryDto } from '@api/modules/product-variants/dto/public-variant-response.dto';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 import type { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 import { VendorSummaryDto } from './vendor-summary.dto';
 
-class PublicProductCategoryRefDto {
-  @ApiProperty()
-  id!: string;
-  @ApiProperty()
-  name!: string;
-  @ApiProperty()
-  slug!: string;
-}
+export { CategoryRefDto as PublicProductCategoryRefDto };
 
 class PublicProductImageDto {
   @ApiProperty()
@@ -87,14 +81,14 @@ export class PublicProductResponseDto {
   @ApiProperty({ type: () => VendorSummaryDto })
   vendor!: VendorSummaryDto;
 
-  @ApiProperty({ type: () => PublicProductCategoryRefDto })
-  category!: PublicProductCategoryRefDto;
+  @ApiProperty({ type: () => CategoryRefDto })
+  category!: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => PublicProductCategoryRefDto })
-  parentSubcategory?: PublicProductCategoryRefDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  parentSubcategory?: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => PublicProductCategoryRefDto })
-  subcategory?: PublicProductCategoryRefDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  subcategory?: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'Legacy field for backward compatibility',

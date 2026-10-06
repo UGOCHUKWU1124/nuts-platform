@@ -21,6 +21,8 @@ export default function VendorAnalyticPage() {
 
   const { data: s, isLoading } = useQuery({
     queryKey: [...queryKey.vendor.analytic, range],
+    staleTime: 1000 * 60,
+    gcTime: 1000 * 60 * 5,
     queryFn: async () => {
       const res = await vendorAnalyticsService.summary({
         range,

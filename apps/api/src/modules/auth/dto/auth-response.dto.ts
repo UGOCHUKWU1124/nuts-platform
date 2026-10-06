@@ -1,39 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserIdentitySummaryDto } from '@api/modules/shared/dto/user-identity-summary.dto';
 
-export class AuthUserDto {
-  @ApiProperty({
-    description: 'Unique identifier of the authenticated user',
-    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Email address of the authenticated user',
-    example: 'jane@example.com',
-  })
-  email!: string;
-
-  @ApiPropertyOptional({
-    description: 'First name of the authenticated user',
-    example: 'Jane',
-    nullable: true,
-  })
-  firstName!: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Last name of the authenticated user',
-    example: 'Doe',
-    nullable: true,
-  })
-  lastName!: string | null;
-}
+export { UserIdentitySummaryDto as AuthUserDto };
 
 export class AuthResponseDto {
   @ApiProperty({
     description: 'Authenticated user details',
-    type: AuthUserDto,
+    type: UserIdentitySummaryDto,
   })
-  user!: AuthUserDto;
+  user!: UserIdentitySummaryDto;
 
   @ApiPropertyOptional({
     description: 'JWT access token for Authorization header',

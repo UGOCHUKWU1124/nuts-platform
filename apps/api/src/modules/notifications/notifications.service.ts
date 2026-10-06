@@ -5,7 +5,7 @@ import {
   Prisma,
   ROLE,
 } from '@prisma/client';
-import { filter, map, Observable, Subject } from 'rxjs';
+import { filter, interval, map, merge, Observable, Subject } from 'rxjs';
 import {
   buildCursorMeta,
   buildCursorWhere,
@@ -246,14 +246,15 @@ export class NotificationsService {
    * SSE Stream: Emits live notifications for the given userId
    */
   subscribeToUserStream(userId: string): Observable<MessageEvent> {
-    return this.sseSubject.asObservable().pipe(
+    const notifications = this.sseSubject.asObservable().pipe(
       filter((event) => event.userId === userId),
-      map(
-        (event) =>
-          ({
-            data: event.notification,
-          }) as MessageEvent,
-      ),
+      map((event) => ({ data: event.notification }) as MessageEvent),
     );
+
+    const heartbeat = interval(25_000).pipe(
+      map(() => ({ data: { type: 'ping' } }) as MessageEvent),
+    );
+
+    return merge(notifications, heartbeat);
   }
 }

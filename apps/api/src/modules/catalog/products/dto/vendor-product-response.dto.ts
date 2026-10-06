@@ -1,12 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { VendorVariantResponseDto } from '@api/modules/product-variants/dto/vendor-variant-response.dto';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 import type { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 
-class VendorProductCategoryRefDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() name!: string;
-  @ApiProperty() slug!: string;
-}
+export { CategoryRefDto as VendorProductCategoryRefDto };
 
 class VendorProductImageDto {
   @ApiProperty() id!: string;
@@ -44,14 +41,14 @@ export class VendorProductResponseDto {
     },
   })
   variantCombinations?: VariantCombinations;
-  @ApiProperty({ type: () => VendorProductCategoryRefDto })
-  category!: VendorProductCategoryRefDto;
+  @ApiProperty({ type: () => CategoryRefDto })
+  category!: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => VendorProductCategoryRefDto })
-  parentSubcategory?: VendorProductCategoryRefDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  parentSubcategory?: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => VendorProductCategoryRefDto })
-  subcategory?: VendorProductCategoryRefDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  subcategory?: CategoryRefDto;
   @ApiPropertyOptional({ type: () => VendorProductImageDto, isArray: true })
   images?: VendorProductImageDto[];
   @ApiProperty() isActive!: boolean;
