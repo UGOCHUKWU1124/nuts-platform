@@ -12,9 +12,9 @@ import { NotificationsService } from '../notifications.service';
 @UseGuards(JwtAuthGuard)
 @Roles(ROLE.USER, ROLE.ADMIN, ROLE.VENDOR)
 @Controller([
-  'notifications/sse',
-  'admin/notifications/sse',
-  'vendors/notifications/sse',
+  'notifications/sse/stream',
+  'admin/notifications/sse/stream',
+  'vendors/notifications/sse/stream',
 ])
 export class NotificationsSseController {
   constructor(private readonly notificationsService: NotificationsService) {}

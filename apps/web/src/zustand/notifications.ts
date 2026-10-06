@@ -63,9 +63,9 @@ function showIncomingNotification(notification: AppNotification): void {
 function getSseUrl(role: AuthRole): string {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
   const routeByRole: Record<AuthRole, string> = {
-    user: "notifications/sse",
-    admin: "admin/notifications/sse",
-    vendor: "vendors/notifications/sse",
+    user: "notifications/sse/stream",
+    admin: "admin/notifications/sse/stream",
+    vendor: "vendors/notifications/sse/stream",
   };
   const apiPath = new URL(apiUrl, window.location.origin).pathname.replace(
     /\/+$/,
