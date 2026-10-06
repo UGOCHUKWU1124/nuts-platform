@@ -72,9 +72,7 @@ export function ProductCard({
   priority = false,
 }: ProductCardProps) {
   const router = useRouter();
-  const targetHref = href || (categoryPath
-    ? `${categoryPath.replace(/\/$/, "")}/${product.slug}`
-    : `/product/${product.slug}`);
+  const targetHref = href || `/product/${product.slug}`;
 
   const effectiveAddedFrom: AddedFromType =
     addedFrom || (categoryPath ? "CATEGORY_PAGE" : "PRODUCT_PAGE");

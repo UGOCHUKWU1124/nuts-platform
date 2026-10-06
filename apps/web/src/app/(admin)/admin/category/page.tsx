@@ -161,6 +161,7 @@ export default function AdminCategoryPage() {
 
   const refreshCategories = () => {
     qc.invalidateQueries({ queryKey: queryKey.admin.category });
+    qc.invalidateQueries({ queryKey: queryKey.category.list() });
   };
 
   const purgeCacheMutation = useMutation({
