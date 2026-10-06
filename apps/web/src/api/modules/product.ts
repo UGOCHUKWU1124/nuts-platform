@@ -58,8 +58,8 @@ export const productService = {
   getBySlug(slug: string) {
     return api.get<PublicProductResponseDto>(`/products/${slug}`);
   },
-  getCards(params: ProductQueryParams) {
-    return api.get<ProductCardDto[]>("/products", { params });
+  getCards(params: ProductQueryParams, signal?: AbortSignal) {
+    return api.get<ProductCardDto[]>("/products", { params, signal });
   },
   query(body: CursorQueryBody) {
     return api.post<{ items: ProductCardDto[]; nextCursor?: string | null }>(

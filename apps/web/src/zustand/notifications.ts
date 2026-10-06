@@ -1,8 +1,7 @@
-import {
-  AppNotification,
-  notificationsApi,
-} from "@/api/notifications";
+import { notificationsApi } from "@/api/notifications";
+import type { AppNotification, ListNotificationsParams } from "@/api/notifications";
 import { useAuthStore, type AuthRole } from "@/zustand/auth";
+import { notificationDetailPath } from "@/lib/notification-path";
 import { create } from "zustand";
 import { toast } from "sonner";
 
@@ -14,9 +13,14 @@ interface NotificationsState {
   hasNextPage: boolean;
   nextCursor: string | null;
 
-  fetchNotifications: (cursor?: string, limit?: number, append?: boolean) => Promise<void>;
+  fetchNotifications: (
+    cursor?: string,
+    limit?: number,
+    append?: boolean,
+    filters?: Pick<ListNotificationsParams, "unreadOnly" | "category" | "type">,
+  ) => Promise<void>;
   fetchUnreadCount: () => Promise<void>;
-  markAsRead: (id: string) => Promise<void>;
+  markAsRead: (id: string, unreadHint?: boolean) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
@@ -28,6 +32,8 @@ interface NotificationsState {
 let globalEventSource: EventSource | null = null;
 let globalStreamKey: string | null = null;
 let streamRefCount = 0;
+let listRequestSequence = 0;
+let listRequestController: AbortController | null = null;
 const unreadCountCache = new Map<string, number>();
 const unreadCountRequests = new Map<string, Promise<void>>();
 const receivedNotificationIds = new Set<string>();
@@ -40,18 +46,13 @@ function getNotificationSessionKey(): string {
 function showIncomingNotification(notification: AppNotification): void {
   const auth = useAuthStore.getState();
   const role = auth.role ?? auth.user?.role ?? "user";
-  const notificationsPath =
-    role === "admin"
-      ? "/admin/notifications"
-      : role === "vendor"
-        ? "/vendor/notifications"
-        : "/account/notifications";
 
   toast(notification.title, {
     description: notification.message,
     action: {
       label: "View notifications",
-      onClick: () => window.location.assign(notificationsPath),
+      onClick: () =>
+        window.location.assign(notificationDetailPath(role, notification.id)),
     },
   });
 }
@@ -64,15 +65,24 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   hasNextPage: false,
   nextCursor: null,
 
-  fetchNotifications: async (cursor, limit = 20, append = false) => {
+  fetchNotifications: async (cursor, limit = 20, append = false, filters) => {
     const auth = useAuthStore.getState();
     const userId = auth.user?.id;
     if (!auth.isAuthenticated || !userId) return;
 
     const cacheKey = `${auth.role ?? auth.user?.role ?? "user"}:${userId}`;
+    if (!append) {
+      listRequestController?.abort();
+      listRequestController = new AbortController();
+    }
+    const requestController = listRequestController;
+    const requestSequence = append ? listRequestSequence : ++listRequestSequence;
     set({ isLoading: true });
     try {
-      const res = await notificationsApi.list({ cursor, limit });
+      const res = await notificationsApi.list(
+        { cursor, limit, ...filters },
+        requestController?.signal,
+      );
       const items = res.data ?? [];
       const meta = res.meta;
       const activeAuth = useAuthStore.getState();
@@ -81,22 +91,40 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
         ? `${activeAuth.role ?? activeAuth.user?.role ?? "user"}:${activeUserId}`
         : null;
 
-      if (activeCacheKey === cacheKey) {
+      if (activeCacheKey === cacheKey && requestSequence === listRequestSequence) {
         set({
-          notifications: append ? [...get().notifications, ...items] : items,
+          notifications: append
+            ? [
+                ...get().notifications,
+                ...items.filter(
+                  (item) => !get().notifications.some((existing) => existing.id === item.id),
+                ),
+              ]
+            : items,
           hasNextPage: meta?.hasNextPage ?? false,
           nextCursor: meta?.nextCursor ?? null,
         });
       }
-    } catch {
-      // Graceful fallback
+    } catch (error) {
+      if (
+        requestSequence === listRequestSequence &&
+        !(error instanceof Error && error.name === "CanceledError")
+      ) {
+        console.error("Failed to load notifications", error);
+        toast.error("Failed to load notifications. Please try again.");
+      }
     } finally {
       const activeAuth = useAuthStore.getState();
       const activeUserId = activeAuth.user?.id;
       const activeCacheKey = activeUserId
         ? `${activeAuth.role ?? activeAuth.user?.role ?? "user"}:${activeUserId}`
         : null;
-      if (activeCacheKey === cacheKey) set({ isLoading: false });
+      if (
+        activeCacheKey === cacheKey &&
+        requestSequence === listRequestSequence
+      ) {
+        set({ isLoading: false });
+      }
     }
   },
 
@@ -141,10 +169,12 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     }
   },
 
-  markAsRead: async (id: string) => {
+  markAsRead: async (id: string, unreadHint = false) => {
     const prevList = get().notifications;
     const prevCount = get().unreadCount;
-    const wasUnread = prevList.some((notification) => notification.id === id && !notification.isRead);
+    const wasUnread =
+      prevList.some((notification) => notification.id === id && !notification.isRead) ||
+      unreadHint;
 
     // Optimistic update
     set({
@@ -245,6 +275,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
 
   reset: () =>
     {
+      listRequestSequence++;
+      listRequestController?.abort();
+      listRequestController = null;
       unreadCountCache.clear();
       unreadCountRequests.clear();
       receivedNotificationIds.clear();

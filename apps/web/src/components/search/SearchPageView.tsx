@@ -13,10 +13,10 @@ import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { findCategoryFullPath } from "@/lib/cart-path";
 import { queryKey } from "@/lib/query-key";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight,Search as SearchIcon,Sparkles,Store,Tag } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { PaginationMeta } from "@/api/core/types";
 
@@ -35,42 +35,47 @@ export function SearchPageView({
   initialProductMeta,
   initialVendors,
 }: SearchPageViewProps) {
-  const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
+  const debouncedQuery = useDebouncedValue(query.trim(), 300);
   const [page, setPage] = useState(1);
 
   // 1. Products search
-  const { data, isLoading, isError } = useQuery({
-    queryKey: queryKey.product.list({ page, limit: 12, search: query }),
-    queryFn: async () =>
+  const {
+    data,
+    isLoading,
+    isPlaceholderData,
+    isError,
+  } = useQuery({
+    queryKey: queryKey.product.list({ page, limit: 12, search: debouncedQuery }),
+    queryFn: async ({ signal }) =>
       productService.getCards({
         page,
         limit: 12,
-        search: query,
-      }),
-    initialData: query === initialQuery && query.length >= 2 && initialProductMeta != null
+        search: debouncedQuery,
+      }, signal),
+    initialData: debouncedQuery === initialQuery.trim() && debouncedQuery.length >= 2 && initialProductMeta != null
       ? { data: initialProducts, meta: initialProductMeta }
       : undefined,
     placeholderData: (previousData) => previousData,
-    enabled: query.trim().length > 0,
+    enabled: debouncedQuery.length >= 2,
     staleTime: 1000 * 60 * 5,
   });
 
   // 2. Vendors search
   const { data: matchedVendors } = useQuery({
-    queryKey: queryKey.vendor.list({ search: query }),
-    queryFn: async () => {
+    queryKey: queryKey.vendor.list({ search: debouncedQuery }),
+    queryFn: async ({ signal }) => {
       const { data } = await publicVendorService.list({
-        search: query.trim(),
+        search: debouncedQuery,
         limit: 4,
-      });
+      }, signal);
       return data;
     },
     initialData:
-      query === initialQuery && query.length >= 2 && initialVendors.length > 0
+      debouncedQuery === initialQuery.trim() && debouncedQuery.length >= 2 && initialVendors.length > 0
         ? initialVendors
         : undefined,
-    enabled: query.trim().length > 0,
+    enabled: debouncedQuery.length >= 2,
     staleTime: 1000 * 60 * 10,
   });
 
@@ -88,10 +93,10 @@ export function SearchPageView({
   const handleSearch = (q: string) => {
     setQuery(q);
     setPage(1);
-    if (q) {
-      const destination = `/search?q=${encodeURIComponent(q)}`;
-            router.push(destination, { scroll: false });
-    }
+    const url = new URL(window.location.href);
+    if (q.trim()) url.searchParams.set("q", q.trim());
+    else url.searchParams.delete("q");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
   const vendors = matchedVendors || [];
@@ -208,7 +213,7 @@ export function SearchPageView({
 
             {/* Products Grid */}
             <div>
-              {isLoading ? (
+              {isLoading || isPlaceholderData ? (
                 <ProductGridSkeleton count={8} />
               ) : !hasAnyResults ? (
                 <div className="rounded-3xl border border-dashed border-border/70 p-12 text-center">

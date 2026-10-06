@@ -11,8 +11,8 @@ import type { WalletTransactionResponseDto } from "@/api/dto/vendor";
 import type { ProductQueryParams } from "./product";
 
 export const publicVendorService = {
-  list(params?: ProductQueryParams) {
-    return api.get<VendorResponseDto[]>("/vendors/store", { params });
+  list(params?: ProductQueryParams, signal?: AbortSignal) {
+    return api.get<VendorResponseDto[]>("/vendors/store", { params, signal });
   },
   getStore(slug: string) {
     return api.get<VendorStoreDto>(`/vendors/store/${slug}`);

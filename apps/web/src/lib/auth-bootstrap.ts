@@ -1,5 +1,6 @@
 import { performTokenRefresh } from "@/api/core/client";
 import { clearAuthTokens } from "@/api/core/token-storage";
+import { clearBrowserQueryClient } from "@/lib/query-client";
 import { getActiveRole,useAuthStore,type AuthRole } from "@/zustand/auth";
 import { authBroadcast,type AuthEvent } from "./auth-events";
 
@@ -38,10 +39,12 @@ export const authBootstrap = async (): Promise<void> => {
       }
 
       if (event.type === "LOGOUT" || event.type === "SESSION_EXPIRED") {
+        clearBrowserQueryClient();
         clearAuthTokens(activeRole);
         resetAuthBootstrap();
         useAuthStore.getState().clearSession(activeRole);
       } else if (event.type === "LOGIN") {
+        clearBrowserQueryClient();
         resetAuthBootstrap();
         void authBootstrap();
       }

@@ -33,10 +33,17 @@ export class NotificationsController {
     @Query('limit') limit?: string,
     @Query('unreadOnly') unreadOnly?: string,
     @Query('type') type?: NotificationType,
+    @Query('category') category?: string,
   ) {
     const parsedLimit = limit === undefined ? 20 : Number(limit);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
       throw new BadRequestException('limit must be a positive integer');
+    }
+    if (category && category !== 'orders' && category !== 'payments') {
+      throw new BadRequestException('category must be orders or payments');
+    }
+    if (type && !Object.values(NotificationType).includes(type)) {
+      throw new BadRequestException('type is invalid');
     }
 
     return this.notificationsService.list(user.id, user.role, {
@@ -44,6 +51,8 @@ export class NotificationsController {
       limit: parsedLimit,
       unreadOnly: unreadOnly === 'true',
       type,
+      category:
+        category === 'orders' || category === 'payments' ? category : undefined,
     });
   }
 
@@ -57,13 +66,19 @@ export class NotificationsController {
     return { count };
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a notification for the current user' })
+  async getById(@Param('id') id: string, @GetUser() user: AuthenticatedUser) {
+    return this.notificationsService.getById(id, user.id, user.role);
+  }
+
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark a notification as read' })
   async markAsRead(
     @Param('id') id: string,
     @GetUser() user: AuthenticatedUser,
   ) {
-    return this.notificationsService.markAsRead(id, user.id);
+    return this.notificationsService.markAsRead(id, user.id, user.role);
   }
 
   @Patch('mark-all-read')
@@ -75,7 +90,7 @@ export class NotificationsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a single notification' })
   async delete(@Param('id') id: string, @GetUser() user: AuthenticatedUser) {
-    return this.notificationsService.delete(id, user.id);
+    return this.notificationsService.delete(id, user.id, user.role);
   }
 
   @Delete('clear-all')

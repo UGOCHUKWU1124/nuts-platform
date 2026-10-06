@@ -1,6 +1,6 @@
 "use client";
 
-import { categoryService,productService } from "@/api";
+import { productService } from "@/api";
 import type { CategoryResponseDto } from "@/api/dto/category";
 import type { PaginationMeta, CursorPaginationMeta } from "@/api/core/types";
 import type { ProductCardDto } from "@/api/dto/product";
@@ -11,8 +11,10 @@ import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { useQuery } from "@tanstack/react-query";
+import { queryKey } from "@/lib/query-key";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { Search,ShoppingBag,SlidersHorizontal,X } from "lucide-react";
-import { useDeferredValue,useMemo,useRef,useState } from "react";
+import { useMemo,useRef,useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
 const EMPTY_PRODUCTS: ProductCardDto[] = [];
@@ -41,32 +43,22 @@ export interface ProductCatalogViewProps {
 export function ProductCatalogView({
   initialCategories,
   initialProducts,
+  initialMeta,
   initialFilters,
 }: ProductCatalogViewProps) {
   const [searchInput, setSearchInput] = useState(initialFilters?.search || "");
-  const search = useDeferredValue(searchInput.trim().toLowerCase());
+  const search = useDebouncedValue(searchInput.trim().toLowerCase(), 300);
   const [selectedCategoryId, setSelectedCategoryId] = useState(initialFilters?.categoryId || "");
   const [inStock, setInStock] = useState(Boolean(initialFilters?.inStock));
   const [minPrice, setMinPrice] = useState(initialFilters?.minPrice || "");
   const [maxPrice, setMaxPrice] = useState(initialFilters?.maxPrice || "");
   const [sortBy, setSortBy] = useState(initialFilters?.sort || "newest");
+  const [pageState, setPageState] = useState({ filterKey: "", page: 1 });
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("");
   const tabsScrollRef = useRef<HTMLDivElement>(null);
 
-  // Client query fallback for categories if server-side returned empty
-  const { data: clientCategories } = useQuery({
-    queryKey: ["categories-all"],
-    queryFn: async () => {
-      const res = await categoryService.getAll();
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    initialData: initialCategories?.length ? initialCategories : undefined,
-    enabled: !initialCategories?.length,
-    staleTime: 1000 * 60 * 10,
-  });
-
-  const allCategories = clientCategories ?? initialCategories ?? EMPTY_CATEGORIES;
+  const allCategories = initialCategories ?? EMPTY_CATEGORIES;
   const rootCategories = allCategories.filter(
     (c) => !c.parentId
   );
@@ -96,22 +88,60 @@ export function ProductCatalogView({
     return map;
   }, [allCategories]);
 
-  // Client query fallback for products if server-side returned empty
-  const { data: clientProducts, isLoading: isClientLoading } = useQuery({
-    queryKey: ["catalog-products", selectedCategoryId],
-    queryFn: async () => {
-      const res = await productService.getCards({
-        limit: 100,
-        categoryId: selectedCategoryId || undefined,
-      });
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    initialData: initialProducts?.length ? initialProducts : undefined,
-    enabled: !initialProducts?.length,
-    staleTime: 1000 * 60 * 2,
-  });
+  const filterKey = JSON.stringify([
+    search,
+    selectedCategoryId,
+    inStock,
+    minPrice,
+    maxPrice,
+    sortBy,
+  ]);
+  const page = pageState.filterKey === filterKey ? pageState.page : 1;
+  const minPriceValue = minPrice.trim() ? Number(minPrice) : undefined;
+  const maxPriceValue = maxPrice.trim() ? Number(maxPrice) : undefined;
 
-  const rawProducts = clientProducts ?? initialProducts ?? EMPTY_PRODUCTS;
+  const productQuery = useQuery({
+    queryKey: queryKey.product.list({
+      page,
+      limit: 24,
+      categoryId: selectedCategoryId || undefined,
+      search,
+      minPrice: Number.isFinite(minPriceValue) ? minPriceValue : undefined,
+      maxPrice: Number.isFinite(maxPriceValue) ? maxPriceValue : undefined,
+      inStock,
+      sort: sortBy,
+    }),
+    queryFn: async ({ signal }) =>
+      productService.getCards({
+        page,
+        limit: 24,
+        categoryId: selectedCategoryId || undefined,
+        search: search || undefined,
+        minPrice: Number.isFinite(minPriceValue) ? minPriceValue : undefined,
+        maxPrice: Number.isFinite(maxPriceValue) ? maxPriceValue : undefined,
+        inStock: inStock || undefined,
+        sort: sortBy,
+      }, signal),
+    initialData:
+      page === 1 &&
+      search === (initialFilters?.search || "").trim().toLowerCase() &&
+      selectedCategoryId === (initialFilters?.categoryId || "") &&
+      inStock === Boolean(initialFilters?.inStock) &&
+      minPrice === (initialFilters?.minPrice || "") &&
+      maxPrice === (initialFilters?.maxPrice || "") &&
+      sortBy === (initialFilters?.sort || "newest")
+        ? {
+            data: initialProducts,
+            meta: initialMeta && "page" in initialMeta ? initialMeta : undefined,
+          }
+        : undefined,
+  });
+  const rawProducts = productQuery.data?.data ?? EMPTY_PRODUCTS;
+  const isClientLoading = productQuery.isLoading;
+  const pagination =
+    productQuery.data?.meta && "page" in productQuery.data.meta
+      ? productQuery.data.meta
+      : null;
 
   // Group products into subcategory / category sections
   const subcategoryGroups: SubcategoryGroup[] = useMemo(() => {
@@ -179,68 +209,7 @@ export function ProductCatalogView({
     return Array.from(groupMap.values());
   }, [rawProducts, selectedCategoryId, selectedCategory, categoryMap]);
 
-  // Filter & sort products within each group in-memory (identically to VendorStoreView)
-  const filteredGroups = useMemo(() => {
-    return subcategoryGroups
-      .map((group) => {
-        let prods = [...group.products];
-
-        // Search filter
-        if (search) {
-          prods = prods.filter(
-            (p) =>
-              p.name?.toLowerCase().includes(search) ||
-              p.vendor?.storeName?.toLowerCase().includes(search) ||
-              p.slug?.toLowerCase().includes(search)
-          );
-        }
-
-        // Category filter if selected
-        if (selectedCategoryId) {
-          const mapped = categoryMap.get(selectedCategoryId);
-          const targetIds = new Set<string>([
-            selectedCategoryId,
-            ...(mapped ? [mapped.id, mapped.slug] : []),
-          ]);
-
-          prods = prods.filter((p) => {
-            if (p.categoryId && targetIds.has(p.categoryId)) return true;
-            if (p.category?.id && targetIds.has(p.category.id)) return true;
-            if (p.category?.slug && targetIds.has(p.category.slug)) return true;
-            if (p.subcategory?.id && targetIds.has(p.subcategory.id)) return true;
-            if (p.subcategory?.slug && targetIds.has(p.subcategory.slug)) return true;
-            if (p.parentSubcategory?.id && targetIds.has(p.parentSubcategory.id)) return true;
-            if (p.parentSubcategory?.slug && targetIds.has(p.parentSubcategory.slug)) return true;
-            return false;
-          });
-        }
-
-        // In Stock filter
-        if (inStock) {
-          prods = prods.filter((p) => p.stockStatus !== "OUT_OF_STOCK");
-        }
-
-        // Price filters
-        if (minPrice) {
-          const min = parseFloat(minPrice);
-          if (!isNaN(min)) prods = prods.filter((p) => Number(p.price) >= min);
-        }
-        if (maxPrice) {
-          const max = parseFloat(maxPrice);
-          if (!isNaN(max)) prods = prods.filter((p) => Number(p.price) <= max);
-        }
-
-        // Sorting
-        if (sortBy === "price_asc") {
-          prods.sort((a, b) => Number(a.price) - Number(b.price));
-        } else if (sortBy === "price_desc") {
-          prods.sort((a, b) => Number(b.price) - Number(a.price));
-        }
-
-        return { ...group, products: prods };
-      })
-      .filter((g) => g.products.length > 0);
-  }, [subcategoryGroups, search, selectedCategoryId, inStock, minPrice, maxPrice, sortBy, categoryMap]);
+  const filteredGroups = subcategoryGroups;
 
   const scrollToSubcategory = (subcatSlug: string) => {
     setActiveTab(subcatSlug);
@@ -425,7 +394,19 @@ export function ProductCatalogView({
         )}
 
         {/* Product Catalog Display */}
-        {isClientLoading ? (
+        {productQuery.isError && rawProducts.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-border py-16 text-center">
+            <p className="text-sm text-destructive">Products could not be loaded.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void productQuery.refetch()}
+              className="mt-4 rounded-full"
+            >
+              Try again
+            </Button>
+          </div>
+        ) : isClientLoading ? (
           <div className="py-6">
             <ProductGridSkeleton count={8} />
           </div>
@@ -486,6 +467,41 @@ export function ProductCatalogView({
           </div>
         )}
 
+        {pagination && pagination.totalPages > 1 && (
+          <nav
+            aria-label="Product pages"
+            className="mt-10 flex items-center justify-center gap-4"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || productQuery.isFetching}
+              onClick={() =>
+                setPageState({
+                  filterKey,
+                  page: Math.max(1, page - 1),
+                })
+              }
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {pagination.page} of {pagination.totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={
+                !(pagination.hasNextPage ?? page < pagination.totalPages) ||
+                productQuery.isFetching
+              }
+              onClick={() => setPageState({ filterKey, page: page + 1 })}
+            >
+              Next
+            </Button>
+          </nav>
+        )}
+
         {/* Category & Filter Drawer */}
         <CategoryFilterDrawer
           key={isFilterDrawerOpen ? "open" : "closed"}
@@ -500,7 +516,10 @@ export function ProductCatalogView({
           sortBy={sortBy}
           onSortByChange={(val: string) => setSortBy(val)}
           onReset={handleResetFilters}
-          totalResults={filteredGroups.reduce((acc, g) => acc + g.products.length, 0)}
+          totalResults={
+            pagination?.totalItems ??
+            filteredGroups.reduce((acc, group) => acc + group.products.length, 0)
+          }
         />
       </div>
     </CustomerLayout>

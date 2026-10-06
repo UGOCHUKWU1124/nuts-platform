@@ -26,7 +26,7 @@ export default async function ProductCatalogPage({
   const [categories, productsResult] = await Promise.all([
     serverGetCategories(),
     serverGetProducts({
-      limit: 100,
+      limit: 24,
       categoryId,
       search: params.search,
       sort: params.sort || "newest",
