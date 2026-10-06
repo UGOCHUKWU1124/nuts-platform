@@ -3,7 +3,7 @@
 import { useHydrated } from "../../hook/use-hydrated";
 import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
-import { Bell,Grid,Heart,Home,ShoppingBag } from "lucide-react";
+import { Heart,Home,Package,ShoppingBag } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/component/notification/NotificationBell";
@@ -35,7 +35,7 @@ export function BottomNav() {
   }
 
   const isHome = pathname === "/";
-  const isCategories = pathname.startsWith("/category");
+  const isProducts = pathname.startsWith("/product");
   const isWishlist = pathname.startsWith("/wishlist");
   const isCart = pathname.startsWith("/cart");
   return (
@@ -43,7 +43,11 @@ export function BottomNav() {
       aria-label="Mobile Navigation"
       className="xl:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border/80 bg-background/95 backdrop-blur-lg pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_-4px_16px_rgba(0,0,0,0.2)]"
     >
-      <div className="mx-auto grid max-w-xl grid-cols-5 items-center px-1 sm:px-2">
+      <div
+        className={`mx-auto grid max-w-xl items-center px-1 sm:px-2 ${
+          isMounted && isAuthenticated ? "grid-cols-5" : "grid-cols-4"
+        }`}
+      >
         {/* Home */}
         <Link
           href="/"
@@ -57,32 +61,21 @@ export function BottomNav() {
           <span className="text-[10px] tracking-tight mt-1">Home</span>
         </Link>
 
-        {/* Categories */}
+        {/* Products */}
         <Link
-          href="/category"
+          href="/product"
           className={`flex min-h-11 flex-col items-center justify-center py-1 transition-colors ${
-            isCategories ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground"
+            isProducts ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <div className="relative">
-            <Grid className={`h-5 w-5 ${isCategories ? "stroke-[2.2]" : "stroke-[1.6]"}`} />
+            <Package className={`h-5 w-5 ${isProducts ? "stroke-[2.2]" : "stroke-[1.6]"}`} />
           </div>
-          <span className="text-[10px] tracking-tight mt-1">Categories</span>
+          <span className="text-[10px] tracking-tight mt-1">Products</span>
         </Link>
 
         {/* Notifications */}
-        {isAuthenticated ? (
-          <NotificationBell placement="bottom" />
-        ) : (
-          <Link
-            href="/auth/login"
-            aria-label="Sign in to view notifications"
-            className="flex min-h-11 flex-col items-center justify-center py-1 text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Bell className="h-5 w-5 stroke-[1.6]" />
-            <span className="mt-1 text-[10px] tracking-tight">Alerts</span>
-          </Link>
-        )}
+        {isMounted && isAuthenticated && <NotificationBell placement="bottom" />}
 
         {/* Wishlist */}
         <Link

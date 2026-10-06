@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKey } from "@/lib/query-key";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { Search,ShoppingBag,SlidersHorizontal,X } from "lucide-react";
-import { useMemo,useRef,useState } from "react";
+import { useEffect,useMemo,useRef,useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
 const EMPTY_PRODUCTS: ProductCardDto[] = [];
@@ -57,6 +57,8 @@ export function ProductCatalogView({
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("");
   const tabsScrollRef = useRef<HTMLDivElement>(null);
+  const productResultsRef = useRef<HTMLDivElement>(null);
+  const lastScrolledPage = useRef(1);
 
   const allCategories = initialCategories ?? EMPTY_CATEGORIES;
   const rootCategories = allCategories.filter(
@@ -135,6 +137,7 @@ export function ProductCatalogView({
             meta: initialMeta && "page" in initialMeta ? initialMeta : undefined,
           }
         : undefined,
+    placeholderData: (previousData) => previousData,
   });
   const rawProducts = productQuery.data?.data ?? EMPTY_PRODUCTS;
   const isClientLoading = productQuery.isLoading;
@@ -142,6 +145,23 @@ export function ProductCatalogView({
     productQuery.data?.meta && "page" in productQuery.data.meta
       ? productQuery.data.meta
       : null;
+
+  useEffect(() => {
+    if (
+      page === lastScrolledPage.current ||
+      productQuery.isFetching ||
+      productQuery.isPlaceholderData ||
+      pagination?.page !== page
+    ) {
+      return;
+    }
+
+    lastScrolledPage.current = page;
+    productResultsRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [page, pagination?.page, productQuery.isFetching, productQuery.isPlaceholderData]);
 
   // Group products into subcategory / category sections
   const subcategoryGroups: SubcategoryGroup[] = useMemo(() => {
@@ -441,7 +461,13 @@ export function ProductCatalogView({
             </Button>
           </div>
         ) : (
-          <div className="space-y-12 sm:space-y-16">
+          <div
+            ref={productResultsRef}
+            aria-busy={productQuery.isFetching}
+            className={`scroll-mt-24 space-y-12 transition-opacity duration-200 sm:space-y-16 ${
+              productQuery.isFetching ? "opacity-70" : ""
+            }`}
+          >
             {filteredGroups.map((group) => (
               <section
                 key={group.id}
@@ -485,7 +511,7 @@ export function ProductCatalogView({
             >
               Previous
             </Button>
-            <span className="text-sm text-muted-foreground">
+            <span aria-live="polite" className="text-sm text-muted-foreground">
               Page {pagination.page} of {pagination.totalPages}
             </span>
             <Button

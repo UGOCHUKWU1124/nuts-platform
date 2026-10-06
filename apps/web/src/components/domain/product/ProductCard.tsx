@@ -171,6 +171,15 @@ export function ProductCard({
   const handleToggleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!isAuthenticated) {
+      toast.error("Please sign in to save items to your wishlist", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push("/auth/login"),
+        },
+      });
+      return;
+    }
     if (isWishlistPending) return;
 
     setIsWishlistPending(true);
