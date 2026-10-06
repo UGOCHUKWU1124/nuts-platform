@@ -4,6 +4,8 @@ export const queryKey = {
     all: ["product"] as const,
     list: (params?: Record<string, unknown>) => ["product", "list", params] as const,
     detail: (slug: string) => ["product", "detail", slug] as const,
+    related: (productId: string, recommendationKey: string) =>
+      ["product", "related", productId, recommendationKey] as const,
     review: (productId: string) => ["product", "review", productId] as const,
   },
   category: {
