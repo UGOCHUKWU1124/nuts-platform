@@ -40,7 +40,7 @@ import {
   VariantStockUpdateResponseDto,
 } from './dto/variant-response.dto';
 
-@ApiTags('Product Variants')
+@ApiTags('PRODUCT VARIANTS')
 @Controller('variants')
 export class ProductVariantsController {
   constructor(private readonly variantsService: ProductVariantsService) {}

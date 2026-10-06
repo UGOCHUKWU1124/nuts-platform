@@ -217,6 +217,10 @@ Sensitive endpoints (auth, OTP, checkout) have strict rate limits. Responses inc
         'Admin authentication — setup, login, logout, token refresh',
       )
       .addTag(
+        'ADMIN - CACHE',
+        'Admin-only cache operations — inspect and flush shared Redis cache data',
+      )
+      .addTag(
         'ADMIN - CATEGORY',
         'Admin category management — create, update, activate/deactivate, delete',
       )
@@ -281,6 +285,10 @@ Sensitive endpoints (auth, OTP, checkout) have strict rate limits. Responses inc
         'Vendor product management — CRUD, stock adjustments, activate/deactivate',
       )
       .addTag(
+        'VENDOR - SEARCH',
+        'Vendor-scoped search and autocomplete for products, orders, and discount codes',
+      )
+      .addTag(
         'VENDOR - WALLET',
         'Vendor wallet — view balance, transaction history',
       )
@@ -295,6 +303,18 @@ Sensitive endpoints (auth, OTP, checkout) have strict rate limits. Responses inc
       .addTag(
         'HEALTH',
         'Application health and readiness checks — liveness probe, database connectivity',
+      )
+      .addTag(
+        'IMAGES',
+        'Authenticated image uploads for vendor and admin product management',
+      )
+      .addTag(
+        'NOTIFICATIONS',
+        'Authenticated notification inbox — list, read, and manage notifications',
+      )
+      .addTag(
+        'NOTIFICATIONS - SSE',
+        'Authenticated server-sent event stream for real-time notifications',
       )
       .addTag(
         'ORDERS',
