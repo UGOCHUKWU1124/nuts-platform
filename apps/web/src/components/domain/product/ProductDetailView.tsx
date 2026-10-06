@@ -79,8 +79,8 @@ export function ProductDetailView({
 
   const { data: product, isLoading } = useQuery({
     queryKey: queryKey.product.detail(slug),
-    queryFn: async () => {
-      const { data } = await productService.getBySlug(slug);
+    queryFn: async ({ signal }) => {
+      const { data } = await productService.getBySlug(slug, signal);
       return data;
     },
     initialData: initialProduct || undefined,

@@ -55,8 +55,8 @@ export interface UpdateStockPayload {
 }
 
 export const productService = {
-  getBySlug(slug: string) {
-    return api.get<PublicProductResponseDto>(`/products/${slug}`);
+  getBySlug(slug: string, signal?: AbortSignal) {
+    return api.get<PublicProductResponseDto>(`/products/${slug}`, { signal });
   },
   getCards(params: ProductQueryParams, signal?: AbortSignal) {
     return api.get<ProductCardDto[]>("/products", { params, signal });

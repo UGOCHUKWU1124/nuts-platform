@@ -104,16 +104,44 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       }
       await wishlistService.remove(productId, variantId);
     },
+    onMutate: async ({ productId, variantId }) => {
+      if (!isAuthenticated) return undefined;
+
+      await queryClient.cancelQueries({ queryKey: queryKey.wishlist });
+      const previous = queryClient.getQueryData<WishlistResponseDto[]>(queryKey.wishlist);
+      if (previous) {
+        const exactVariantExists = variantId
+          ? previous.some((item) => item.productId === productId && item.variantId === variantId)
+          : false;
+        queryClient.setQueryData<WishlistResponseDto[]>(
+          queryKey.wishlist,
+          previous.filter((item) =>
+            item.productId !== productId ||
+            (exactVariantExists && item.variantId !== variantId)
+          )
+        );
+      }
+      return { previous };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
       toast.info("Removed from wishlist");
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey.wishlist, context.previous);
+      } else if (context && isAuthenticated) {
+        queryClient.removeQueries({ queryKey: queryKey.wishlist, exact: true });
+      }
       toast.error(
         typeof error === "object" && error !== null && "message" in error
           ? String((error as { message: unknown }).message)
           : "Unable to remove item"
       );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (isAuthenticated && context?.previous === undefined) {
+        void queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
+      }
     },
   });
 
@@ -131,15 +159,14 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       // Handle guest users with local store
       if (!isAuthenticated) {
         useWishlistStore.getState().toggleItem(product, variantId);
-        return shouldAdd;
+        return null;
       }
 
       if (shouldAdd) {
-        await wishlistService.add(product.id, variantId);
-        return true;
+        return (await wishlistService.add(product.id, variantId)).data;
       }
       await wishlistService.remove(product.id, variantId);
-      return false;
+      return null;
     },
     onMutate: async ({ product, variantId, shouldAdd }) => {
       if (!isAuthenticated) return undefined;
@@ -187,8 +214,20 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
           : "Unable to update wishlist"
       );
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
+    onSuccess: (addedItem, variables, context) => {
+      if (!isAuthenticated) return;
+      if (context?.previous === undefined) {
+        void queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
+        return;
+      }
+      if (variables.shouldAdd && addedItem) {
+        queryClient.setQueryData<WishlistResponseDto[]>(
+          queryKey.wishlist,
+          (current) => current
+            ? [addedItem, ...current.filter((item) => item.productId !== variables.product.id)]
+            : current
+        );
+      }
     },
   });
 

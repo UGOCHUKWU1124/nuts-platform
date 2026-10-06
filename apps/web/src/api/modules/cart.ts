@@ -1,9 +1,10 @@
 import { api } from "@/api/core/client";
 import type {
+AddToCartResponseDto,
 AddedFromType,
-CartItemResponseDto,
 CartResponseDto,
 DiscountPreviewDto,
+RemoveCartItemResponseDto,
 } from "@/api/dto/cart";
 
 export interface AddToCartPayload {
@@ -22,7 +23,7 @@ export const cartService = {
     return api.get<CartResponseDto>("/cart");
   },
   addItem(productId: string, payload: AddToCartPayload = {}) {
-    return api.post<CartItemResponseDto | CartResponseDto>(
+    return api.post<AddToCartResponseDto>(
       `/cart/items/${productId}`,
       payload
     );
@@ -31,12 +32,12 @@ export const cartService = {
     return api.patch<CartResponseDto>(`/cart/items/${productId}`, payload);
   },
   removeItem(productId: string, variantId?: string) {
-    return api.delete<CartResponseDto>(`/cart/items/${productId}`, {
+    return api.delete<RemoveCartItemResponseDto>(`/cart/items/${productId}`, {
       params: variantId ? { variantId } : {},
     });
   },
   clear() {
-    return api.delete<void>("/cart");
+    return api.delete<CartResponseDto>("/cart");
   },
   previewDiscount(code: string) {
     return api.get<DiscountPreviewDto>(`/cart/discount-preview?code=${encodeURIComponent(code)}`);

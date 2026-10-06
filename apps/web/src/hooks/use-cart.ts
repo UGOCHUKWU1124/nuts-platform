@@ -102,7 +102,9 @@ export function useCart(initialData?: CartResponseDto | null) {
         queryClient.setQueryData(queryKey.cart, context.previous);
       }
     },
-    onSettled: invalidateCart,
+    onSuccess: ({ data: cart }) => {
+      queryClient.setQueryData(queryKey.cart, cart);
+    },
   });
 
   const removeItem = useMutation({
@@ -140,7 +142,9 @@ export function useCart(initialData?: CartResponseDto | null) {
         queryClient.setQueryData(queryKey.cart, context.previous);
       }
     },
-    onSettled: invalidateCart,
+    onSuccess: ({ data: response }) => {
+      queryClient.setQueryData(queryKey.cart, response.cart);
+    },
   });
 
   const clearCart = useMutation({
@@ -148,22 +152,19 @@ export function useCart(initialData?: CartResponseDto | null) {
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: queryKey.cart });
       const previous = queryClient.getQueryData<CartResponseDto>(queryKey.cart);
-      queryClient.setQueryData<CartResponseDto>(queryKey.cart, {
-        cart: {
-          id: previous?.cart.id ?? "",
-          userId: previous?.cart.userId ?? "",
-          subtotal: 0,
-          deliveryCharge: 0,
-          serviceCharge: 0,
-          totalAmount: 0,
-          totalItemCount: 0,
-          abandonedCartAlerted: previous?.cart.abandonedCartAlerted ?? false,
-          checkedOut: previous?.cart.checkedOut ?? false,
-          createdAt: previous?.cart.createdAt ?? new Date(),
-          updatedAt: new Date(),
-        },
-        cartItems: [],
-      });
+      if (previous) {
+        queryClient.setQueryData<CartResponseDto>(queryKey.cart, {
+          ...previous,
+          cart: {
+            ...previous.cart,
+            subtotal: 0,
+            totalAmount: 0,
+            totalItemCount: 0,
+            updatedAt: new Date(),
+          },
+          cartItems: [],
+        });
+      }
       return { previous };
     },
     onError: (_error, _variables, context) => {
@@ -171,7 +172,9 @@ export function useCart(initialData?: CartResponseDto | null) {
         queryClient.setQueryData(queryKey.cart, context.previous);
       }
     },
-    onSettled: invalidateCart,
+    onSuccess: ({ data: cart }) => {
+      queryClient.setQueryData(queryKey.cart, cart);
+    },
   });
 
   const addItem = useMutation({
@@ -215,8 +218,10 @@ export function useCart(initialData?: CartResponseDto | null) {
       queryClient.setQueryData<CartResponseDto>(queryKey.cart, (current: CartResponseDto | undefined) => {
         if (!current) return current;
 
-        const existing = current.cartItems.find((line: CartItemResponseDto) =>
-          matchesCartItem(line, productId, variantId, current.cartItems)
+        const existing = current.cartItems.find(
+          (line: CartItemResponseDto) =>
+            line.productId === productId &&
+            (line.variant?.id ?? null) === (variantId ?? null)
         );
 
         const nextItems = existing
@@ -288,7 +293,30 @@ export function useCart(initialData?: CartResponseDto | null) {
         queryClient.setQueryData(queryKey.cart, context.previous);
       }
     },
-    onSettled: invalidateCart,
+    onSuccess: ({ data: response }) => {
+      const current = queryClient.getQueryData<CartResponseDto>(queryKey.cart);
+      if (!current) {
+        void invalidateCart();
+        return;
+      }
+
+      const addedItem = response.addedItem;
+      const matchingIndex = current.cartItems.findIndex(
+        (line) =>
+          line.productId === addedItem.productId &&
+          (line.variant?.id ?? null) === (addedItem.variant?.id ?? null)
+      );
+      const cartItems = [...current.cartItems];
+      if (matchingIndex === -1) {
+        cartItems.push(addedItem);
+      } else {
+        cartItems[matchingIndex] = addedItem;
+      }
+      queryClient.setQueryData<CartResponseDto>(queryKey.cart, {
+        cart: response.cart,
+        cartItems,
+      });
+    },
   });
 
   return {
