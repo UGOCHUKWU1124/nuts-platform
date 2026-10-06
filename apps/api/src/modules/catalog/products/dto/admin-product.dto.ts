@@ -1,25 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 import { VariantSummaryDto } from '@api/modules/product-variants/dto/variant-response.dto';
 
-class AdminProductCategoryDto {
-  @ApiProperty({
-    description: 'Unique identifier of the category',
-    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Display name of the category',
-    example: 'Leather Goods',
-  })
-  name!: string;
-
-  @ApiProperty({
-    description: 'URL-friendly category slug',
-    example: 'leather-goods',
-  })
-  slug!: string;
-}
+export { CategoryRefDto as AdminProductCategoryDto };
 
 export class AdminProductDto {
   @ApiProperty({
@@ -105,21 +88,21 @@ export class AdminProductDto {
 
   @ApiProperty({
     description: 'Category this product belongs to',
-    type: AdminProductCategoryDto,
+    type: CategoryRefDto,
   })
-  category!: AdminProductCategoryDto;
+  category!: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'Parent subcategory this product belongs to',
-    type: AdminProductCategoryDto,
+    type: CategoryRefDto,
   })
-  parentSubcategory?: AdminProductCategoryDto;
+  parentSubcategory?: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'Subcategory this product belongs to',
-    type: AdminProductCategoryDto,
+    type: CategoryRefDto,
   })
-  subcategory?: AdminProductCategoryDto;
+  subcategory?: CategoryRefDto;
 
   @ApiProperty({
     description: 'List of variants associated with the product',

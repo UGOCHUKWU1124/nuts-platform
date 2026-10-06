@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 
 export class VendorSummaryDto {
   @ApiProperty({
@@ -104,19 +105,22 @@ export class ProductCardDto {
 
   @ApiPropertyOptional({
     description: 'Root category summary',
+    type: () => CategoryRefDto,
     nullable: true,
   })
-  category?: { id: string; name: string; slug: string } | null;
+  category?: CategoryRefDto | null;
 
   @ApiPropertyOptional({
     description: 'Parent subcategory summary',
+    type: () => CategoryRefDto,
     nullable: true,
   })
-  parentSubcategory?: { id: string; name: string; slug: string } | null;
+  parentSubcategory?: CategoryRefDto | null;
 
   @ApiPropertyOptional({
     description: 'Leaf subcategory summary',
+    type: () => CategoryRefDto,
     nullable: true,
   })
-  subcategory?: { id: string; name: string; slug: string } | null;
+  subcategory?: CategoryRefDto | null;
 }

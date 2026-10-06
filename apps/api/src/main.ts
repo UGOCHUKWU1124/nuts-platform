@@ -20,6 +20,7 @@ import { GlobalExceptionFilter } from './modules/shared/filters/global-exception
 import { ResponseInterceptor } from './modules/shared/interceptors/response.interceptor';
 import { NormalizeInputPipe } from './modules/shared/pipes/normalize-input.pipe';
 import { SanitizeHtmlPipe } from './modules/shared/pipes/sanitize-html.pipe';
+import { removeDuplicateAdminCategoryPaths } from './modules/shared/utils/swagger-paths.util';
 
 const CSRF_EXEMPT_WEBHOOK_PATHS = new Set([
   '/api/v1/payment/webhook',
@@ -351,6 +352,7 @@ Sensitive endpoints (auth, OTP, checkout) have strict rate limits. Responses inc
     const document = SwaggerModule.createDocument(app, swaggerConfig, {
       deepScanRoutes: true,
     });
+    removeDuplicateAdminCategoryPaths(document.paths);
     SwaggerModule.setup('api/docs', app, document, {
       swaggerOptions: {
         persistAuthorization: true,

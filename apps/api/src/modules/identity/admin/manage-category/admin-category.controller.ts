@@ -17,26 +17,24 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiNotFoundResponse,
-  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiQuery,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
-import { CategoriesService } from '@api/modules/category/categories.service';
-import { CategoryResponseDto } from '@api/modules/category/dto/category-response.dto';
-import { CreateCategoryDto } from '@api/modules/category/dto/create-category.dto';
-import { MoveCategoryDto } from '@api/modules/category/dto/move-category.dto';
-import { ReorderCategoriesDto } from '@api/modules/category/dto/reorder-categories.dto';
-import { UpdateCategoryDto } from '@api/modules/category/dto/update-category.dto';
+import { CategoriesService } from '@api/modules/catalog/categories/categories.service';
+import { CategoryResponseDto } from '@api/modules/catalog/categories/dto/category-response.dto';
+import { CreateCategoryDto } from '@api/modules/catalog/categories/dto/create-category.dto';
+import { MoveCategoryDto } from '@api/modules/catalog/categories/dto/move-category.dto';
+import { ReorderCategoriesDto } from '@api/modules/catalog/categories/dto/reorder-categories.dto';
+import { UpdateCategoryDto } from '@api/modules/catalog/categories/dto/update-category.dto';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
+import { ApiEnvelopeResponse } from '@api/modules/shared/decorators/api-envelope-response.decorator';
 
 @ApiTags('ADMIN - CATEGORY')
 @ApiBearerAuth('JWT-auth')
@@ -55,8 +53,8 @@ export class AdminCategoryController {
     description: 'Returns the complete category hierarchy for administration.',
   })
   @ApiQuery({ name: 'includeArchived', required: false, type: Boolean })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto[]>,
+  @ApiEnvelopeResponse(CategoryResponseDto, {
+    isArray: true,
     description: 'Categories returned successfully.',
   })
   async getAdminCategories(
@@ -77,8 +75,7 @@ export class AdminCategoryController {
     name: 'idOrSlug',
     description: 'URL slug or UUID of the category to retrieve.',
   })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto>,
+  @ApiEnvelopeResponse(CategoryResponseDto, {
     description: 'Category found and returned.',
   })
   @ApiNotFoundResponse({ description: 'Category not found.' })
@@ -100,9 +97,8 @@ export class AdminCategoryController {
       'Creates a root category or a child under an existing active parent category.',
   })
   @ApiBody({ type: CreateCategoryDto })
-  @ApiResponse({
+  @ApiEnvelopeResponse(CategoryResponseDto, {
     status: 201,
-    type: ApiResponseDto<CategoryResponseDto>,
     description: 'Category created successfully.',
   })
   @ApiBadRequestResponse({
@@ -128,9 +124,8 @@ export class AdminCategoryController {
     description: 'UUID or slug of the category to update.',
   })
   @ApiBody({ type: UpdateCategoryDto })
-  @ApiResponse({
+  @ApiEnvelopeResponse(CategoryResponseDto, {
     status: 200,
-    type: ApiResponseDto<CategoryResponseDto>,
     description: 'Category updated successfully.',
   })
   @ApiBadRequestResponse({
@@ -161,9 +156,8 @@ export class AdminCategoryController {
   })
   @ApiParam({ name: 'id', description: 'UUID of the category to move' })
   @ApiBody({ type: MoveCategoryDto })
-  @ApiResponse({
+  @ApiEnvelopeResponse(CategoryResponseDto, {
     status: 200,
-    type: ApiResponseDto<CategoryResponseDto>,
     description: 'Category moved and hierarchy paths updated.',
   })
   async move(
@@ -188,9 +182,9 @@ export class AdminCategoryController {
     description: 'Parent category UUID (null for root)',
   })
   @ApiBody({ type: ReorderCategoriesDto })
-  @ApiResponse({
+  @ApiEnvelopeResponse(CategoryResponseDto, {
     status: 200,
-    type: ApiResponseDto<CategoryResponseDto[]>,
+    isArray: true,
     description: 'Categories reordered.',
   })
   async reorder(

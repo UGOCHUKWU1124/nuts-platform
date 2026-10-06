@@ -41,6 +41,11 @@ export class ApiResponseDto<TData = unknown> {
   })
   data?: TData | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Pagination metadata when the response contains a page of data',
+    type: () => PaginationMetaDto,
+  })
   meta?: PaginationMetaDto;
 
   @ApiProperty({
