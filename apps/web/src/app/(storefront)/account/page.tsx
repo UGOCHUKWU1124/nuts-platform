@@ -88,16 +88,16 @@ export default function AccountPage() {
             <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-2xl bg-white text-neutral-950 font-bold text-xl sm:text-2xl shadow-lg">
               {initials}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{fullName}</h1>
+                <h1 className="break-words text-2xl sm:text-3xl font-bold tracking-tight">{fullName}</h1>
               </div>
-              <p className="mt-1 text-sm text-neutral-400 flex items-center gap-2">
-                <span>{user.email}</span>
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-400">
+                <span className="break-all">{user.email}</span>
                 {user.phoneNumber && (
                   <>
                     <span>·</span>
-                    <span>{user.phoneNumber}</span>
+                    <span className="break-all">{user.phoneNumber}</span>
                   </>
                 )}
               </p>

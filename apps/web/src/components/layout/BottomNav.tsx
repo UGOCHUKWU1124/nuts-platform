@@ -9,15 +9,28 @@ import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/component/notification/NotificationBell";
 import { useAuthStore } from "@/zustand/auth";
 
+const VENDOR_PORTAL_ROUTES = [
+  "/vendor/analytic",
+  "/vendor/discount",
+  "/vendor/notifications",
+  "/vendor/order",
+  "/vendor/product",
+  "/vendor/setting",
+  "/vendor/wallet",
+];
+
 export function BottomNav() {
   const pathname = usePathname();
   const isMounted = useHydrated();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
+  const isVendorPortalRoute = VENDOR_PORTAL_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
 
   // Do not render bottom nav on admin, vendor, or checkout screens to avoid clashing with forms/flows
-  if (pathname.startsWith("/admin") || pathname.startsWith("/vendor") || pathname.startsWith("/checkout")) {
+  if (pathname.startsWith("/admin") || isVendorPortalRoute || pathname.startsWith("/checkout")) {
     return null;
   }
 
