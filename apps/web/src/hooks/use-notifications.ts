@@ -57,3 +57,8 @@ export function useNotifications() {
     clearAll: useNotificationsStore.getState().clearAll,
   };
 }
+
+export function NotificationStreamHost() {
+  useNotifications();
+  return null;
+}
