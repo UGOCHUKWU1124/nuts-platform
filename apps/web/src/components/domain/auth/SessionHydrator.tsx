@@ -12,6 +12,14 @@ export function SessionHydrator({ children }: { children: React.ReactNode }) {
   const syncActiveRole = useAuthStore((state) => state.syncActiveRole);
 
   useEffect(() => {
+    try {
+      window.sessionStorage.removeItem("nuts-auth-storage");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "SecurityError")) {
+        throw error;
+      }
+    }
+
     syncActiveRole();
     hydrateFromCookies();
 

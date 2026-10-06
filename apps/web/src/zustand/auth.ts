@@ -21,7 +21,6 @@ import { authBroadcast } from "@/lib/auth-events";
 import { clearBrowserQueryClient } from "@/lib/query-client";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 import { create } from "zustand";
-import { createJSONStorage,persist } from "zustand/middleware";
 import { clearWishlistOnLogout } from "./wishlist";
 
 export type AuthStatus = "unknown" | "hydrating" | "authenticated" | "unauthenticated";
@@ -123,8 +122,7 @@ export interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       status: "unknown",
       user: null,
       role: null,
@@ -364,41 +362,5 @@ export const useAuthStore = create<AuthState>()(
           get().clearSession(currentRole);
         }
       },
-    }),
-    {
-      name: "nuts-auth-storage",
-      storage: createJSONStorage(() =>
-        typeof window !== "undefined"
-          ? window.sessionStorage
-          : {
-              getItem: () => null,
-              setItem: () => {},
-              removeItem: () => {},
-            }
-      ),
-      partialize: (state) => ({
-        sessions: state.sessions,
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (!state) return;
-        const activeRole = getActiveRole();
-        const activeSession = state.sessions?.[activeRole];
-        if (activeSession?.user) {
-          state.user = activeSession.user;
-          state.role = activeRole;
-          state.status = "authenticated";
-          state.isAuthenticated = true;
-          state.isLoading = false;
-          state.isInitialized = true;
-        } else {
-          state.user = null;
-          state.role = null;
-          state.status = "unauthenticated";
-          state.isAuthenticated = false;
-          state.isLoading = false;
-          state.isInitialized = true;
-        }
-      },
-    }
-  )
+  })
 );
