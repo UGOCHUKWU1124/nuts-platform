@@ -2,7 +2,7 @@ import {
 AppNotification,
 notificationsApi,
 } from "@/api/notifications";
-import { useAuthStore } from "@/zustand/auth";
+import { useAuthStore, type AuthRole } from "@/zustand/auth";
 import { create } from "zustand";
 
 interface NotificationsState {
@@ -21,7 +21,7 @@ interface NotificationsState {
   clearAll: () => Promise<void>;
   addNotification: (notification: AppNotification) => void;
   reset: () => void;
-  initStream: () => () => void;
+  initStream: (role: AuthRole) => () => void;
 }
 
 let globalEventSource: EventSource | null = null;
@@ -206,7 +206,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       });
     },
 
-  initStream: () => {
+  initStream: (role) => {
     if (typeof window === "undefined") return () => {};
 
     streamRefCount++;
@@ -225,10 +225,16 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     let sseRetryCount = 0;
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+    const routeByRole: Record<AuthRole, string> = {
+      user: "notifications/sse",
+      admin: "admin/notifications/sse",
+      vendor: "vendors/notifications/sse",
+    };
+    const route = routeByRole[role];
     const sseUrl =
       typeof window !== "undefined" && backendUrl
-        ? `${backendUrl}/api/v1/notifications/sse`
-        : `${apiUrl}/notifications/sse`;
+        ? `${backendUrl}/api/v1/${route}`
+        : `${apiUrl}/${route}`;
 
     const connect = () => {
       try {

@@ -27,7 +27,7 @@ function applyThemeToDOM(resolved: "light" | "dark") {
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  theme: "system",
+  theme: "light",
   resolvedTheme: "light",
 
   setTheme: (newTheme: ThemeMode) => {
@@ -46,7 +46,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   initTheme: () => {
     if (typeof window === "undefined") return;
 
-    let savedTheme: ThemeMode = "system";
+    let savedTheme: ThemeMode = "light";
     try {
       const stored = localStorage.getItem("nuts_theme") as ThemeMode | null;
       if (stored && ["light", "dark", "system"].includes(stored)) {

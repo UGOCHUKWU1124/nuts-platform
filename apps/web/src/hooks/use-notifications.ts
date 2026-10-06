@@ -11,9 +11,10 @@ export function useNotifications() {
   const user = useAuthStore((s) => s.user);
   const role = useAuthStore((s) => s.role);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const activeRole = role ?? user?.role ?? "user";
   const currentUserId = user?.id ?? (isAuthenticated ? "auth" : null);
   const sessionKey = currentUserId
-    ? `${(role ?? user?.role ?? "user").toLowerCase()}:${currentUserId}`
+    ? `${activeRole.toLowerCase()}:${currentUserId}`
     : null;
 
   const notifications = useNotificationsStore((s) => s.notifications);
@@ -47,8 +48,8 @@ export function useNotifications() {
     lastAuthenticatedUserId = sessionKey;
     const store = useNotificationsStore.getState();
     store.fetchUnreadCount();
-    activeSseCleanup = store.initStream();
-  }, [isAuthenticated, sessionKey]);
+    activeSseCleanup = store.initStream(activeRole);
+  }, [activeRole, isAuthenticated, sessionKey]);
 
   return {
     notifications,
