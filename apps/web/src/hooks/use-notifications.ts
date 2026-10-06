@@ -7,6 +7,30 @@ import { useEffect } from "react";
 let activeSessionKey: string | null = null;
 
 export function useNotifications() {
+  const notifications = useNotificationsStore((s) => s.notifications);
+  const unreadCount = useNotificationsStore((s) => s.unreadCount);
+  const isLoading = useNotificationsStore((s) => s.isLoading);
+  const sseConnected = useNotificationsStore((s) => s.sseConnected);
+  const hasNextPage = useNotificationsStore((s) => s.hasNextPage);
+  const nextCursor = useNotificationsStore((s) => s.nextCursor);
+
+  return {
+    notifications,
+    unreadCount,
+    isLoading,
+    sseConnected,
+    hasNextPage,
+    nextCursor,
+    fetchNotifications: useNotificationsStore.getState().fetchNotifications,
+    fetchUnreadCount: useNotificationsStore.getState().fetchUnreadCount,
+    markAsRead: useNotificationsStore.getState().markAsRead,
+    markAllAsRead: useNotificationsStore.getState().markAllAsRead,
+    deleteNotification: useNotificationsStore.getState().deleteNotification,
+    clearAll: useNotificationsStore.getState().clearAll,
+  };
+}
+
+function useNotificationStreamLifecycle() {
   const user = useAuthStore((s) => s.user);
   const role = useAuthStore((s) => s.role);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -15,13 +39,6 @@ export function useNotifications() {
   const sessionKey = currentUserId
     ? `${activeRole.toLowerCase()}:${currentUserId}`
     : null;
-
-  const notifications = useNotificationsStore((s) => s.notifications);
-  const unreadCount = useNotificationsStore((s) => s.unreadCount);
-  const isLoading = useNotificationsStore((s) => s.isLoading);
-  const sseConnected = useNotificationsStore((s) => s.sseConnected);
-  const hasNextPage = useNotificationsStore((s) => s.hasNextPage);
-  const nextCursor = useNotificationsStore((s) => s.nextCursor);
 
   useEffect(() => {
     const store = useNotificationsStore.getState();
@@ -41,24 +58,9 @@ export function useNotifications() {
     void store.fetchUnreadCount();
     return store.initStream(activeRole, sessionKey);
   }, [activeRole, isAuthenticated, sessionKey]);
-
-  return {
-    notifications,
-    unreadCount,
-    isLoading,
-    sseConnected,
-    hasNextPage,
-    nextCursor,
-    fetchNotifications: useNotificationsStore.getState().fetchNotifications,
-    fetchUnreadCount: useNotificationsStore.getState().fetchUnreadCount,
-    markAsRead: useNotificationsStore.getState().markAsRead,
-    markAllAsRead: useNotificationsStore.getState().markAllAsRead,
-    deleteNotification: useNotificationsStore.getState().deleteNotification,
-    clearAll: useNotificationsStore.getState().clearAll,
-  };
 }
 
 export function NotificationStreamHost() {
-  useNotifications();
+  useNotificationStreamLifecycle();
   return null;
 }
