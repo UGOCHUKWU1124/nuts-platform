@@ -13,7 +13,7 @@ import { Input } from "@/component/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { queryKey } from "@/lib/query-key";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { Search,ShoppingBag,SlidersHorizontal,X } from "lucide-react";
+import { Search,SlidersHorizontal,X } from "lucide-react";
 import { useEffect,useMemo,useRef,useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
@@ -30,6 +30,7 @@ export interface ProductCatalogViewProps {
   initialCategories: CategoryResponseDto[];
   initialProducts: ProductCardDto[];
   initialMeta?: PaginationMeta | CursorPaginationMeta;
+  searchPage?: boolean;
   initialFilters?: {
     categoryId?: string;
     search?: string;
@@ -45,6 +46,7 @@ export function ProductCatalogView({
   initialProducts,
   initialMeta,
   initialFilters,
+  searchPage = false,
 }: ProductCatalogViewProps) {
   const [searchInput, setSearchInput] = useState(initialFilters?.search || "");
   const search = useDebouncedValue(searchInput.trim().toLowerCase(), 300);
@@ -263,10 +265,18 @@ export function ProductCatalogView({
         <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-              {selectedCategory?.name ?? "All Products"}
+              {searchPage
+                ? search
+                  ? `Results for “${searchInput.trim()}”`
+                  : "Search the marketplace"
+                : selectedCategory?.name ?? "All Products"}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Explore authentic products from vetted independent vendors across Nigeria.
+              {searchPage
+                ? search
+                  ? `${pagination?.totalItems ?? pagination?.total ?? rawProducts.length} products matching your search.`
+                  : "Find products from independent vendors across Nigeria."
+                : "Explore authentic products from vetted independent vendors across Nigeria."}
             </p>
           </div>
 
@@ -432,13 +442,27 @@ export function ProductCatalogView({
           </div>
         ) : rawProducts.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-border py-20 text-center">
-            <ShoppingBag className="mx-auto h-12 w-12 text-muted-foreground/60" />
+            <Search className="mx-auto h-10 w-10 text-muted-foreground/60" />
             <h3 className="mt-4 text-base font-bold text-foreground">
-              No products available yet
+              {searchPage && search ? `No results for “${searchInput.trim()}”` : searchPage ? "Start your search" : "No products available yet"}
             </h3>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-              Check back soon as new products are being added.
+              {searchPage
+                ? search
+                  ? "Try a different keyword or adjust your filters."
+                  : "Enter a product name or keyword above to explore the marketplace."
+                : "Check back soon as new products are being added."}
             </p>
+            {searchPage && search && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetFilters}
+                className="mt-4 rounded-full"
+              >
+                Clear search
+              </Button>
+            )}
           </div>
         ) : filteredGroups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border py-16 text-center">

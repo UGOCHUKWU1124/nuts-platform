@@ -66,10 +66,15 @@ export default function CheckoutPage() {
   // If user doesn't have a default address, stay in "new" address mode
   const effectiveAddressMode = hasDefaultAddress ? addressMode : "new";
 
-  const { data: cartData, isLoading: cartLoading } = useQuery({
+  const {
+    data: cartData,
+    isLoading: cartLoading,
+    isError: cartError,
+    refetch: refetchCart,
+  } = useQuery({
     queryKey: queryKey.cart,
     queryFn: async () => (await cartService.get()).data,
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 20,
   });
 
@@ -141,7 +146,11 @@ export default function CheckoutPage() {
 
       if (directUrl) {
         const checkoutUrl = safePaystackCheckoutUrl(directUrl);
-        if (!checkoutUrl) throw new Error("Invalid Paystack checkout URL");
+        if (!checkoutUrl) {
+          toast.error("The payment provider returned an invalid checkout link.");
+          router.push(`/order/${encodeURIComponent(orderId)}`);
+          return;
+        }
         window.location.assign(checkoutUrl);
         return;
       }
@@ -150,15 +159,21 @@ export default function CheckoutPage() {
         const { data: payment } = await paymentService.getByOrderId(orderId);
         if (payment.paymentLink) {
           const checkoutUrl = safePaystackCheckoutUrl(payment.paymentLink);
-          if (!checkoutUrl) throw new Error("Invalid Paystack checkout URL");
+          if (!checkoutUrl) {
+            toast.error("The payment provider returned an invalid checkout link.");
+            router.push(`/order/${encodeURIComponent(orderId)}`);
+            return;
+          }
           window.location.assign(checkoutUrl);
           return;
         }
-      } catch {
-        // Fall back to success page
+      } catch (error: unknown) {
+        toast.error(
+          `Your order was created, but payment could not be opened. Continue from your order details. ${getApiErrorMessage(error, "")}`.trim()
+        );
       }
 
-      router.push(`/order-success?orderId=${encodeURIComponent(orderId)}`);
+      router.push(`/order/${encodeURIComponent(orderId)}`);
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Checkout failed. Please review your address.")),
@@ -188,7 +203,9 @@ export default function CheckoutPage() {
             country: v.country || "Nigeria",
             isDefault: true,
           })
-          .catch(() => {});
+          .catch((error: unknown) => {
+            toast.error(getApiErrorMessage(error, "Your address could not be saved as default"));
+          });
       }
     } else {
       return;
@@ -246,6 +263,29 @@ export default function CheckoutPage() {
     );
   }
 
+  if (cartError) {
+    return (
+      <CustomerLayout>
+        <div className="mx-auto max-w-md px-4 py-20 text-center">
+          <ShoppingBag className="mx-auto h-10 w-10 text-muted-foreground" />
+          <h1 className="mt-4 text-xl font-semibold text-foreground">
+            We couldn&apos;t load your cart
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your cart has not been cleared. Try loading it again before continuing to checkout.
+          </p>
+          <Button
+            type="button"
+            onClick={() => void refetchCart()}
+            className="mt-5"
+          >
+            Try again
+          </Button>
+        </div>
+      </CustomerLayout>
+    );
+  }
+
   const items = cartData?.cartItems ?? [];
   const subtotal = cartData?.cart.subtotal ?? 0;
   const deliveryCharge = cartData?.cart.deliveryCharge ?? 0;
@@ -272,9 +312,9 @@ export default function CheckoutPage() {
 
   return (
     <CustomerLayout>
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-3 pb-28 pt-5 sm:px-6 sm:py-8 lg:px-8 lg:pb-8">
         {/* Navigation & Header */}
-        <div className="mb-8 flex items-center justify-between border-b border-border pb-5">
+        <div className="mb-6 flex items-center justify-between border-b border-border pb-4 sm:mb-8 sm:pb-5">
           <div>
             <Link
               href="/cart"
@@ -283,16 +323,16 @@ export default function CheckoutPage() {
               <ArrowLeft className="h-4.5 w-4.5" />
               <span>Back to shopping cart</span>
             </Link>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
               Checkout
             </h1>
           </div>
         </div>
 
         {/* Two-Column Checkout Layout */}
-        <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px] items-start">
+        <div className="grid items-start gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-12">
           {/* Left Column: Checkout Forms */}
-          <div className="space-y-10">
+          <div className="space-y-5 sm:space-y-8">
             <FormProvider {...form}>
               <form
                 id="checkout-form"
@@ -304,15 +344,15 @@ export default function CheckoutPage() {
                       }
                     : form.handleSubmit((v) => handleCheckoutSubmit(v))
                 }
-                className="space-y-8"
+                className="space-y-5 sm:space-y-8"
               >
                 {/* Step 1: Delivery Address */}
-                <div className="rounded-3xl border border-neutral-200/90 bg-white p-6 sm:p-8 shadow-xs">
+                <div className="rounded-2xl border border-border bg-card p-4 shadow-xs sm:rounded-3xl sm:p-8">
                   <div className="flex items-center gap-3 mb-6">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                       1
                     </span>
-                    <h2 className="text-lg font-semibold text-neutral-900">
+                    <h2 className="text-lg font-semibold text-foreground">
                       Shipping &amp; Delivery Address
                     </h2>
                   </div>
@@ -326,21 +366,21 @@ export default function CheckoutPage() {
                           onClick={() => setAddressMode("default")}
                           className={`rounded-2xl border p-4 text-left transition-all cursor-pointer ${
                             effectiveAddressMode === "default"
-                              ? "border-black bg-neutral-50/80 shadow-xs ring-1 ring-black"
-                              : "border-neutral-200 hover:border-neutral-300 bg-white"
+                              ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary"
+                              : "border-border hover:border-primary/50 bg-card"
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-neutral-900">
+                            <span className="text-sm font-semibold text-foreground">
                               Use Default Address
                             </span>
                             {effectiveAddressMode === "default" && (
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-black text-white text-xs font-semibold">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                                 ✓
                               </span>
                             )}
                           </div>
-                          <p className="mt-1.5 text-xs text-neutral-600 line-clamp-1">
+                          <p className="mt-1.5 line-clamp-1 text-xs text-muted-foreground">
                             {defaultAddress.street}, {defaultAddress.city}
                           </p>
                         </button>
@@ -350,21 +390,21 @@ export default function CheckoutPage() {
                           onClick={() => setAddressMode("new")}
                           className={`rounded-2xl border p-4 text-left transition-all cursor-pointer ${
                             effectiveAddressMode === "new"
-                              ? "border-black bg-neutral-50/80 shadow-xs ring-1 ring-black"
-                              : "border-neutral-200 hover:border-neutral-300 bg-white"
+                              ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary"
+                              : "border-border hover:border-primary/50 bg-card"
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-neutral-900">
+                            <span className="text-sm font-semibold text-foreground">
                               New Address
                             </span>
                             {effectiveAddressMode === "new" && (
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-black text-white text-xs font-semibold">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                                 ✓
                               </span>
                             )}
                           </div>
-                          <p className="mt-1.5 text-xs text-neutral-500">
+                          <p className="mt-1.5 text-xs text-muted-foreground">
                             Deliver to different location
                           </p>
                         </button>
@@ -372,12 +412,12 @@ export default function CheckoutPage() {
 
                       {/* Display summary of default address when selected */}
                       {effectiveAddressMode === "default" && (
-                        <div className="rounded-2xl border border-neutral-200/80 bg-neutral-50/60 p-4 text-sm space-y-1">
+                        <div className="space-y-1 rounded-2xl border border-border bg-secondary/40 p-4 text-sm">
                           <div className="flex items-center justify-between">
-                            <p className="font-semibold text-neutral-900">{defaultAddress.fullName}</p>
-                            <span className="text-neutral-500">{defaultAddress.phone}</span>
+                            <p className="font-semibold text-foreground">{defaultAddress.fullName}</p>
+                            <span className="text-muted-foreground">{defaultAddress.phone}</span>
                           </div>
-                          <p className="text-neutral-600">
+                          <p className="text-muted-foreground">
                             {defaultAddress.street}, {defaultAddress.city}, {defaultAddress.state},{" "}
                             {defaultAddress.country || "Nigeria"}
                           </p>
@@ -390,7 +430,7 @@ export default function CheckoutPage() {
                   {effectiveAddressMode === "new" && (
                     <div className="space-y-4">
                       {hasDefaultAddress && (
-                        <p className="text-xs font-medium text-neutral-500 mb-2">
+                        <p className="mb-2 text-xs font-medium text-muted-foreground">
                           Please enter the delivery information for this order:
                         </p>
                       )}
@@ -438,12 +478,12 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="pt-2">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs text-neutral-700">
+                        <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                           <input
                             type="checkbox"
                             checked={saveAsDefault}
                             onChange={(e) => setSaveAsDefault(e.target.checked)}
-                            className="h-4 w-4 rounded accent-black"
+                            className="h-4 w-4 rounded accent-primary"
                           />
                           <span>Save as my default shipping address</span>
                         </label>
@@ -453,57 +493,57 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Step 2: Delivery Method */}
-                <div className="rounded-3xl border border-neutral-200/90 bg-white p-6 sm:p-8 shadow-xs">
+                <div className="rounded-2xl border border-border bg-card p-4 shadow-xs sm:rounded-3xl sm:p-8">
                   <div className="flex items-center gap-3 mb-6">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                       2
                     </span>
-                    <h2 className="text-lg font-semibold text-neutral-900">
+                    <h2 className="text-lg font-semibold text-foreground">
                       Delivery Method
                     </h2>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-2xl border-2 border-black bg-neutral-50/50 p-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
-                        <Truck className="h-5 w-5" />
+                  <div className="flex items-start justify-between gap-3 rounded-2xl border-2 border-primary bg-primary/5 p-3 sm:items-center sm:p-4">
+                    <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-3.5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground sm:h-10 sm:w-10">
+                        <Truck className="h-4 w-4 sm:h-5 sm:w-5" />
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-neutral-900">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">
                           Standard Express Dispatch
                         </p>
-                        <p className="text-xs text-neutral-500">
+                        <p className="text-xs text-muted-foreground">
                           Estimated 24 – 48 business hours
                         </p>
                       </div>
                     </div>
-                    <span className="text-xs font-semibold text-neutral-900">
+                    <span className="shrink-0 pt-1 text-xs font-semibold text-foreground sm:pt-0">
                       {deliveryCharge > 0 ? formatPrice(deliveryCharge) : "Free"}
                     </span>
                   </div>
                 </div>
 
                 {/* Step 3: Payment Method */}
-                <div className="rounded-3xl border border-neutral-200/90 bg-white p-6 sm:p-8 shadow-xs">
+                <div className="rounded-2xl border border-border bg-card p-4 shadow-xs sm:rounded-3xl sm:p-8">
                   <div className="flex items-center gap-3 mb-6">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                       3
                     </span>
-                    <h2 className="text-lg font-semibold text-neutral-900">
+                    <h2 className="text-lg font-semibold text-foreground">
                       Payment Gateway
                     </h2>
                   </div>
 
-                  <div className="rounded-2xl border border-neutral-200 p-4 space-y-3 bg-neutral-50/50">
+                  <div className="space-y-3 rounded-2xl border border-border bg-secondary/30 p-3 sm:p-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="h-5 w-5 text-neutral-700" />
+                      <div className="flex min-w-0 items-start gap-3 sm:items-center">
+                        <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-foreground sm:mt-0" />
                         <div>
-                          <p className="text-sm font-bold text-neutral-900">
+                          <p className="text-sm font-bold text-foreground">
                             Paystack Secure Checkout
                           </p>
-                          <p className="text-xs text-neutral-500">
-                            Pay via Debit Card, Bank Transfer, USSD, or Apple Pay
+                          <p className="text-xs leading-5 text-muted-foreground">
+                            Securely pay by card, bank transfer, or USSD on Paystack.
                           </p>
                         </div>
                       </div>
@@ -516,13 +556,13 @@ export default function CheckoutPage() {
           </div>
 
           {/* Right Column: Sticky Order Summary */}
-          <aside className="sticky top-24 rounded-3xl border border-border bg-card p-6 sm:p-7 shadow-xs space-y-6">
+          <aside className="space-y-5 rounded-2xl border border-border bg-card p-4 shadow-xs sm:space-y-6 sm:rounded-3xl sm:p-7 lg:sticky lg:top-24">
             <h2 className="text-lg font-bold text-foreground">
               Order Review ({items.length})
             </h2>
 
             {/* Itemized List */}
-            <div className="max-h-72 overflow-y-auto divide-y divide-border/70 pr-1 [scrollbar-width:thin]">
+            <div className="max-h-56 divide-y divide-border/70 overflow-y-auto pr-1 [scrollbar-width:thin] sm:max-h-72">
               {items.map((item) => {
                 const img =
                   item.product.images && item.product.images.length > 0
@@ -654,8 +694,8 @@ export default function CheckoutPage() {
             <Button
               type="submit"
               form="checkout-form"
-              disabled={checkoutMutation.isPending}
-              className="w-full rounded-full bg-primary text-primary-foreground hover:bg-primary/90 py-6 text-base font-semibold transition-all shadow-md flex items-center justify-center gap-2"
+              disabled={checkoutMutation.isPending || isApplyingPromo}
+              className="hidden w-full rounded-full bg-primary py-6 text-base font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 lg:flex lg:items-center lg:justify-center lg:gap-2"
             >
               {checkoutMutation.isPending ? (
                 <>
@@ -667,6 +707,36 @@ export default function CheckoutPage() {
               )}
             </Button>
           </aside>
+        </div>
+      </div>
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 pt-3 shadow-[0_-4px_18px_rgba(0,0,0,0.08)] backdrop-blur-lg pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+        <div className="mx-auto flex max-w-2xl items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Total due
+            </p>
+            <p className="truncate text-lg font-bold text-foreground">
+              {formatPrice(totalAmount)}
+            </p>
+          </div>
+          <Button
+            type="submit"
+            form="checkout-form"
+            disabled={checkoutMutation.isPending || isApplyingPromo}
+            className="min-h-12 min-w-40 rounded-xl px-5 font-semibold"
+          >
+            {checkoutMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing…
+              </>
+            ) : (
+              <>
+                Pay securely
+                <CreditCard className="h-4 w-4" />
+              </>
+            )}
+          </Button>
         </div>
       </div>
     </CustomerLayout>
