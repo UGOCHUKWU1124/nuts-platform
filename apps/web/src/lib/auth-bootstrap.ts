@@ -96,19 +96,37 @@ export const authBootstrap = async (): Promise<void> => {
       const refreshedUser = refreshed.user;
       if (
         !refreshed.success ||
-        !refreshedUser || typeof refreshedUser !== "object" ||
-        !("id" in refreshedUser) || typeof refreshedUser.id !== "string" ||
-        !("email" in refreshedUser) || typeof refreshedUser.email !== "string"
+        !refreshedUser ||
+        typeof refreshedUser !== "object" ||
+        !("id" in refreshedUser) ||
+        typeof refreshedUser.id !== "string" ||
+        !("email" in refreshedUser) ||
+        typeof refreshedUser.email !== "string"
       ) {
         useAuthStore.getState().clearSession(currentRole);
         return;
       }
 
+      const profile = refreshedUser as Record<string, unknown>;
+      const optionalString = (value: unknown) =>
+        typeof value === "string" ? value : undefined;
+
       useAuthStore.getState().setSession({
         id: refreshedUser.id,
         email: refreshedUser.email,
-        firstName: "firstName" in refreshedUser && typeof refreshedUser.firstName === "string" ? refreshedUser.firstName : null,
-        lastName: "lastName" in refreshedUser && typeof refreshedUser.lastName === "string" ? refreshedUser.lastName : null,
+        firstName: optionalString(profile.firstName) ?? null,
+        lastName: optionalString(profile.lastName) ?? null,
+        phone: optionalString(profile.phone) ?? null,
+        phoneNumber: optionalString(profile.phoneNumber) ?? null,
+        storeName: optionalString(profile.storeName),
+        storeSlug: optionalString(profile.storeSlug),
+        storeLogoUrl:
+          typeof profile.storeLogoUrl === "string" || profile.storeLogoUrl === null
+            ? profile.storeLogoUrl
+            : undefined,
+        isVerified:
+          typeof profile.isVerified === "boolean" ? profile.isVerified : undefined,
+        isActive: typeof profile.isActive === "boolean" ? profile.isActive : undefined,
       }, currentRole);
     } catch {
       useAuthStore.getState().clearSession(currentRole);

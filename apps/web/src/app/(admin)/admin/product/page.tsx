@@ -565,8 +565,8 @@ export default function AdminProductPage() {
               setPage(1);
             }}
             filters={[
-              { value: "active", label: "Active Products" },
-              { value: "inactive", label: "Inactive Products" },
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
             ]}
           />
         </div>

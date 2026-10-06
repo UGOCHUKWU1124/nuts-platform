@@ -19,6 +19,7 @@ Tag,
 X,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
+import { useRouter } from "next/navigation";
 import { useEffect,useMemo,useRef,useState } from "react";
 
 import { useDebouncedValue } from "@/hook/use-debounced-value";
@@ -50,6 +51,7 @@ export function GlobalSearchBar({
   className = "",
   categories,
 }: GlobalSearchBarProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query.trim(), 160);
   const [isOpen, setIsOpen] = useState(false);
@@ -117,8 +119,10 @@ export function GlobalSearchBar({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-    setIsOpen(true);
+    const searchTerm = query.trim();
+    if (searchTerm.length < 2) return;
+    setIsOpen(false);
+    router.push(`/search?q=${encodeURIComponent(searchTerm)}`);
   };
 
   const handleTagClick = (tag: string) => {
@@ -162,6 +166,8 @@ export function GlobalSearchBar({
         <input
           type="text"
           value={query}
+          maxLength={100}
+          aria-label="Search products, vendors, and categories"
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
@@ -344,10 +350,16 @@ export function GlobalSearchBar({
                   </div>
                 </div>
               )}
-
-              {/* Bottom link */}
             </div>
           )}
+          <Link
+            href={`/search?q=${encodeURIComponent(query.trim())}`}
+            onClick={() => setIsOpen(false)}
+            className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-secondary"
+          >
+            View all results for “{query.trim()}”
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       )}
     </div>

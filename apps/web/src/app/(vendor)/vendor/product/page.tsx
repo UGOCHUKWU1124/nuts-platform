@@ -393,15 +393,15 @@ export default function DashboardProductPage() {
     },
     {
       key: "isActive",
-      header: "Visibility",
+      header: "Status",
       render: (r) =>
         r.isActive ? (
           <Badge variant="success" className="text-xs font-semibold">
-            Live on Store
+            Active
           </Badge>
         ) : (
           <Badge variant="muted" className="text-xs font-semibold">
-            Hidden
+            Inactive
           </Badge>
         ),
     },
@@ -442,7 +442,7 @@ export default function DashboardProductPage() {
           <Button
             variant="ghost"
             size="sm"
-            title={r.isActive ? "Hide from store" : "Publish to store"}
+            title={r.isActive ? "Deactivate product" : "Activate product"}
             className={`h-8 w-8 p-0 rounded-lg ${
               r.isActive
                 ? "text-amber-500 hover:text-amber-600"
@@ -500,8 +500,8 @@ export default function DashboardProductPage() {
           setPage(1);
         }}
         filters={[
-          { value: "active", label: "Live Listings" },
-          { value: "inactive", label: "Hidden Items" },
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
         ]}
       />
 

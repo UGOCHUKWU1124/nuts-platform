@@ -144,7 +144,7 @@ export const performTokenRefresh = async (
       return {
         success: true,
         accessToken: data.accessToken,
-        user: data.user,
+        user: data.user ?? data.vendor,
       };
     }
     return { success: false };
