@@ -31,7 +31,10 @@ export class AuthSessionService {
       !Object.values(ROLE).includes(payload.role) ||
       (expectedRole && payload.role !== expectedRole) ||
       !Number.isInteger(payload.tokenVersion) ||
-      payload.tokenVersion < 0
+      payload.tokenVersion < 0 ||
+      (payload.sessionId !== undefined &&
+        (typeof payload.sessionId !== 'string' ||
+          payload.sessionId.length === 0))
     ) {
       throw new UnauthorizedException('Invalid access token');
     }
@@ -68,7 +71,25 @@ export class AuthSessionService {
       throw new UnauthorizedException('Session has been revoked');
     }
 
-    return this.toAuthenticatedUser(account);
+    if (payload.role === ROLE.USER && payload.sessionId) {
+      const session = await this.prisma.userAuthSession.findFirst({
+        where: {
+          id: payload.sessionId,
+          userId: payload.sub,
+          tokenVersion: payload.tokenVersion,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+      if (!session) {
+        throw new UnauthorizedException('User session has been revoked');
+      }
+    }
+
+    // Session-less user tokens are accepted only for their remaining JWT
+    // lifetime while old API instances drain during the additive migration.
+    return this.toAuthenticatedUser(account, payload.sessionId);
   }
 
   private async findAccount(userId: string, role: ROLE) {
@@ -135,19 +156,23 @@ export class AuthSessionService {
     }
   }
 
-  private toAuthenticatedUser(account: {
-    id: string;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-    role: ROLE;
-  }): AuthenticatedUser {
+  private toAuthenticatedUser(
+    account: {
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      role: ROLE;
+    },
+    sessionId?: string,
+  ): AuthenticatedUser {
     return {
       id: account.id,
       email: account.email,
       role: account.role,
       firstName: account.firstName,
       lastName: account.lastName,
+      ...(sessionId ? { sessionId } : {}),
     };
   }
 }

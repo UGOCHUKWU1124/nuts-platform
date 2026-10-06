@@ -1,6 +1,6 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { Prisma } from '@prisma/client';
+import { Prisma, ROLE } from '@prisma/client';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { ReferralService } from '@api/modules/referral/referral.service';
@@ -63,6 +63,9 @@ describe('AuthService', () => {
     };
 
     mockRefreshSessionService = {
+      revokeSession: jest.fn().mockResolvedValue(undefined),
+      revokeUserSession: jest.fn().mockResolvedValue(undefined),
+      revokeUserSessionByRefreshToken: jest.fn().mockResolvedValue(undefined),
       issueUserSession: jest.fn().mockResolvedValue({
         tokens: {
           accessToken: 'access-jwt-token',
@@ -221,6 +224,45 @@ describe('AuthService', () => {
           password: 'StrongPassword123!',
         }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes only the current user device session', async () => {
+      await service.logout('u-1', ROLE.USER, 'device-session-1');
+
+      expect(mockRefreshSessionService.revokeUserSession).toHaveBeenCalledWith(
+        'u-1',
+        'device-session-1',
+      );
+      expect(mockRefreshSessionService.revokeSession).not.toHaveBeenCalled();
+    });
+
+    it('uses the verified legacy refresh cookie to revoke its migrated device session', async () => {
+      await service.logout(
+        'u-1',
+        ROLE.USER,
+        undefined,
+        'signed-refresh-cookie',
+      );
+
+      expect(
+        mockRefreshSessionService.revokeUserSessionByRefreshToken,
+      ).toHaveBeenCalledWith('u-1', 'signed-refresh-cookie');
+      expect(mockRefreshSessionService.revokeSession).not.toHaveBeenCalled();
+    });
+
+    it('retains account-wide revocation for the separate admin and vendor flows', async () => {
+      await service.logout('admin-1', ROLE.ADMIN, undefined);
+
+      expect(mockRefreshSessionService.revokeSession).toHaveBeenCalledWith(
+        'admin-1',
+        ROLE.ADMIN,
+        true,
+      );
+      expect(
+        mockRefreshSessionService.revokeUserSession,
+      ).not.toHaveBeenCalled();
     });
   });
 });
