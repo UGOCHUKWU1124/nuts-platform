@@ -46,6 +46,7 @@ export class VendorAnalyticsService {
       revenueTrendRows,
       orderTrendRows,
       distinctOrders,
+      variantProducts,
     ] = await Promise.all([
       this.prisma.product.count({
         where: { vendorId, isDeleted: false },
@@ -118,19 +119,42 @@ export class VendorAnalyticsService {
       this.prisma.order.count({
         where: { orderItems: { some: { vendorId } }, ...notCancelled },
       }),
+      this.prisma.product.findMany({
+        where: { vendorId, isDeleted: false, hasVariants: true },
+        select: {
+          id: true,
+          variants: {
+            where: { isDeleted: false, isActive: true },
+            select: { stock: true },
+          },
+        },
+      }),
     ]);
 
-    // ── Compute variant-specific low stock / out of stock ──
-    const variantProducts = await this.prisma.product.findMany({
-      where: { vendorId, isDeleted: false, hasVariants: true },
-      select: {
-        id: true,
-        variants: {
-          where: { isDeleted: false, isActive: true },
-          select: { stock: true },
-        },
-      },
-    });
+    const totalRevenue = Number(totalRevenueAgg._sum.totalPrice ?? 0);
+
+    const [topProducts, customers, productsSoldAgg, recentOrders] =
+      await Promise.all([
+        this.getTopProducts(vendorId, top),
+        this.getCustomerSummary(vendorId, totalRevenue, distinctOrders),
+        this.prisma.orderItem.aggregate({
+          where: { vendorId, order: notCancelled },
+          _sum: { quantity: true },
+        }),
+        this.prisma.order.findMany({
+          where: { orderItems: { some: { vendorId } }, ...notCancelled },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+            _count: { select: { orderItems: true } },
+          },
+        }),
+      ]);
 
     let variantLowStockCount = 0;
     let variantOutOfStockCount = 0;
@@ -161,7 +185,6 @@ export class VendorAnalyticsService {
     );
 
     // ── Revenue calculations (DB-side aggregates) ──
-    const totalRevenue = Number(totalRevenueAgg._sum.totalPrice ?? 0);
     const revenueInPeriod = Number(revenueInPeriodAgg._sum.totalPrice ?? 0);
 
     // ── Trends (day buckets come pre-aggregated from the database — the
@@ -191,37 +214,8 @@ export class VendorAnalyticsService {
           : 0,
     }));
 
-    // ── Top products ──
-    const topProducts = await this.getTopProducts(vendorId, top);
-
-    // ── Customer insights ──
-    const customers = await this.getCustomerSummary(
-      vendorId,
-      totalRevenue,
-      distinctOrders,
-    );
-
     // ── Products sold (total units across all order items) ──
-    const productsSoldAgg = await this.prisma.orderItem.aggregate({
-      where: { vendorId, order: notCancelled },
-      _sum: { quantity: true },
-    });
     const productsSold = productsSoldAgg._sum.quantity ?? 0;
-
-    // ── Recent orders (latest 10) ──
-    const recentOrders = await this.prisma.order.findMany({
-      where: { orderItems: { some: { vendorId } }, ...notCancelled },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        totalAmount: true,
-        createdAt: true,
-        _count: { select: { orderItems: true } },
-      },
-    });
 
     // ── Conversion rate ──
     const conversionRate =
@@ -327,33 +321,28 @@ export class VendorAnalyticsService {
     totalRevenue: number,
     distinctOrders: number,
   ) {
-    // Unique buyers for this vendor's products
-    const [{ count: totalBuyers }] = await this.prisma.$queryRaw<
-      { count: bigint }[]
-    >`
-      SELECT COUNT(DISTINCT o."userId") as count FROM "order_items" oi
-      JOIN "orders" o ON o.id = oi."orderId"
-      WHERE oi."vendorId" = ${vendorId} AND o.status != 'CANCELLED'
-    `;
-
-    // Repeat buyers (>1 order with this vendor's products)
-    const [{ count: repeatBuyers }] = await this.prisma.$queryRaw<
-      { count: bigint }[]
-    >`
-      SELECT COUNT(*) as count FROM (
-        SELECT o."userId" FROM "order_items" oi
+    const [buyers, repeaters] = await Promise.all([
+      this.prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(DISTINCT o."userId") as count FROM "order_items" oi
         JOIN "orders" o ON o.id = oi."orderId"
         WHERE oi."vendorId" = ${vendorId} AND o.status != 'CANCELLED'
-        GROUP BY o."userId" HAVING COUNT(DISTINCT o.id) > 1
-      ) AS repeaters
-    `;
+      `,
+      this.prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM (
+          SELECT o."userId" FROM "order_items" oi
+          JOIN "orders" o ON o.id = oi."orderId"
+          WHERE oi."vendorId" = ${vendorId} AND o.status != 'CANCELLED'
+          GROUP BY o."userId" HAVING COUNT(DISTINCT o.id) > 1
+        ) AS repeaters
+      `,
+    ]);
 
     // AOV = lifetime revenue / distinct non-cancelled orders
     const aov = distinctOrders > 0 ? totalRevenue / distinctOrders : 0;
 
     return {
-      totalBuyers: Number(totalBuyers),
-      repeatBuyers: Number(repeatBuyers),
+      totalBuyers: Number(buyers[0]?.count ?? 0),
+      repeatBuyers: Number(repeaters[0]?.count ?? 0),
       averageOrderValue: aov.toFixed(2),
     };
   }

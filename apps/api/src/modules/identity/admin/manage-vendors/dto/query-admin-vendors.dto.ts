@@ -7,6 +7,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { ToBoolean } from '@api/modules/shared/decorators/to-boolean.decorator';
 
 export class QueryAdminVendorsDto {
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
@@ -32,19 +33,19 @@ export class QueryAdminVendorsDto {
 
   @ApiPropertyOptional({ description: 'Filter by active state' })
   @IsOptional()
-  @Type(() => Boolean)
+  @ToBoolean()
   @IsBoolean()
   isActive?: boolean;
 
   @ApiPropertyOptional({ description: 'Filter by approval state' })
   @IsOptional()
-  @Type(() => Boolean)
+  @ToBoolean()
   @IsBoolean()
   isApproved?: boolean;
 
   @ApiPropertyOptional({ description: 'Filter by verification state' })
   @IsOptional()
-  @Type(() => Boolean)
+  @ToBoolean()
   @IsBoolean()
   isVerified?: boolean;
 }
