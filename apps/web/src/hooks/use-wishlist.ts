@@ -60,10 +60,10 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
 
   // Show error if fetch fails (inside effect, not during render)
   useEffect(() => {
-    if (error) {
+    if (isAuthenticated && error) {
       toast.error("Failed to load wishlist");
     }
-  }, [error]);
+  }, [error, isAuthenticated]);
 
   // Map server items to view items, or use guest items for unauthenticated users
   const items: WishlistViewItem[] = isAuthenticated

@@ -68,7 +68,6 @@ export function ProductDetailView({
   const {
     toggleItem,
     isInWishlist,
-    isTogglePending: isWishlistPending,
   } = useWishlist();
   const { addItem: addToCart } = useCart();
 
@@ -294,7 +293,12 @@ export function ProductDetailView({
 
   function handleAddToCart() {
     if (!isAuthenticated) {
-      toast.error("Please sign in to add items to your cart");
+      toast.error("Please sign in to add items to your cart", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push("/auth/login"),
+        },
+      });
       return;
     }
     if (p.hasVariants && !selectedVariant) {
@@ -343,6 +347,16 @@ export function ProductDetailView({
   }
 
   async function handleWishlist() {
+    if (!isAuthenticated) {
+      toast.error("Please sign in to save items to your wishlist", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push("/auth/login"),
+        },
+      });
+      return;
+    }
+
     try {
       const added = await toggleItem(
         {
@@ -372,7 +386,7 @@ export function ProductDetailView({
       : null)?.trim() || null;
 
   const content = (
-    <div className="mx-auto max-w-7xl px-3 py-5 pb-28 sm:px-6 sm:py-8 lg:px-8 xl:pb-8">
+    <div className="mx-auto max-w-7xl px-3 py-5 pb-8 sm:px-6 sm:py-8 lg:px-8">
       {/* Dynamic Breadcrumb Trail */}
       <nav
         className="mb-5 flex flex-wrap items-center gap-1.5 text-xs sm:mb-8 sm:gap-2.5 sm:text-base"
@@ -500,17 +514,17 @@ export function ProductDetailView({
           {/* Right Column: Title, Actions, Price, Accordions (Screenshot 6) */}
           <div className="flex flex-col">
             {/* Header: Title & Action Icons */}
-            <div className="flex items-start justify-between gap-4">
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
+            <div className="flex items-start justify-between gap-2 sm:gap-4">
+              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
                 {p.name}
               </h1>
 
-              <div className="flex items-center gap-2 shrink-0 pt-1">
+              <div className="flex shrink-0 items-center gap-1 pt-1 sm:gap-2">
                 <button
                   type="button"
                   onClick={handleWishlist}
                   aria-label="Save to wishlist"
-                  className="p-1.5 text-foreground hover:text-neutral-600 transition-colors"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary hover:text-neutral-600"
                 >
                   <Heart
                     className={`h-5 w-5 ${
@@ -523,7 +537,7 @@ export function ProductDetailView({
                   type="button"
                   onClick={handleShare}
                   aria-label="Share product"
-                  className="p-1.5 text-foreground hover:text-neutral-600 transition-colors"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary hover:text-neutral-600"
                 >
                   <Share2 className="h-5 w-5 stroke-[1.6]" />
                 </button>
@@ -656,7 +670,7 @@ export function ProductDetailView({
               {/* Add to Cart Pill Button */}
               <Button
                 size="lg"
-                disabled={isOutOfStock || (p.hasVariants && !selectedVariant) || addToCart.isPending}
+                disabled={isOutOfStock || addToCart.isPending}
                 onClick={handleAddToCart}
                 className="flex-1 h-12 sm:h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-bold shadow-xs transition-all"
               >
@@ -734,42 +748,6 @@ export function ProductDetailView({
           initialReviews={initialReviews}
         />
 
-        {/* ─── Sticky Mobile Add-to-Cart Bar (Instant Purchase on Mobile) ─── */}
-        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 border-t border-border/80 bg-background/95 px-3 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-md sm:px-4 xl:hidden">
-          <div className="mx-auto flex max-w-md items-center justify-between gap-3">
-            <div className="flex flex-col min-w-0">
-              <span className="text-[11px] text-muted-foreground truncate">{p.name}</span>
-              <span className="text-base font-bold text-foreground">
-                {formatPrice(basePrice * quantity)}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleWishlist}
-                aria-label={isLiked ? "Remove from wishlist" : "Add to wishlist"}
-                disabled={isWishlistPending}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-secondary/80 text-foreground transition-colors hover:bg-secondary shrink-0"
-              >
-                <Heart
-                  className={`h-4.5 w-4.5 ${
-                    isLiked ? "fill-primary text-primary" : "stroke-[1.6]"
-                  } ${isWishlistPending ? "animate-pulse" : ""}`}
-                />
-              </button>
-
-              <Button
-                size="default"
-                disabled={isOutOfStock || (p.hasVariants && !selectedVariant) || addToCart.isPending}
-                onClick={handleAddToCart}
-                className="h-10 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs sm:text-sm font-bold px-4 shadow-xs transition-all shrink-0"
-              >
-                {isOutOfStock ? "Sold Out" : "Add to Cart"}
-              </Button>
-            </div>
-          </div>
-        </div>
       </div>
   );
 
