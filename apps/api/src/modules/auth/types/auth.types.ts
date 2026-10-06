@@ -6,6 +6,7 @@ export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
   refreshId: string;
+  sessionId?: string;
 }
 
 export interface AuthSession {

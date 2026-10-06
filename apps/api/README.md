@@ -79,7 +79,7 @@ Business Modules
 
 Customer Modules
 
-* AuthModule — Customer registration, login, logout, refresh tokens, password reset, OTP verification
+* AuthModule — Customer registration, per-device login/logout and refresh sessions, password reset, OTP verification
 * UsersModule — Profile management, password change, deactivate/delete account
 * CartModule — Add, update, remove items, clear cart
 * CategoriesModule — Nested category hierarchy and slug resolution

@@ -58,8 +58,18 @@ import { ROLE } from '@prisma/client';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
+import {
+  authCookieNames,
+  AuthCookieRole,
+} from './constants/auth-cookies.constants';
 
-import { AuthCookieRole } from './constants/auth-cookies.constants';
+function getCookieValue(cookies: unknown, name: string): string | undefined {
+  if (typeof cookies !== 'object' || cookies === null || !(name in cookies)) {
+    return undefined;
+  }
+  const value = (cookies as Record<string, unknown>)[name];
+  return typeof value === 'string' ? value : undefined;
+}
 
 @ApiTags('AUTH')
 @Controller('auth')
@@ -230,19 +240,25 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<null> {
-    await this.authService.logout(
-      user.id,
-      user.role,
-      extractIpAddress(req),
-      extractUserAgent(req),
-    );
-
     const roleScope: AuthCookieRole =
       user.role === ROLE.ADMIN
         ? 'admin'
         : user.role === ROLE.VENDOR
           ? 'vendor'
           : 'user';
+    const refreshToken = getCookieValue(
+      req.cookies as unknown,
+      authCookieNames(roleScope).refresh,
+    );
+
+    await this.authService.logout(
+      user.id,
+      user.role,
+      user.sessionId,
+      refreshToken,
+      extractIpAddress(req),
+      extractUserAgent(req),
+    );
 
     this.authCookies.clearAuthCookies(res, roleScope);
 

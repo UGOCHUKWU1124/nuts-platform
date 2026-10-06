@@ -122,11 +122,29 @@ model User {
   shippingAddresses      ShippingAddress[]
   userWallet             UserWallet?
   wishlistItems          WishlistItem[]
+  authSessions           UserAuthSession[]
 
   @@index([isActive])
   @@index([scheduledPermanentDeleteAt])
   @@index([isActive, createdAt])
   @@map("users")
+}
+
+model UserAuthSession {
+  id             String    @id @default(uuid())
+  userId         String
+  tokenVersion   Int
+  refreshToken   String?
+  refreshTokenId String?   @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("user_auth_sessions")
 }
 
 model Vendor {

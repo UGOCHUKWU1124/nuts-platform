@@ -65,7 +65,10 @@ export class JwtRefreshStrategy extends PassportStrategy(
     if (
       !Object.values(ROLE).includes(payload.role) ||
       typeof payload.sub !== 'string' ||
-      typeof payload.refreshId !== 'string'
+      typeof payload.refreshId !== 'string' ||
+      (payload.sessionId !== undefined &&
+        (typeof payload.sessionId !== 'string' ||
+          payload.sessionId.length === 0))
     ) {
       throw new UnauthorizedException('Invalid refresh token');
     }

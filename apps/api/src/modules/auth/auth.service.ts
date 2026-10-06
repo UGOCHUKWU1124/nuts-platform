@@ -260,10 +260,23 @@ export class AuthService {
   async logout(
     userId: string,
     role: ROLE = ROLE.USER,
+    sessionId?: string,
+    refreshToken?: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
-    await this.refreshSessionService.revokeSession(userId, role, true);
+    if (role === ROLE.USER) {
+      if (sessionId) {
+        await this.refreshSessionService.revokeUserSession(userId, sessionId);
+      } else if (refreshToken) {
+        await this.refreshSessionService.revokeUserSessionByRefreshToken(
+          userId,
+          refreshToken,
+        );
+      }
+    } else {
+      await this.refreshSessionService.revokeSession(userId, role, true);
+    }
 
     this.fireAndForget(
       this.auditLog.log({

@@ -22,4 +22,10 @@ export type JwtPayload = {
    * Incrementing this value invalidates previously issued access tokens.
    */
   tokenVersion: number;
+
+  /**
+   * Device-scoped session identifier. Required for user sessions issued
+   * after migration; omitted by the separate admin/vendor auth flows.
+   */
+  sessionId?: string;
 };
