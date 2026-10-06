@@ -56,6 +56,8 @@ export default function CheckoutPage() {
   const { data: userProfile } = useQuery({
     queryKey: ["user", "profile"],
     queryFn: async () => (await userService.me()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const defaultAddress = userProfile?.shippingInformation ?? authUser?.shippingInformation;
@@ -67,6 +69,8 @@ export default function CheckoutPage() {
   const { data: cartData, isLoading: cartLoading } = useQuery({
     queryKey: queryKey.cart,
     queryFn: async () => (await cartService.get()).data,
+    staleTime: 1000 * 60 * 15,
+    gcTime: 1000 * 60 * 20,
   });
 
   const form = useForm<AddressForm>({

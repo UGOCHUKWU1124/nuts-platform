@@ -50,6 +50,8 @@ export default function AdminVendorPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey.admin.vendor, debouncedSearch, filter, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {

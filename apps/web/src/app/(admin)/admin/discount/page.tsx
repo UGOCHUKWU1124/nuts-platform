@@ -81,6 +81,8 @@ export default function AdminDiscountPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: queryKey.admin.discount,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await api.get<AdminDiscount[]>("/admin/discounts");
       return res.data;

@@ -21,6 +21,8 @@ export default function OrderPage() {
   const { data, isLoading } = useQuery({
     queryKey: queryKey.order.list({ page, limit: 10 }),
     queryFn: async () => await orderService.list({ page, limit: 10 }),
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   const orders: OrderSummaryDto[] = data?.data ?? [];

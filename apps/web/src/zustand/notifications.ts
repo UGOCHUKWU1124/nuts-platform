@@ -94,6 +94,11 @@ function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+function getStreamRetryDelay(attempt: number): number {
+  const backoff = Math.min(1000 * 2 ** Math.min(attempt, 6), 60_000);
+  return Math.round(backoff * (0.8 + Math.random() * 0.4));
+}
+
 function parseSseFrame(
   frame: string,
   onData: (data: string) => void,
@@ -164,10 +169,7 @@ async function consumeNotificationStream(
       console.error("Notification stream request failed", error);
       retryAttempt++;
       onConnectionChange(false);
-      await waitForRetry(
-        Math.min(1000 * 2 ** Math.min(retryAttempt, 5), 30_000),
-        signal,
-      );
+      await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
       continue;
     }
 
@@ -192,10 +194,7 @@ async function consumeNotificationStream(
       console.error(`Notification stream returned HTTP ${response.status}`);
       retryAttempt++;
       onConnectionChange(false);
-      await waitForRetry(
-        Math.min(1000 * 2 ** Math.min(retryAttempt, 5), 30_000),
-        signal,
-      );
+      await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
       continue;
     }
 
@@ -234,10 +233,7 @@ async function consumeNotificationStream(
 
     onConnectionChange(false);
     retryAttempt = Date.now() - connectedAt >= 30_000 ? 0 : retryAttempt + 1;
-    await waitForRetry(
-      Math.min(1000 * 2 ** Math.min(retryAttempt, 5), 30_000),
-      signal,
-    );
+    await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
   }
 }
 

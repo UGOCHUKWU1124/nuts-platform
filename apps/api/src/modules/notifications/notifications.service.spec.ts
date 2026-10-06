@@ -135,4 +135,21 @@ describe('NotificationsService', () => {
       service.getById('notification-1', 'user-1', ROLE.ADMIN),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('emits SSE heartbeats to keep idle notification streams open', () => {
+    jest.useFakeTimers();
+    const events: unknown[] = [];
+    const subscription = service
+      .subscribeToUserStream('user-1')
+      .subscribe((event) => events.push(event));
+
+    try {
+      jest.advanceTimersByTime(25_000);
+
+      expect(events).toEqual([{ data: { type: 'ping' } }]);
+    } finally {
+      subscription.unsubscribe();
+      jest.useRealTimers();
+    }
+  });
 });

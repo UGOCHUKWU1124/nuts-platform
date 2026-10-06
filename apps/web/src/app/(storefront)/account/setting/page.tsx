@@ -84,6 +84,8 @@ export default function AccountSettingPage() {
       const res = await userService.me();
       return res.data;
     },
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   // Referral stats — fetched only when the referral tab is active
@@ -91,6 +93,8 @@ export default function AccountSettingPage() {
     queryKey: ["referral", "stats"],
     queryFn: async () => (await referralService.getStats()).data,
     enabled: activeTab === "referral",
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   // 2. Profile Form

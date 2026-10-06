@@ -26,12 +26,16 @@ export default function WalletPage() {
   const { data: walletData, isLoading: walletLoading } = useQuery({
     queryKey: ["wallet"],
     queryFn: async () => (await walletService.getUserWallet()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   // 2. Fetch paginated transactions
   const { data: txData, isLoading: txLoading } = useQuery({
     queryKey: ["wallet", "transactions", page],
     queryFn: async () => (await walletService.getUserTransactions({ page, limit: 15 })).data,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   const transactions = txData?.data ?? [];

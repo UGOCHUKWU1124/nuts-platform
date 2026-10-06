@@ -122,6 +122,8 @@ export default function DashboardProductPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey.vendor.product, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {
@@ -144,7 +146,8 @@ export default function DashboardProductPage() {
       const res = await categoryService.getAll();
       return res.data;
     },
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   const methods = useForm<ProductFormData>({

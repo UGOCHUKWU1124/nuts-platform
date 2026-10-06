@@ -48,6 +48,8 @@ export default function VendorSettingPage() {
 
   const { data: vendor, isLoading } = useQuery({
     queryKey: ["vendor", "account"],
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
     queryFn: async () => (await vendorAccountService.getAccount()).data,
   });
 

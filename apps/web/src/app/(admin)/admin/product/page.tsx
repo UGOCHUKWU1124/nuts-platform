@@ -135,6 +135,8 @@ export default function AdminProductPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey.admin.product, debouncedSearch, status, selectedCategory, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {
@@ -154,6 +156,8 @@ export default function AdminProductPage() {
 
   const { data: vendorsData } = useQuery({
     queryKey: queryKey.admin.vendor,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await api.get<{ id: string; storeName: string; email: string }[]>(
         "/admin/vendors",
@@ -165,6 +169,8 @@ export default function AdminProductPage() {
 
   const { data: categoriesData } = useQuery({
     queryKey: queryKey.admin.category,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await adminCategoryService.get();
       return res.data;

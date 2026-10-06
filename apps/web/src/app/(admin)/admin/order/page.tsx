@@ -53,6 +53,8 @@ export default function AdminOrderPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey.admin.order, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminOrderService.list({

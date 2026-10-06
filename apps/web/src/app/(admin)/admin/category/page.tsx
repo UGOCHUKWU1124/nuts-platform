@@ -132,6 +132,8 @@ export default function AdminCategoryPage() {
 
   const { data: rawTree, isLoading } = useQuery({
     queryKey: [...queryKey.admin.category, "includeArchived"],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await adminCategoryService.get({ includeArchived: true });
       return res.data;
