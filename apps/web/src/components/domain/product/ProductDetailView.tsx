@@ -372,10 +372,10 @@ export function ProductDetailView({
       : null)?.trim() || null;
 
   const content = (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-3 py-5 pb-28 sm:px-6 sm:py-8 lg:px-8 xl:pb-8">
       {/* Dynamic Breadcrumb Trail */}
       <nav
-        className="mb-8 flex flex-wrap items-center gap-2 sm:gap-2.5 text-sm sm:text-base"
+        className="mb-5 flex flex-wrap items-center gap-1.5 text-xs sm:mb-8 sm:gap-2.5 sm:text-base"
         aria-label="Breadcrumb"
       >
         <Link
@@ -418,7 +418,7 @@ export function ProductDetailView({
       </nav>
 
       {/* ─── Main Product Details Grid (Screenshot 6 Layout) ─── */}
-      <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
+      <div className="grid grid-cols-1 gap-6 sm:gap-10 lg:grid-cols-2 lg:gap-16">
         {/* Left Column: Image Viewport & Thumbnails */}
         <div className="flex flex-col gap-4">
           <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-[#f7f7f8] flex items-center justify-center">
@@ -735,7 +735,7 @@ export function ProductDetailView({
         />
 
         {/* ─── Sticky Mobile Add-to-Cart Bar (Instant Purchase on Mobile) ─── */}
-        <div className="lg:hidden fixed bottom-14 sm:bottom-0 left-0 right-0 z-30 border-t border-border/80 bg-background/95 backdrop-blur-md px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 border-t border-border/80 bg-background/95 px-3 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-md sm:px-4 xl:hidden">
           <div className="mx-auto flex max-w-md items-center justify-between gap-3">
             <div className="flex flex-col min-w-0">
               <span className="text-[11px] text-muted-foreground truncate">{p.name}</span>

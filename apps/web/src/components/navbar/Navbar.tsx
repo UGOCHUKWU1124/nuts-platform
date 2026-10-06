@@ -29,6 +29,38 @@ import { useWishlist } from "@/hook/use-wishlist";
 import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useAuthStore } from "@/zustand/auth";
 
+function MobileSearchControl({
+  categories,
+}: {
+  categories?: CategoryResponseDto[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="xl:hidden flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        aria-label="Toggle mobile search"
+        aria-expanded={open}
+      >
+        {open ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full border-t border-border/80 bg-background/95 px-4 py-2.5 shadow-md backdrop-blur-md animate-in slide-in-from-top-2 duration-150 xl:hidden">
+          <GlobalSearchBar
+            categories={categories}
+            variant="navbar"
+            placeholder="Search products, vendors, categories..."
+            className="w-full"
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = {}) {
   const { data: cachedCategories } = usePublicCategories(categories);
   const navCategories = cachedCategories ?? categories;
@@ -36,8 +68,6 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
   const { user, isAuthenticated, role, logout } = useAuthStore();
   const isMounted = useHydrated();
   const [accountOpen, setAccountOpen] = useState(false);
-  const [mobileSearchPath, setMobileSearchPath] = useState<string | null>(null);
-  const mobileSearchOpen = mobileSearchPath === pathname;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const hasSessionCookie =
@@ -90,7 +120,9 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 lg:px-8">
         {/* Left: Category Menu, Brand Logo & Main Nav */}
         <div className="flex items-center gap-2.5 sm:gap-5 min-w-0">
-          <CategoryNavMenu categories={navCategories} />
+          <div className="hidden xl:flex">
+            <CategoryNavMenu categories={navCategories} />
+          </div>
 
           <Link href="/" className="flex shrink-0 items-center gap-1 group">
             <span className="text-xl sm:text-2xl font-bold tracking-tight text-foreground transition-transform group-hover:scale-105">
@@ -98,7 +130,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-6 ml-3">
+          <nav className="hidden xl:flex items-center gap-6 ml-3">
             <Link
               href="/"
               className={`text-sm font-medium transition-colors ${
@@ -127,7 +159,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
         </div>
 
         {/* Center: Search Bar (Desktop / Tablet) */}
-        <div className="hidden md:block flex-1 max-w-md mx-4 lg:mx-6">
+        <div className="hidden xl:block flex-1 max-w-md mx-4 lg:mx-6">
           <GlobalSearchBar
             categories={navCategories}
             variant="navbar"
@@ -139,18 +171,11 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Mobile Search Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setMobileSearchPath((current) => current === pathname ? null : pathname)}
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            aria-label="Toggle mobile search"
-          >
-            {mobileSearchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-          </button>
+          <MobileSearchControl key={pathname} categories={navCategories} />
 
           <Link
             href="/wishlist"
-            className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all ${
+            className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
               isLinkActive("/wishlist")
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -167,7 +192,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
 
           <Link
             href="/cart"
-            className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all ${
+            className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
               isLinkActive("/cart")
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -182,7 +207,11 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
             )}
           </Link>
 
-          {isMounted && isLoggedIn && <NotificationBell />}
+          {isMounted && isLoggedIn && (
+            <div className="hidden xl:block">
+              <NotificationBell />
+            </div>
+          )}
 
           {!isMounted ? (
             <div className="flex items-center gap-2 opacity-0 pointer-events-none" aria-hidden="true">
@@ -339,17 +368,6 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
         </div>
       </div>
 
-      {/* Mobile Search Dropdown */}
-      {mobileSearchOpen && (
-        <div className="md:hidden border-t border-border/80 bg-background/95 backdrop-blur-md px-4 py-2.5 shadow-md animate-in slide-in-from-top-2 duration-150">
-          <GlobalSearchBar
-            categories={categories}
-            variant="navbar"
-            placeholder="Search products, vendors, categories..."
-            className="w-full"
-          />
-        </div>
-      )}
     </header>
   );
 }
