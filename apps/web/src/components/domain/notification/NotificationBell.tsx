@@ -50,7 +50,11 @@ function formatRelativeTime(dateString: string): string {
   return `${days}d ago`;
 }
 
-export function NotificationBell() {
+export function NotificationBell({
+  placement = "header",
+}: {
+  placement?: "header" | "bottom";
+}) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -108,15 +112,25 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div
+      className={placement === "bottom" ? "relative flex min-w-0 justify-center" : "relative"}
+      ref={dropdownRef}
+    >
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus:outline-hidden"
+        className={`relative flex items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus:outline-hidden ${
+          placement === "bottom"
+            ? "min-h-11 w-full flex-col py-1"
+            : "h-9 w-9"
+        }`}
       >
         <Bell className="h-5 w-5" />
+        {placement === "bottom" && (
+          <span className="mt-1 text-[10px] tracking-tight">Alerts</span>
+        )}
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white shadow-xs animate-pulse">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -125,7 +139,13 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className={`${
+            placement === "bottom"
+              ? "fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-2 right-2 mx-auto w-auto max-w-sm sm:left-auto sm:right-4"
+              : "absolute right-0 mt-2 w-[min(24rem,calc(100vw-1rem))]"
+          } z-50 overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl animate-in fade-in zoom-in-95 duration-150`}
+        >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-secondary/30">
             <div className="flex items-center gap-2">
@@ -149,7 +169,7 @@ export function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-border/60">
+          <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto divide-y divide-border/60 sm:max-h-80">
             {recentNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
                 <Bell className="h-8 w-8 text-muted-foreground/40 mb-2" />

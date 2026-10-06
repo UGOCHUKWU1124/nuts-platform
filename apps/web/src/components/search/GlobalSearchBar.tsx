@@ -19,7 +19,6 @@ Tag,
 X,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useRouter } from "next/navigation";
 import { useEffect,useMemo,useRef,useState } from "react";
 
 import { useDebouncedValue } from "@/hook/use-debounced-value";
@@ -51,7 +50,6 @@ export function GlobalSearchBar({
   className = "",
   categories,
 }: GlobalSearchBarProps) {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query.trim(), 160);
   const [isOpen, setIsOpen] = useState(false);
@@ -120,14 +118,12 @@ export function GlobalSearchBar({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-    setIsOpen(false);
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    setIsOpen(true);
   };
 
   const handleTagClick = (tag: string) => {
     setQuery(tag);
-    setIsOpen(false);
-    router.push(`/search?q=${encodeURIComponent(tag)}`);
+    setIsOpen(true);
   };
 
   const products: ProductCardDto[] = data?.products ?? [];
@@ -218,7 +214,7 @@ export function GlobalSearchBar({
 
       {/* Autocomplete Dropdown Panel */}
       {isOpen && query.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[420px] overflow-y-auto rounded-2xl border border-border/80 bg-card/98 p-3 shadow-2xl backdrop-blur-2xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(70dvh,28rem)] overflow-y-auto rounded-2xl border border-border/80 bg-card/98 p-3 shadow-2xl backdrop-blur-2xl">
           {isLoading ? (
             <div className="flex items-center justify-center py-8 text-sm text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -350,15 +346,6 @@ export function GlobalSearchBar({
               )}
 
               {/* Bottom link */}
-              <div className="border-t border-border/40 pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                >
-                  View all results for &quot;{query}&quot; <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
             </div>
           )}
         </div>
