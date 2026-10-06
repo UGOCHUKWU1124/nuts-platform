@@ -47,7 +47,7 @@ import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
-@ApiTags('Payments')
+@ApiTags('PAYMENTS')
 @ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller(['payment', 'payments'])

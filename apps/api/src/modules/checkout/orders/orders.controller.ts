@@ -40,7 +40,7 @@ import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import type { RequestWithUser } from '@api/modules/shared/interfaces/request-with-user.interface';
 
-@ApiTags('Orders')
+@ApiTags('ORDERS')
 @ApiBearerAuth()
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
