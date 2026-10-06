@@ -1,23 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CartItemResponseDto, CartMetadataDto } from '../cart-response.dto';
+import { CartResponseDto } from '../cart-response.dto';
 
 /**
  * Response for PATCH /cart/items/:productId
- * Returns the cart summary and the item that was updated.
- * If the item quantity reached 0 and was removed, updatedItem is null.
+ * Returns the full updated cart, consistent with the service response.
  */
-export class UpdateCartItemResponseDto {
-  @ApiProperty({
-    type: () => CartMetadataDto,
-    description: 'The updated cart summary metadata',
-  })
-  cart!: CartMetadataDto;
-
-  @ApiPropertyOptional({
-    type: () => CartItemResponseDto,
-    nullable: true,
-    description:
-      'The updated cart item (null if the item was removed due to quantity reaching 0)',
-  })
-  updatedItem?: CartItemResponseDto | null;
-}
+export class UpdateCartItemResponseDto extends CartResponseDto {}

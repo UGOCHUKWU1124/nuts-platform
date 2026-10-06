@@ -6,8 +6,8 @@ ReviewResponseDto,
 } from "@/api/dto/review";
 
 export const reviewService = {
-  listByProduct(productId: string) {
-    return api.get<ReviewResponseDto[], ProductReviewsMetaDto>(`/reviews/product/${productId}`);
+  listByProduct(productId: string, signal?: AbortSignal) {
+    return api.get<ReviewResponseDto[], ProductReviewsMetaDto>(`/reviews/product/${productId}`, { signal });
   },
   create(payload: CreateReviewDto) {
     return api.post<ReviewResponseDto>("/reviews", payload);

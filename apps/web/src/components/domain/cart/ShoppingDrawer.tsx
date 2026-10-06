@@ -5,7 +5,6 @@ import { RemoteImage } from "@/component/ui/RemoteImage";
 import { cartService,orderService,paymentService,userService } from "@/api";
 import type {
 CartItemResponseDto,
-CartResponseDto,
 DiscountPreviewDto,
 } from "@/api/dto/cart";
 import type { CheckoutResponseDto } from "@/api/dto/order";
@@ -32,31 +31,9 @@ import { toast } from "sonner";
 type Address = { fullName: string; phone: string; street: string; city: string; state: string; country: string };
 const blankAddress: Address = { fullName: "", phone: "", street: "", city: "", state: "", country: "Nigeria" };
 
-function updateCartLine(current: CartResponseDto, item: CartItemResponseDto, delta: number) {
-  const target = current.cartItems.find((line) => line.productId === item.productId && line.variant?.id === item.variant?.id);
-  if (!target) return current;
-  const quantity = target.quantity + delta;
-  return {
-    ...current,
-    cartItems: quantity <= 0 ? current.cartItems.filter((line) => line !== target) : current.cartItems.map((line) => line === target ? { ...line, quantity } : line),
-    cart: { ...current.cart, subtotal: Math.max(0, current.cart.subtotal + target.price * delta), totalItemCount: Math.max(0, current.cart.totalItemCount + delta), totalAmount: Math.max(0, current.cart.totalAmount + target.price * delta) },
-  };
-}
-
 function CartLine({ item, cartAddedFrom }: { item: CartItemResponseDto; cartAddedFrom?: Record<string, string> | null }) {
-  const queryClient = useQueryClient();
-  const reconcile = () => queryClient.invalidateQueries({ queryKey: queryKey.cart });
-  const change = useMutation({
-    mutationFn: (delta: number) => cartService.updateItem(item.productId, { quantity: delta, ...(item.variant?.id ? { variantId: item.variant.id } : {}) }),
-    onMutate: async (delta) => { await queryClient.cancelQueries({ queryKey: queryKey.cart }); const previous = queryClient.getQueryData<CartResponseDto>(queryKey.cart); queryClient.setQueryData<CartResponseDto>(queryKey.cart, (current) => current ? updateCartLine(current, item, delta) : current); return { previous }; },
-    onError: (_error, _delta, context) => queryClient.setQueryData(queryKey.cart, context?.previous), onSettled: reconcile,
-  });
-  const remove = useMutation({
-    mutationFn: () => cartService.removeItem(item.productId, item.variant?.id),
-    onMutate: async () => { await queryClient.cancelQueries({ queryKey: queryKey.cart }); const previous = queryClient.getQueryData<CartResponseDto>(queryKey.cart); queryClient.setQueryData<CartResponseDto>(queryKey.cart, (current) => current ? updateCartLine(current, item, -item.quantity) : current); return { previous }; },
-    onError: (_error, _variables, context) => queryClient.setQueryData(queryKey.cart, context?.previous), onSettled: reconcile,
-  });
-  const pending = change.isPending || remove.isPending;
+  const { updateItem, removeItem } = useCart();
+  const pending = updateItem.isPending || removeItem.isPending;
   const productHref = resolveCartItemProductHref(item, cartAddedFrom);
   const closeDrawer = () => useShoppingDrawerStore.getState().close();
 
@@ -94,7 +71,7 @@ function CartLine({ item, cartAddedFrom }: { item: CartItemResponseDto; cartAdde
             <button
               aria-label="Decrease quantity"
               disabled={pending}
-              onClick={() => change.mutate(-1)}
+              onClick={() => updateItem.mutate({ productId: item.productId, delta: -1, variantId: item.variant?.id })}
               className="grid h-7 w-7 place-items-center hover:bg-secondary disabled:opacity-40"
             >
               <Minus className="h-3 w-3" />
@@ -103,7 +80,7 @@ function CartLine({ item, cartAddedFrom }: { item: CartItemResponseDto; cartAdde
             <button
               aria-label="Increase quantity"
               disabled={pending}
-              onClick={() => change.mutate(1)}
+              onClick={() => updateItem.mutate({ productId: item.productId, delta: 1, variantId: item.variant?.id })}
               className="grid h-7 w-7 place-items-center hover:bg-secondary disabled:opacity-40"
             >
               <Plus className="h-3 w-3" />
@@ -112,7 +89,7 @@ function CartLine({ item, cartAddedFrom }: { item: CartItemResponseDto; cartAdde
           <button
             aria-label="Remove from cart"
             disabled={pending}
-            onClick={() => remove.mutate()}
+            onClick={() => removeItem.mutate({ productId: item.productId, variantId: item.variant?.id })}
             className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-40"
           >
             <Trash2 className="h-4 w-4" />
@@ -123,7 +100,47 @@ function CartLine({ item, cartAddedFrom }: { item: CartItemResponseDto; cartAdde
   );
 }
 
-const POLL_MS = 2000;
+const PAYMENT_POLL_INTERVAL_MS = 2000;
+const PAYMENT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+function pollForPaymentCompletion(
+  reference: string,
+  onSuccess: () => Promise<void>
+) {
+  const deadline = Date.now() + PAYMENT_POLL_TIMEOUT_MS;
+
+  const poll = async () => {
+    let verification: PaymentResponseDto;
+    try {
+      ({ data: verification } = await paymentService.verify(reference));
+    } catch {
+      if (Date.now() >= deadline) {
+        toast.info("Payment is still being confirmed. Check your orders shortly.");
+        return;
+      }
+      window.setTimeout(() => void poll(), PAYMENT_POLL_INTERVAL_MS);
+      return;
+    }
+
+    if (verification.status === "SUCCESS") {
+      await onSuccess();
+      return;
+    }
+
+    if (["FAILED", "CANCELLED", "REFUNDED"].includes(verification.status)) {
+      toast.error("Payment was not completed. You can retry it from your orders.");
+      return;
+    }
+
+    if (Date.now() >= deadline) {
+      toast.info("Payment is still being confirmed. Check your orders shortly.");
+      return;
+    }
+    window.setTimeout(() => void poll(), PAYMENT_POLL_INTERVAL_MS);
+  };
+
+  window.setTimeout(() => void poll(), PAYMENT_POLL_INTERVAL_MS);
+}
 
 async function resolvePaymentInitialization(order: CheckoutResponseDto): Promise<{ accessCode?: string; reference?: string; redirectUrl?: string }> {
   // Preferred path: the checkout response already carries Paystack details.
@@ -157,14 +174,6 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
           const checkoutUrl = safePaystackCheckoutUrl(initialized.redirectUrl);
           if (!checkoutUrl) throw new Error("Invalid Paystack checkout URL");
           useShoppingDrawerStore.getState().close();
-          const reference = initialized.reference;
-          const poll = window.setInterval(async () => {
-            try {
-              const { data: verification }: { data: PaymentResponseDto } = await paymentService.verify(reference);
-              if (verification.status !== "SUCCESS") return;
-              window.clearInterval(poll); queryClient.removeQueries({ queryKey: queryKey.cart }); await queryClient.invalidateQueries({ queryKey: queryKey.order.all }); router.push(`/order-success?orderId=${encodeURIComponent(order.id)}`);
-            } catch { /* Paystack has not confirmed the transaction yet. */ }
-          }, POLL_MS);
           window.location.assign(checkoutUrl);
           return;
         }
@@ -173,13 +182,11 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
         const PaystackPopup = (window as typeof window & { PaystackPop?: new () => { resumeTransaction: (code: string) => void } }).PaystackPop;
         if (!PaystackPopup) throw new Error("Secure payment is still loading");
         useShoppingDrawerStore.getState().close(); new PaystackPopup().resumeTransaction(initialized.accessCode);
-        const reference = initialized.reference; const poll = window.setInterval(async () => {
-          try {
-            const { data: verification }: { data: PaymentResponseDto } = await paymentService.verify(reference);
-            if (verification.status !== "SUCCESS") return;
-            window.clearInterval(poll); queryClient.removeQueries({ queryKey: queryKey.cart }); await queryClient.invalidateQueries({ queryKey: queryKey.order.all }); router.push(`/order-success?orderId=${encodeURIComponent(order.id)}`);
-          } catch { /* Paystack has not confirmed the transaction yet. */ }
-        }, POLL_MS);
+        pollForPaymentCompletion(initialized.reference, async () => {
+          queryClient.removeQueries({ queryKey: queryKey.cart });
+          await queryClient.invalidateQueries({ queryKey: queryKey.order.all });
+          router.push(`/order-success?orderId=${encodeURIComponent(order.id)}`);
+        });
       } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to start secure payment"); }
     }, onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to start checkout"),
   });
@@ -208,8 +215,13 @@ export function ShoppingDrawer() {
   })();
   const effectiveDiscountCode = discountCode || savedDiscountCode;
   const { items: wishlist, removeItem } = useWishlist();
-  const { items: cartItems, cart, isLoading, clearCart } = useCart();
-  const { addItem: addToCart } = useCart();
+  const {
+    items: cartItems,
+    cart,
+    isLoading,
+    clearCart,
+    addItem: addToCart,
+  } = useCart();
 
   const previewDiscount = useMutation({
     mutationFn: (code: string) => cartService.previewDiscount(code).then((res) => res.data),

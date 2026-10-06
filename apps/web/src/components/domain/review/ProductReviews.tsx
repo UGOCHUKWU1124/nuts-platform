@@ -42,7 +42,7 @@ export function ProductReviews({
   const { data: reviewResponse, isLoading } = useQuery({
     queryKey: queryKey.product.review(productId),
     enabled: Boolean(productId) && !hasInitialData,
-    queryFn: () => reviewService.listByProduct(productId),
+    queryFn: ({ signal }) => reviewService.listByProduct(productId, signal),
     initialData: initialReviews ? { data: initialReviews.data, meta: initialReviews.meta } : undefined,
     staleTime: 1000 * 60 * 15,
     refetchOnMount: false,

@@ -1,14 +1,12 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { cartService } from "@/api";
-import type { CartItemResponseDto,CartResponseDto } from "@/api/dto/cart";
+import type { CartItemResponseDto } from "@/api/dto/cart";
 import { Button } from "@/component/ui/button";
 import { Card,CardContent } from "@/component/ui/card";
+import { useCart } from "@/hook/use-cart";
 import { resolveCartItemProductHref } from "@/lib/cart-path";
-import { queryKey } from "@/lib/query-key";
 import { formatPrice } from "@/lib/util";
-import { useMutation,useQueryClient } from "@tanstack/react-query";
 import { Minus,Plus,ShoppingBag,Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -20,57 +18,7 @@ export function CartItemList({
   items: CartItemResponseDto[];
   cartAddedFrom?: Record<string, string> | null;
 }) {
-  const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: queryKey.cart });
-
-  const updateItem = useMutation({
-    mutationFn: ({ productId, delta, variantId }: { productId: string; delta: number; variantId?: string }) =>
-      cartService.updateItem(productId, { quantity: delta, ...(variantId ? { variantId } : {}) }),
-    onMutate: async ({ productId, delta, variantId }) => {
-      await qc.cancelQueries({ queryKey: queryKey.cart });
-      const previous = qc.getQueryData<CartResponseDto>(queryKey.cart);
-      qc.setQueryData<CartResponseDto>(queryKey.cart, (current) => {
-        if (!current) return current;
-        const target = current.cartItems.find((line) => line.productId === productId && line.variant?.id === variantId);
-        if (!target) return current;
-        const nextQuantity = target.quantity + delta;
-        const cartItems =
-          nextQuantity <= 0
-            ? current.cartItems.filter((line) => line !== target)
-            : current.cartItems.map((line) => (line === target ? { ...line, quantity: nextQuantity } : line));
-        return {
-          ...current,
-          cartItems,
-          cart: {
-            ...current.cart,
-            totalItemCount: Math.max(0, current.cart.totalItemCount + delta),
-            subtotal: Math.max(0, current.cart.subtotal + target.price * delta),
-            totalAmount: Math.max(0, current.cart.totalAmount + target.price * delta),
-          },
-        };
-      });
-      return { previous };
-    },
-    onError: (_error, _variables, context) => qc.setQueryData(queryKey.cart, context?.previous),
-    onSettled: invalidate,
-  });
-
-  const removeItem = useMutation({
-    mutationFn: ({ productId, variantId }: { productId: string; variantId?: string }) =>
-      cartService.removeItem(productId, variantId),
-    onSuccess: () => {
-      invalidate();
-      toast.success("Item removed from cart");
-    },
-  });
-
-  const clearCart = useMutation({
-    mutationFn: () => cartService.clear(),
-    onSuccess: () => {
-      invalidate();
-      toast.success("Cart cleared");
-    },
-  });
+  const { updateItem, removeItem, clearCart } = useCart();
 
   if (items.length === 0) return null;
 
@@ -136,7 +84,12 @@ export function CartItemList({
                   variant="ghost"
                   className="h-7 w-7 text-destructive hover:bg-destructive/10"
                   disabled={removeItem.isPending}
-                  onClick={() => removeItem.mutate({ productId: item.productId, variantId: item.variant?.id })}
+                  onClick={() =>
+                    removeItem.mutate(
+                      { productId: item.productId, variantId: item.variant?.id },
+                      { onSuccess: () => toast.success("Item removed from cart") }
+                    )
+                  }
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
@@ -149,7 +102,7 @@ export function CartItemList({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => clearCart.mutate()}
+        onClick={() => clearCart.mutate(undefined, { onSuccess: () => toast.success("Cart cleared") })}
         disabled={clearCart.isPending}
         className="rounded-xl text-xs text-muted-foreground hover:text-destructive"
       >
