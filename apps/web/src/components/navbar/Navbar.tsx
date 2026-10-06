@@ -26,9 +26,12 @@ import { GlobalSearchBar } from "@/component/search/GlobalSearchBar";
 import { useCart } from "@/hook/use-cart";
 import { useHydrated } from "../../hook/use-hydrated";
 import { useWishlist } from "@/hook/use-wishlist";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useAuthStore } from "@/zustand/auth";
 
 export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = {}) {
+  const { data: cachedCategories } = usePublicCategories(categories);
+  const navCategories = cachedCategories ?? categories;
   const pathname = usePathname();
   const { user, isAuthenticated, role, logout } = useAuthStore();
   const isMounted = useHydrated();
@@ -87,7 +90,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 lg:px-8">
         {/* Left: Category Menu, Brand Logo & Main Nav */}
         <div className="flex items-center gap-2.5 sm:gap-5 min-w-0">
-          <CategoryNavMenu categories={categories} />
+          <CategoryNavMenu categories={navCategories} />
 
           <Link href="/" className="flex shrink-0 items-center gap-1 group">
             <span className="text-xl sm:text-2xl font-bold tracking-tight text-foreground transition-transform group-hover:scale-105">
@@ -126,7 +129,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
         {/* Center: Search Bar (Desktop / Tablet) */}
         <div className="hidden md:block flex-1 max-w-md mx-4 lg:mx-6">
           <GlobalSearchBar
-            categories={categories}
+            categories={navCategories}
             variant="navbar"
             placeholder="Search products, vendors, categories..."
             className="w-full"

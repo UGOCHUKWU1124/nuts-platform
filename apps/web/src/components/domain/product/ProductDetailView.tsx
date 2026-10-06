@@ -15,6 +15,7 @@ import { findCategoryBreadcrumbs } from "@/lib/cart-path";
 import { queryKey } from "@/lib/query-key";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatPrice } from "@/lib/util";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useAuthStore } from "@/zustand/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -61,6 +62,8 @@ export function ProductDetailView({
   noLayout = false,
 }: ProductDetailViewProps) {
   const router = useRouter();
+  const { data: cachedCategories } = usePublicCategories(categories);
+  const productCategories = cachedCategories ?? categories;
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const {
     toggleItem,
@@ -193,15 +196,15 @@ export function ProductDetailView({
       product?.subcategory?.slug ||
       product?.parentSubcategory?.slug ||
       product?.category?.slug;
-    if (targetSlug && categories && categories.length > 0) {
+    if (targetSlug && productCategories && productCategories.length > 0) {
       const resolved = findCategoryBreadcrumbs(
         targetSlug,
-        categories
+        productCategories
       );
       if (resolved && resolved.length > 0) return resolved;
     }
     return undefined;
-  }, [breadcrumbs, product, categories]);
+  }, [breadcrumbs, product, productCategories]);
 
   if (isLoading) {
     const skeleton = (
@@ -217,7 +220,7 @@ export function ProductDetailView({
         </div>
       </div>
     );
-    return noLayout ? skeleton : <CustomerLayout categories={categories}>{skeleton}</CustomerLayout>;
+    return noLayout ? skeleton : <CustomerLayout categories={productCategories}>{skeleton}</CustomerLayout>;
   }
 
   if (!product) {
@@ -232,7 +235,7 @@ export function ProductDetailView({
         </Button>
       </div>
     );
-    return noLayout ? notFound : <CustomerLayout categories={categories}>{notFound}</CustomerLayout>;
+    return noLayout ? notFound : <CustomerLayout categories={productCategories}>{notFound}</CustomerLayout>;
   }
 
   const p = product;
@@ -770,5 +773,5 @@ export function ProductDetailView({
       </div>
   );
 
-  return noLayout ? content : <CustomerLayout categories={categories}>{content}</CustomerLayout>;
+  return noLayout ? content : <CustomerLayout categories={productCategories}>{content}</CustomerLayout>;
 }

@@ -1,5 +1,4 @@
 import {
-serverGetCategories,
 serverGetProductBySlug,
 serverGetProductReviews,
 } from "@/api/server";
@@ -37,10 +36,7 @@ export async function generateMetadata({
 
 export default async function ProductDetailPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const [product, categories] = await Promise.all([
-    serverGetProductBySlug(slug),
-    serverGetCategories(),
-  ]);
+  const product = await serverGetProductBySlug(slug);
 
   if (!product) {
     notFound();
@@ -53,7 +49,6 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
       slug={slug}
       initialProduct={product}
       initialReviews={initialReviews}
-      categories={categories}
       addedFrom="PRODUCT_PAGE"
       fullPath={`/product/${slug}`}
     />

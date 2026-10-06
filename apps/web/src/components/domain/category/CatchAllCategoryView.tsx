@@ -13,6 +13,7 @@ import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { findCategoryBreadcrumbs,getNodeChildren,resolveCategoryPath } from "@/lib/cart-path";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useQuery } from "@tanstack/react-query";
 import {
 ChevronLeft,
@@ -81,16 +82,7 @@ export function CatchAllCategoryView({
   const [activeTab, setActiveTab] = useState<string>("");
 
   // 1. Categories delivered directly via RSC props with client fallback
-  const { data: clientCategories } = useQuery({
-    queryKey: ["categories-all"],
-    queryFn: async () => {
-      const res = await categoryService.getAll();
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    initialData: initialCategories?.length ? initialCategories : undefined,
-    enabled: !initialCategories?.length,
-    staleTime: 1000 * 60 * 10,
-  });
+  const { data: clientCategories } = usePublicCategories(initialCategories);
 
   const tree = clientCategories ?? initialCategories ?? EMPTY_CATEGORIES;
   const traversal = resolveCategoryPath(tree, slugs);
