@@ -437,7 +437,7 @@ export class NotificationListener {
     await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
       userId: payload.userId,
       role: ROLE.USER,
-      type: NotificationType.PAYMENT_RECEIVED,
+      type: NotificationType.PAYMENT_FAILED,
       title: 'Payment Failed',
       message: `Payment failed for order #${payload.orderNumber}: ${payload.reason || 'Check details and try again.'}`,
       priority: NotificationPriority.HIGH,

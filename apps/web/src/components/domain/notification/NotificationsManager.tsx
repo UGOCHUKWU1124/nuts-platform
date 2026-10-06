@@ -38,6 +38,8 @@ function getNotificationIcon(type: NotificationType) {
       return <Package className="h-5 w-5 text-blue-500" />;
     case "PAYMENT_RECEIVED":
       return <CreditCard className="h-5 w-5 text-emerald-500" />;
+    case "PAYMENT_FAILED":
+      return <CreditCard className="h-5 w-5 text-rose-500" />;
     case "PAYOUT_PROCESSED":
       return <DollarSign className="h-5 w-5 text-amber-500" />;
     case "LOW_STOCK_ALERT":
@@ -46,6 +48,34 @@ function getNotificationIcon(type: NotificationType) {
       return <Info className="h-5 w-5 text-muted-foreground" />;
   }
 }
+
+const notificationTypeLabels: Record<NotificationType, string> = {
+  ORDER_PLACED: "Order placed",
+  ORDER_CONFIRMED: "Order confirmed",
+  ORDER_SHIPPED: "Order shipped",
+  ORDER_DELIVERED: "Order delivered",
+  ORDER_CANCELLED: "Order cancelled",
+  PAYMENT_RECEIVED: "Payment received",
+  PAYMENT_FAILED: "Payment failed",
+  PAYOUT_PROCESSED: "Payout processed",
+  LOW_STOCK_ALERT: "Low stock",
+  SYSTEM_ANNOUNCEMENT: "System announcement",
+};
+
+const categoryNotificationTypes = {
+  orders: new Set<NotificationType>([
+    "ORDER_PLACED",
+    "ORDER_CONFIRMED",
+    "ORDER_SHIPPED",
+    "ORDER_DELIVERED",
+    "ORDER_CANCELLED",
+  ]),
+  payments: new Set<NotificationType>([
+    "PAYMENT_RECEIVED",
+    "PAYMENT_FAILED",
+    "PAYOUT_PROCESSED",
+  ]),
+};
 
 function formatFullDate(dateString: string): string {
   const d = new Date(dateString);
@@ -88,7 +118,12 @@ export function NotificationsManager({
     });
   }, [fetchNotifications, filter]);
 
-  const filteredNotifications = notifications;
+  const filteredNotifications =
+    filter === "orders" || filter === "payments"
+      ? notifications.filter((notification) =>
+          categoryNotificationTypes[filter].has(notification.type),
+        )
+      : notifications;
 
   const handleAction = async (notif: AppNotification) => {
     if (!notif.isRead) {
@@ -257,6 +292,9 @@ export function NotificationsManager({
                         NEW
                       </span>
                     )}
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary text-secondary-foreground">
+                      {notificationTypeLabels[notif.type]}
+                    </span>
                     {notif.priority === "URGENT" && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600">
                         URGENT

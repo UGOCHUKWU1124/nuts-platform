@@ -78,35 +78,40 @@ export class NotificationsService {
   }> {
     const limit = Math.min(50, Math.max(1, params.limit || 20));
     const { take, decodedCursor } = getCursorPagination(limit, params.cursor);
+    const typeFilters: Prisma.NotificationWhereInput[] = [];
+
+    if (params.category === 'orders') {
+      typeFilters.push({
+        type: {
+          in: [
+            NotificationType.ORDER_PLACED,
+            NotificationType.ORDER_CONFIRMED,
+            NotificationType.ORDER_SHIPPED,
+            NotificationType.ORDER_DELIVERED,
+            NotificationType.ORDER_CANCELLED,
+          ],
+        },
+      });
+    } else if (params.category === 'payments') {
+      typeFilters.push({
+        type: {
+          in: [
+            NotificationType.PAYMENT_RECEIVED,
+            NotificationType.PAYMENT_FAILED,
+            NotificationType.PAYOUT_PROCESSED,
+          ],
+        },
+      });
+    }
+    if (params.type) {
+      typeFilters.push({ type: params.type });
+    }
 
     const where: Prisma.NotificationWhereInput = {
       userId,
       role,
       ...(params.unreadOnly ? { isRead: false } : {}),
-      ...(params.type ? { type: params.type } : {}),
-      ...(params.category === 'orders'
-        ? {
-            type: {
-              in: [
-                NotificationType.ORDER_PLACED,
-                NotificationType.ORDER_CONFIRMED,
-                NotificationType.ORDER_SHIPPED,
-                NotificationType.ORDER_DELIVERED,
-                NotificationType.ORDER_CANCELLED,
-              ],
-            },
-          }
-        : {}),
-      ...(params.category === 'payments'
-        ? {
-            type: {
-              in: [
-                NotificationType.PAYMENT_RECEIVED,
-                NotificationType.PAYOUT_PROCESSED,
-              ],
-            },
-          }
-        : {}),
+      ...(typeFilters.length > 0 ? { AND: typeFilters } : {}),
     };
 
     const cursorId = decodedCursor?.id;
