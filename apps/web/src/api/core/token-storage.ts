@@ -6,6 +6,7 @@
  * - Refresh tokens are handled exclusively via HttpOnly Secure SameSite cookies.
  * - State is cleanly wiped on logout or expiration.
  */
+import { getPortalRoleForPath } from "@/lib/portal-role";
 
 export interface StoredTokens {
   accessToken?: string | null;
@@ -29,14 +30,8 @@ export const getAuthToken = (role?: string | null): string | null => {
   }
 
   if (typeof window !== "undefined") {
-    const path = window.location.pathname.toLowerCase();
-    if (path.startsWith("/admin")) {
-      return inMemoryTokens.admin ?? null;
-    }
-    if (path.startsWith("/vendor")) {
-      return inMemoryTokens.vendor ?? null;
-    }
-    return inMemoryTokens.user ?? null;
+    const role = getPortalRoleForPath(window.location.pathname);
+    return inMemoryTokens[role] ?? null;
   }
 
   return inMemoryTokens.user ?? null;

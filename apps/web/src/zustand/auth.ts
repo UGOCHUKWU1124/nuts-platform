@@ -18,6 +18,7 @@ import type { VendorAuthSessionDto } from "@/api/dto/vendor";
 import type { ShippingInformation,UserResponseDto } from "@/api/dto/user";
 import { authBootstrap,resetAuthBootstrap } from "@/lib/auth-bootstrap";
 import { authBroadcast } from "@/lib/auth-events";
+import { getPortalRoleForPath } from "@/lib/portal-role";
 import { clearBrowserQueryClient } from "@/lib/query-client";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 import { create } from "zustand";
@@ -78,10 +79,7 @@ interface UnifiedLoginPayload {
 
 export const getActiveRole = (): AuthRole => {
   if (typeof window === "undefined") return "user";
-  const path = window.location.pathname.toLowerCase();
-  if (path.startsWith("/admin") || path.startsWith("/auth/admin")) return "admin";
-  if (path.startsWith("/vendor") || path.startsWith("/auth/vendor")) return "vendor";
-  return "user";
+  return getPortalRoleForPath(window.location.pathname);
 };
 
 export interface RoleSessionState {

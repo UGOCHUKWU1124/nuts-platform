@@ -4,7 +4,7 @@ import { clearBrowserQueryClient } from "@/lib/query-client";
 import { getActiveRole,useAuthStore,type AuthRole } from "@/zustand/auth";
 import { authBroadcast,type AuthEvent } from "./auth-events";
 
-let bootstrapPromise: Promise<void> | null = null;
+const bootstrapPromises = new Map<AuthRole, Promise<void>>();
 let broadcastSubscribed = false;
 
 export function hasSessionIndicatorCookieForRole(role: AuthRole): boolean {
@@ -66,11 +66,12 @@ export const authBootstrap = async (): Promise<void> => {
     return;
   }
 
-  if (bootstrapPromise) {
-    return bootstrapPromise;
+  const pendingBootstrap = bootstrapPromises.get(currentRole);
+  if (pendingBootstrap) {
+    return pendingBootstrap;
   }
 
-  bootstrapPromise = (async () => {
+  const bootstrapPromise = (async () => {
     // If no explicit session indicator cookie exists for this portal, user is definitively a guest on this surface
     if (!hasSessionIndicatorCookieForRole(currentRole)) {
       useAuthStore.getState().clearSession(currentRole);
@@ -133,9 +134,10 @@ export const authBootstrap = async (): Promise<void> => {
     }
   })();
 
+  bootstrapPromises.set(currentRole, bootstrapPromise);
   return bootstrapPromise;
 };
 
 export const resetAuthBootstrap = () => {
-  bootstrapPromise = null;
+  bootstrapPromises.clear();
 };
