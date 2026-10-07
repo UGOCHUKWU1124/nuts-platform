@@ -1,14 +1,13 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { categoryService,productService } from "@/api";
+import { productService } from "@/api";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import type { ProductReviewsMetaDto, ReviewResponseDto } from "@/api/dto/review";
-import type { ProductCardDto,PublicProductResponseDto } from "@/api/dto/product";
+import type { ProductCardDto } from "@/api/dto/product";
 import { CategoryFilterDrawer } from "@/component/category/CategoryFilterDrawer";
+import { CategorySectionGrid } from "@/component/category/CategorySectionGrid";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { ProductCard } from "@/component/product/ProductCard";
-import { ProductDetailView } from "@/component/product/ProductDetailView";
 import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
@@ -25,19 +24,16 @@ SlidersHorizontal,
 X,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useParams } from "next/navigation";
 import { useDeferredValue,useMemo,useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
 const EMPTY_PRODUCTS: ProductCardDto[] = [];
 
-export interface CatchAllCategoryViewProps {
+export interface CategoryBrowseViewProps {
   slugs: string[];
   initialCategories: CategoryResponseDto[];
   initialCategoryNode?: CategoryResponseDto | null;
   initialProducts: ProductCardDto[];
-  initialProduct?: PublicProductResponseDto | null;
-  initialReviews?: { data: ReviewResponseDto[]; meta?: ProductReviewsMetaDto } | null;
   initialSearchParams?: {
     search?: string;
     sort?: string;
@@ -47,24 +43,14 @@ export interface CatchAllCategoryViewProps {
   };
 }
 
-export function CatchAllCategoryView({
+export function CategoryBrowseView({
   slugs: propSlugs,
   initialCategories,
   initialCategoryNode,
   initialProducts,
-  initialProduct,
-  initialReviews,
   initialSearchParams,
-}: CatchAllCategoryViewProps) {
-  const params = useParams();
-  const rawSlug = params?.slug;
-  const slugs: string[] = propSlugs?.length
-    ? propSlugs
-    : Array.isArray(rawSlug)
-    ? rawSlug
-    : typeof rawSlug === "string"
-    ? [rawSlug]
-    : [];
+}: CategoryBrowseViewProps) {
+  const slugs = propSlugs;
 
   const slugPath = slugs.join("/");
   const currentCategoryUrl = `/category/${slugPath}`;
@@ -79,7 +65,6 @@ export function CatchAllCategoryView({
   const [maxPrice, setMaxPrice] = useState(initialSearchParams?.maxPrice || "");
   const [inStock, setInStock] = useState(Boolean(initialSearchParams?.inStock));
   const [sortBy, setSortBy] = useState(initialSearchParams?.sort || "newest");
-  const [activeTab, setActiveTab] = useState<string>("");
 
   // 1. Categories delivered directly via RSC props with client fallback
   const { data: clientCategories } = usePublicCategories(initialCategories);
@@ -87,58 +72,13 @@ export function CatchAllCategoryView({
   const tree = clientCategories ?? initialCategories ?? EMPTY_CATEGORIES;
   const traversal = resolveCategoryPath(tree, slugs);
 
-  // 2. Category node resolution with client fallback
-  const { data: clientCategoryNode, isLoading: isCategoryResolving } = useQuery({
-    queryKey: ["category-by-path", slugPath],
-    queryFn: async () => {
-      if (!slugPath) return null;
-      try {
-        const res = await categoryService.findByPath(slugPath);
-        return res.data || null;
-      } catch {
-        if (slugs.length > 1) {
-          const lastSlug = slugs[slugs.length - 1];
-          if (lastSlug) {
-            try {
-              const res = await categoryService.findByPath(lastSlug);
-              return res.data || null;
-            } catch {
-              return null;
-            }
-          }
-        }
-        return null;
-      }
-    },
-    initialData: initialCategoryNode ?? traversal.matchedNode ?? undefined,
-    enabled: Boolean(!initialProduct && !(initialCategoryNode ?? traversal.matchedNode) && slugs.length > 0),
-    staleTime: 1000 * 60 * 5,
-  });
-
   const categoryNode: CategoryResponseDto | null =
-    initialCategoryNode ?? traversal.matchedNode ?? clientCategoryNode ?? null;
-
-  // Determine if this path targets a product
-  const isProduct = Boolean(initialProduct);
-  const productSlug = isProduct
-    ? (initialProduct?.slug ?? slugs[slugs.length - 1])
-    : null;
+    initialCategoryNode ?? traversal.matchedNode ?? null;
 
   const rawChildren = getNodeChildren(categoryNode);
   const matchedChain = traversal.matchedChain ?? EMPTY_CATEGORIES;
   const rootNode = matchedChain[0] ?? categoryNode;
   const parentNode = matchedChain.length > 1 ? matchedChain[matchedChain.length - 2] : null;
-
-  const scrollToSubcategory = (subcatSlug: string) => {
-    setActiveTab(subcatSlug);
-    const element = document.getElementById(`subcat-${subcatSlug}`);
-    if (element) {
-      const yOffset = -120;
-      const y =
-        element.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: "smooth" });
-    }
-  };
 
   // Flattened Category Map for subcategory resolution
   const categoryMap = useMemo(() => {
@@ -167,7 +107,6 @@ export function CatchAllCategoryView({
     setMaxPrice("");
     setInStock(false);
     setSortBy("newest");
-    setActiveTab("");
   };
 
   const activeFiltersCount = useMemo(() => {
@@ -181,7 +120,7 @@ export function CatchAllCategoryView({
 
   const hasActiveFilters = activeFiltersCount > 0;
 
-  // 3. Category products query with client fallback if initialProducts returned empty
+  // Fetch client-side only if the server could not provide initial products.
   const { data: clientCategoryProducts, isLoading: isProductsLoading } = useQuery({
     queryKey: ["category-products", categoryNode?.id || slugPath],
     queryFn: async () => {
@@ -193,7 +132,7 @@ export function CatchAllCategoryView({
       return Array.isArray(res.data) ? res.data : [];
     },
     initialData: initialProducts?.length ? initialProducts : undefined,
-    enabled: Boolean(!initialProduct && categoryNode?.id && !initialProducts?.length),
+    enabled: Boolean(categoryNode?.id && !initialProducts?.length),
     staleTime: 1000 * 60 * 2,
   });
 
@@ -316,10 +255,16 @@ export function CatchAllCategoryView({
       if (full && full.length > 0) return full;
     }
     if (categoryNode?.breadcrumbs && categoryNode.breadcrumbs.length > 0) {
-      return categoryNode.breadcrumbs.map((b) => ({
-        name: b.name,
-        href: `/category/${b.slug || b.path || b.id}`,
-      }));
+      return categoryNode.breadcrumbs.map((breadcrumb) => {
+        const path = breadcrumb.path || breadcrumb.slug || breadcrumb.id;
+        const segments = path.startsWith("/category/")
+          ? path.slice("/category/".length).split("/")
+          : path.replace(/^\/+/, "").split("/");
+        return {
+          name: breadcrumb.name,
+          href: `/category/${segments.filter(Boolean).map(encodeURIComponent).join("/")}`,
+        };
+      });
     }
     if (traversal.breadcrumbs && traversal.breadcrumbs.length > 0) {
       return traversal.breadcrumbs;
@@ -327,46 +272,13 @@ export function CatchAllCategoryView({
     return categoryNode ? [{ name: categoryNode.name, href: currentCategoryUrl }] : [];
   })();
 
-  // Breadcrumbs for product detail view embedded in category catch-all
-  const categoryProductBreadcrumbs = isProduct && traversal.breadcrumbs.length > 0
-    ? traversal.breadcrumbs
-    : undefined;
-
   const parentBackHref =
     parentNode && matchedChain.length > 1
       ? `/category/${matchedChain.slice(0, -1).map((c) => c.slug).join("/")}`
       : null;
 
-  // ─── RENDERING BRANCHES (ALL HOOKS DECLARED ABOVE) ───
-
-  // 1. PRODUCT DETAIL VIEW
-  if (isProduct && productSlug) {
-    return (
-      <CustomerLayout categories={tree}>
-        <ProductDetailView
-          slug={productSlug}
-          initialProduct={initialProduct ?? undefined}
-          initialReviews={initialReviews}
-          addedFrom="CATEGORY_PAGE"
-          fullPath={currentCategoryUrl}
-          breadcrumbs={categoryProductBreadcrumbs}
-          noLayout
-        />
-      </CustomerLayout>
-    );
-  }
-
-  // 2. CATEGORY NOT FOUND STATE
+  // Product detail routes are resolved independently by the server route.
   if (!categoryNode) {
-    if (isCategoryResolving) {
-      return (
-        <CustomerLayout categories={tree}>
-          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-            <ProductGridSkeleton count={8} />
-          </div>
-        </CustomerLayout>
-      );
-    }
     return (
       <CustomerLayout categories={tree}>
         <div className="mx-auto max-w-7xl px-4 py-24 text-center sm:px-6 lg:px-8">
@@ -487,61 +399,49 @@ export function CatchAllCategoryView({
             </div>
           </div>
 
-          {/* Subcategory Pills & Filter Bar */}
-          <div className="mb-8 border-b border-border/60 pb-4">
-            <div className="flex items-center justify-between gap-4">
-              {filteredGroups.length > 1 ? (
-                <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("");
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className={`rounded-full px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
-                      !activeTab
-                        ? "bg-black text-white dark:bg-white dark:text-black"
-                        : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
-                    }`}
+          {rawChildren.length > 0 && (
+            <section
+              aria-labelledby="subcategory-heading"
+              className="mb-10"
+            >
+              <div className="mb-4 flex items-end justify-between gap-4">
+                <div>
+                  <h2
+                    id="subcategory-heading"
+                    className="text-lg font-bold tracking-tight text-foreground sm:text-xl"
                   >
-                    All Sections
-                  </button>
-                  {filteredGroups.map((group) => {
-                    const isSelected = activeTab === group.slug;
-                    return (
-                      <button
-                        key={group.id}
-                        type="button"
-                        onClick={() => scrollToSubcategory(group.slug)}
-                        className={`rounded-full px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-black text-white dark:bg-white dark:text-black"
-                            : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
-                        }`}
-                      >
-                        {group.name}
-                      </button>
-                    );
-                  })}
+                    Explore {categoryNode.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Choose a section to browse its collections and products.
+                  </p>
                 </div>
-              ) : (
-                <div />
-              )}
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {rawChildren.length} {rawChildren.length === 1 ? "section" : "sections"}
+                </span>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => setIsFilterDrawerOpen(true)}
-                className="flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-sm font-medium text-foreground hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors shrink-0 cursor-pointer"
-              >
-                <span>Filters</span>
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                {activeFiltersCount > 0 && (
-                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </button>
-            </div>
+              <CategorySectionGrid
+                categories={rawChildren}
+                parentPath={currentCategoryUrl}
+              />
+            </section>
+          )}
+
+          <div className="mb-6 flex justify-end border-b border-border/60 pb-4">
+            <button
+              type="button"
+              onClick={() => setIsFilterDrawerOpen(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+            >
+              <span>Filters</span>
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              {activeFiltersCount > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Active Filter Chips */}
@@ -626,10 +526,10 @@ export function CatchAllCategoryView({
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
                   {hasActiveFilters
                     ? "No products match your active filters. Try adjusting or clearing your filters."
-                    : `We are curating exclusive pieces for this collection. Explore other subcategories or check back soon.`}
+                    : "There are no products in this collection yet. Choose one of the sections above to continue browsing."}
                 </p>
 
-                {hasActiveFilters ? (
+                {hasActiveFilters && (
                   <Button
                     onClick={handleResetFilters}
                     variant="outline"
@@ -637,20 +537,6 @@ export function CatchAllCategoryView({
                   >
                     Clear Filters
                   </Button>
-                ) : (
-                  rawChildren.length > 0 && (
-                    <div className="mt-6 flex flex-wrap justify-center gap-2">
-                      {rawChildren.slice(0, 4).map((child) => (
-                        <Link
-                          key={child.id}
-                          href={`/category/${slugPath}/${child.slug}`}
-                          className="rounded-full bg-secondary hover:bg-secondary/80 px-4 py-2 text-xs font-medium text-foreground transition-all cursor-pointer"
-                        >
-                          Explore {child.name}
-                        </Link>
-                      ))}
-                    </div>
-                  )
                 )}
               </div>
             ) : (
@@ -672,7 +558,11 @@ export function CatchAllCategoryView({
                         <ProductCard
                           key={product.id}
                           product={product}
-                          categoryPath={currentCategoryUrl}
+                          categoryPath={
+                            group.id === categoryNode.id
+                              ? currentCategoryUrl
+                              : `${currentCategoryUrl}/${encodeURIComponent(group.slug)}`
+                          }
                           addedFrom="CATEGORY_PAGE"
                         />
                       ))}
