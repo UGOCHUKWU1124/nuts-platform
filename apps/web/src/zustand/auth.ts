@@ -16,6 +16,7 @@ import type { AuthRole } from "@/api/dto/auth";
 import type { AuthResponseDto } from "@/api/dto/auth";
 import type { VendorAuthSessionDto } from "@/api/dto/vendor";
 import type { ShippingInformation,UserResponseDto } from "@/api/dto/user";
+import axios from "axios";
 import { authBootstrap,resetAuthBootstrap } from "@/lib/auth-bootstrap";
 import { authBroadcast } from "@/lib/auth-events";
 import { getPortalRoleForPath } from "@/lib/portal-role";
@@ -24,7 +25,12 @@ import { safeInternalPath } from "@/lib/safe-internal-path";
 import { create } from "zustand";
 import { clearWishlistOnLogout } from "./wishlist";
 
-export type AuthStatus = "unknown" | "hydrating" | "authenticated" | "unauthenticated";
+export type AuthStatus =
+  | "unknown"
+  | "hydrating"
+  | "authenticated"
+  | "unauthenticated"
+  | "unavailable";
 
 export type User = UserResponseDto & {
   role: AuthRole;
@@ -132,7 +138,7 @@ export const useAuthStore = create<AuthState>()(
       syncActiveRole: (targetRole) => {
         const active = targetRole || getActiveRole();
         const activeSession = get().sessions?.[active];
-        if (activeSession?.user) {
+        if (activeSession?.user && activeSession.status !== "unavailable") {
           set({
             user: activeSession.user,
             role: active,
@@ -141,24 +147,50 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             isInitialized: true,
           });
+        } else if (activeSession?.status === "unavailable") {
+          set({
+            user: activeSession.user,
+            role: active,
+            isAuthenticated: false,
+            status: "unavailable",
+            isLoading: false,
+            isInitialized: true,
+          });
         } else {
+          const nextStatus =
+            activeSession?.status === "unauthenticated"
+              ? "unauthenticated"
+              : "hydrating";
           set({
             user: null,
             role: null,
             isAuthenticated: false,
-            status: "unauthenticated",
-            isLoading: false,
-            isInitialized: true,
+            status: nextStatus,
+            isLoading: nextStatus === "hydrating",
+            isInitialized: nextStatus !== "hydrating",
           });
         }
       },
 
       setStatus: (status) =>
-        set({
+        set((state) => {
+          const active = getActiveRole();
+          const activeSession = state.sessions[active];
+          const sessions =
+            status === "hydrating" || status === "unavailable"
+              ? {
+                  ...state.sessions,
+                  [active]: { ...activeSession, status },
+                }
+              : state.sessions;
+
+          return {
+          sessions,
           status,
           isLoading: status === "unknown" || status === "hydrating",
           isInitialized: status !== "unknown",
           isAuthenticated: status === "authenticated",
+          };
         }),
 
       setSession: (rawUser, role) => {
@@ -239,7 +271,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: async (payload) => {
-        set({ status: "hydrating", isLoading: true });
+        if (getActiveRole() === payload.role) {
+          set({ status: "hydrating", isLoading: true, isInitialized: false });
+        }
         try {
           const { email, password, role } = payload;
           let responseData: AuthResponseDto | VendorAuthSessionDto;
@@ -272,7 +306,9 @@ export const useAuthStore = create<AuthState>()(
 
           authBroadcast.broadcast({ type: "LOGIN", role });
         } catch (err) {
-          set({ status: "unauthenticated", isLoading: false, isInitialized: true });
+          if (getActiveRole() === payload.role) {
+            set({ status: "unauthenticated", isLoading: false, isInitialized: true });
+          }
           throw err;
         }
       },
@@ -290,8 +326,16 @@ export const useAuthStore = create<AuthState>()(
             } else {
               await authService.logout();
             }
-          } catch {
-            // Non-fatal network error during logout
+          } catch (error) {
+            const status = axios.isAxiosError(error)
+              ? error.response?.status
+              : undefined;
+            if (status !== 401) {
+              throw new Error(
+                "Could not confirm sign out. Your session is still active; please try again.",
+                { cause: error },
+              );
+            }
           }
         }
 

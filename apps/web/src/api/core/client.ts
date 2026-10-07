@@ -88,6 +88,7 @@ export interface RefreshSessionResult {
   success: boolean;
   accessToken?: string;
   user?: unknown;
+  reason?: "expired" | "unavailable" | "invalid-response" | "unscoped";
 }
 
 export const getRoleForUrl = (
@@ -98,63 +99,90 @@ export const getRoleForUrl = (
   return getPortalRoleForApiUrl(url, pathname);
 };
 
-/**
- * Single-flight refresh mutexes per role.
- * Guarantees exactly ONE concurrent refresh execution per role across parallel 401s,
- * preventing admin/vendor/user from interfering with each other.
- */
-const refreshPromises: Record<string, Promise<RefreshSessionResult> | null> = {
+type AuthRole = "admin" | "vendor" | "user";
+
+const refreshPromises: Record<AuthRole, Promise<RefreshSessionResult> | null> = {
   admin: null,
   vendor: null,
   user: null,
 };
 
-export const performTokenRefresh = async (
-  hintUrl?: string,
-  specificRole?: "admin" | "vendor" | "user"
-): Promise<RefreshSessionResult> => {
+async function refreshTokenForRole(
+  role: AuthRole,
+): Promise<RefreshSessionResult> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-  const role = specificRole || getRoleForUrl(hintUrl) || "user";
   try {
     const csrf = getCsrfToken();
     const headers: Record<string, string> = {};
-    if (csrf) {
-      headers["x-csrf-token"] = csrf;
-    }
+    if (csrf) headers["x-csrf-token"] = csrf;
 
-    let refreshEndpoint = `${apiUrl}/auth/refresh`;
-    if (role === "admin") {
-      refreshEndpoint = `${apiUrl}/admin/auth/refresh`;
-    } else if (role === "vendor") {
-      refreshEndpoint = `${apiUrl}/vendors/auth/refresh`;
-    }
+    const refreshEndpoint =
+      role === "admin"
+        ? `${apiUrl}/admin/auth/refresh`
+        : role === "vendor"
+          ? `${apiUrl}/vendors/auth/refresh`
+          : `${apiUrl}/auth/refresh`;
 
     const res = await axios.post(
       refreshEndpoint,
       {},
-      {
-        withCredentials: true,
-        headers,
-      }
+      { withCredentials: true, headers },
     );
 
     const data = res.data?.data || res.data;
-    if (data?.accessToken) {
-      setAuthTokens(role, {
-        accessToken: data.accessToken,
-      });
-      return {
-        success: true,
-        accessToken: data.accessToken,
-        user: data.user ?? data.vendor,
-      };
+    if (!data?.accessToken) {
+      return { success: false, reason: "invalid-response" };
     }
-    return { success: false };
-  } catch {
-    clearAuthTokens(role);
-    authBroadcast.broadcast({ type: "SESSION_EXPIRED", role });
-    return { success: false };
+
+    setAuthTokens(role, { accessToken: data.accessToken });
+    return {
+      success: true,
+      accessToken: data.accessToken,
+      user: data.user ?? data.vendor,
+    };
+  } catch (error) {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    if (status === 401 || status === 403) {
+      clearAuthTokens(role);
+      authBroadcast.broadcast({ type: "SESSION_EXPIRED", role });
+      return { success: false, reason: "expired" };
+    }
+
+    return { success: false, reason: "unavailable" };
   }
+}
+
+/**
+ * Single-flight refresh per role in this tab, plus a browser-wide lock when
+ * available so multiple tabs cannot rotate the same cookie concurrently.
+ */
+export const performTokenRefresh = (
+  hintUrl?: string,
+  specificRole?: AuthRole,
+): Promise<RefreshSessionResult> => {
+  const role = specificRole ?? getRoleForUrl(hintUrl);
+  if (!role) return Promise.resolve({ success: false, reason: "unscoped" });
+
+  const pending = refreshPromises[role];
+  if (pending) return pending;
+
+  const refresh = () => refreshTokenForRole(role);
+  const refreshPromise =
+    typeof navigator !== "undefined" && navigator.locks
+      ? navigator.locks.request(
+          `nuts-auth-refresh:${role}`,
+          { mode: "exclusive" },
+          refresh,
+        )
+      : refresh();
+
+  const trackedPromise = refreshPromise.finally(() => {
+    if (refreshPromises[role] === trackedPromise) {
+      refreshPromises[role] = null;
+    }
+  });
+  refreshPromises[role] = trackedPromise;
+  return trackedPromise;
 };
 
 axiosInstance.interceptors.request.use(async (config) => {
@@ -222,13 +250,7 @@ axiosInstance.interceptors.response.use(
     if (is401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
-      if (!refreshPromises[role]) {
-        refreshPromises[role] = performTokenRefresh(originalRequest.url, role).finally(() => {
-          refreshPromises[role] = null;
-        });
-      }
-
-      const refreshed = await refreshPromises[role];
+      const refreshed = await performTokenRefresh(originalRequest.url, role);
       if (refreshed?.success && refreshed.accessToken) {
         setHeader(originalRequest.headers, "Authorization", `Bearer ${refreshed.accessToken}`);
         const freshCsrf = getCsrfToken();

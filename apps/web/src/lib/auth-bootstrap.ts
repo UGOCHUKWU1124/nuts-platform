@@ -9,14 +9,26 @@ let broadcastSubscribed = false;
 
 export function hasSessionIndicatorCookieForRole(role: AuthRole): boolean {
   if (typeof document === "undefined") return false;
-  const cookie = document.cookie;
+  const cookies = new Map(
+    document.cookie
+      .split(";")
+      .map((cookie) => cookie.trim().split("="))
+      .filter((parts) => parts.length >= 2)
+      .map(([name, ...value]) => [name, value.join("=")]),
+  );
   if (role === "admin") {
-    return cookie.includes("admin_session=1") || cookie.includes("admin_access_token");
+    return (
+      cookies.get("admin_session") === "1" ||
+      cookies.has("admin_access_token")
+    );
   }
   if (role === "vendor") {
-    return cookie.includes("vendor_session=1") || cookie.includes("vendor_access_token");
+    return (
+      cookies.get("vendor_session") === "1" ||
+      cookies.has("vendor_access_token")
+    );
   }
-  return cookie.includes("user_session=1") || cookie.includes("user_access_token");
+  return cookies.get("user_session") === "1" || cookies.has("user_access_token");
 }
 
 /**
@@ -88,15 +100,23 @@ export const authBootstrap = async (): Promise<void> => {
       return;
     }
 
-    if (!hasPersistedUser) {
+    if (!hasPersistedUser && getActiveRole() === currentRole) {
       useAuthStore.getState().setStatus("hydrating");
     }
 
     try {
       const refreshed = await performTokenRefresh(undefined, currentRole);
+      if (!refreshed.success) {
+        if (refreshed.reason === "expired") {
+          useAuthStore.getState().clearSession(currentRole);
+        } else if (getActiveRole() === currentRole) {
+          useAuthStore.getState().setStatus("unavailable");
+        }
+        return;
+      }
+
       const refreshedUser = refreshed.user;
       if (
-        !refreshed.success ||
         !refreshedUser ||
         typeof refreshedUser !== "object" ||
         !("id" in refreshedUser) ||
@@ -104,7 +124,9 @@ export const authBootstrap = async (): Promise<void> => {
         !("email" in refreshedUser) ||
         typeof refreshedUser.email !== "string"
       ) {
-        useAuthStore.getState().clearSession(currentRole);
+        if (getActiveRole() === currentRole) {
+          useAuthStore.getState().setStatus("unavailable");
+        }
         return;
       }
 
@@ -129,13 +151,22 @@ export const authBootstrap = async (): Promise<void> => {
           typeof profile.isVerified === "boolean" ? profile.isVerified : undefined,
         isActive: typeof profile.isActive === "boolean" ? profile.isActive : undefined,
       }, currentRole);
-    } catch {
-      useAuthStore.getState().clearSession(currentRole);
+    } catch (error) {
+      console.error("Session bootstrap failed unexpectedly", error);
+      if (getActiveRole() === currentRole) {
+        useAuthStore.getState().setStatus("unavailable");
+      }
     }
   })();
 
   bootstrapPromises.set(currentRole, bootstrapPromise);
-  return bootstrapPromise;
+  try {
+    await bootstrapPromise;
+  } finally {
+    if (bootstrapPromises.get(currentRole) === bootstrapPromise) {
+      bootstrapPromises.delete(currentRole);
+    }
+  }
 };
 
 export const resetAuthBootstrap = () => {

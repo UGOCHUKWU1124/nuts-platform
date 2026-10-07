@@ -28,6 +28,7 @@ import { useHydrated } from "../../hook/use-hydrated";
 import { useWishlist } from "@/hook/use-wishlist";
 import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useAuthStore } from "@/zustand/auth";
+import { logoutWithFeedback } from "@/lib/logout";
 
 function MobileSearchControl({
   categories,
@@ -351,9 +352,9 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                   <div className="border-t border-border my-1 pt-1">
                     <button
                       type="button"
-                      onClick={async () => {
+                      onClick={() => {
                         setAccountOpen(false);
-                        await logout({ redirectTo: "/auth/login" });
+                        void logoutWithFeedback(logout, { redirectTo: "/auth/login" });
                       }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
                     >

@@ -82,7 +82,7 @@ export default function VendorSettingPage() {
     onSuccess: async () => {
       setIsDeactivateOpen(false);
       toast.success("Vendor store deactivated");
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to deactivate store")),
@@ -93,7 +93,7 @@ export default function VendorSettingPage() {
     onSuccess: async () => {
       setIsDeleteOpen(false);
       toast.success("Vendor account permanently deleted");
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to delete account")),

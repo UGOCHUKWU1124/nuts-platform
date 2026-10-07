@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -24,8 +25,9 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
+import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
 import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
@@ -47,7 +49,10 @@ import { VendorsService } from './vendors.service';
 @AuthStrategy('vendor-jwt')
 @UseGuards(VendorJwtAuthGuard)
 export class VendorAccountController {
-  constructor(private readonly vendorsService: VendorsService) {}
+  constructor(
+    private readonly vendorsService: VendorsService,
+    private readonly authCookies: AuthCookieService,
+  ) {}
 
   @Get('me')
   @ApiBearerAuth('JWT-auth')
@@ -166,7 +171,8 @@ export class VendorAccountController {
   @Message('Vendor account deactivated successfully')
   @ApiOperation({
     summary: 'Deactivate vendor account',
-    description: 'Deactivate the authenticated vendor account.',
+    description:
+      'Deactivate the authenticated vendor account and clear its authentication cookies.',
   })
   @ApiResponse({
     status: 200,
@@ -181,12 +187,17 @@ export class VendorAccountController {
   async deactivateProfile(
     @GetVendor('id') vendorId: string,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<VendorStatusResponseDto> {
-    return this.vendorsService.deactivateProfile(
+    const result = await this.vendorsService.deactivateProfile(
       vendorId,
       extractIpAddress(req),
       extractUserAgent(req),
     );
+
+    this.authCookies.clearAuthCookies(res, 'vendor');
+
+    return result;
   }
 
   @Delete('account')
@@ -208,12 +219,15 @@ export class VendorAccountController {
   async deleteProfile(
     @GetVendor('id') vendorId: string,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<null> {
     await this.vendorsService.deleteProfile(
       vendorId,
       extractIpAddress(req),
       extractUserAgent(req),
     );
+
+    this.authCookies.clearAuthCookies(res, 'vendor');
 
     return null;
   }

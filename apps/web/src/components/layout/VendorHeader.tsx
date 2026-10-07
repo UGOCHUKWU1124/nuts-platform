@@ -3,6 +3,7 @@
 import { NotificationBell } from "@/component/notification/NotificationBell";
 import { Button } from "@/component/ui/button";
 import { useAuthStore } from "@/zustand/auth";
+import { logoutWithFeedback } from "@/lib/logout";
 import {
 BarChart3,
 ChevronDown,
@@ -231,9 +232,9 @@ export function VendorHeader({ onMobileMenuClick }: VendorHeaderProps) {
                 <div className="border-t border-border my-1 pt-1">
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       setDropdownOpen(false);
-                      await logout({ redirectTo: "/auth/vendor/login" });
+                      void logoutWithFeedback(logout, { redirectTo: "/auth/vendor/login" });
                     }}
                     className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors"
                   >
