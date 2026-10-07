@@ -4,6 +4,10 @@ import { performTokenRefresh } from "@/api/core/client";
 import type { AppNotification, ListNotificationsParams } from "@/api/notifications";
 import { useAuthStore, type AuthRole } from "@/zustand/auth";
 import { notificationDetailPath } from "@/lib/notification-path";
+import {
+  shouldRetryNotificationHttpStatus,
+  shouldRetryNotificationStream,
+} from "@/lib/notification-stream-policy";
 import { create } from "zustand";
 import { toast } from "sonner";
 
@@ -12,6 +16,7 @@ interface NotificationsState {
   unreadCount: number;
   isLoading: boolean;
   sseConnected: boolean;
+  sseRetryExhausted: boolean;
   hasNextPage: boolean;
   nextCursor: string | null;
 
@@ -29,10 +34,12 @@ interface NotificationsState {
   addNotification: (notification: AppNotification) => boolean;
   reset: () => void;
   initStream: (role: AuthRole, sessionKey: string) => () => void;
+  retryStream: () => void;
 }
 
 let globalStreamController: AbortController | null = null;
 let globalStreamKey: string | null = null;
+let globalStreamRole: AuthRole | null = null;
 let streamRefCount = 0;
 let streamGeneration = 0;
 let listRequestSequence = 0;
@@ -40,6 +47,50 @@ let listRequestController: AbortController | null = null;
 const unreadCountCache = new Map<string, number>();
 const unreadCountRequests = new Map<string, Promise<void>>();
 const receivedNotificationIds = new Set<string>();
+const SSE_CONNECT_TIMEOUT_MS = 20_000;
+
+function startNotificationStream(
+  role: AuthRole,
+  sessionKey: string,
+  set: (state: Partial<NotificationsState>) => void,
+  get: () => NotificationsState,
+): void {
+  globalStreamKey = sessionKey;
+  globalStreamRole = role;
+  const controller = new AbortController();
+  globalStreamController = controller;
+  const generation = ++streamGeneration;
+  const isCurrent = () =>
+    globalStreamController === controller &&
+    globalStreamKey === sessionKey &&
+    streamGeneration === generation;
+
+  set({ sseConnected: false, sseRetryExhausted: false });
+  void consumeNotificationStream(
+    role,
+    controller.signal,
+    isCurrent,
+    (notification) => {
+      if (get().addNotification(notification)) {
+        showIncomingNotification(notification);
+      }
+    },
+    (connected) => {
+      if (isCurrent()) {
+        set({
+          sseConnected: connected,
+          ...(connected ? { sseRetryExhausted: false } : {}),
+        });
+        if (connected) void get().fetchUnreadCount();
+      }
+    },
+    () => {
+      if (isCurrent()) {
+        set({ sseConnected: false, sseRetryExhausted: true });
+      }
+    },
+  );
+}
 
 function getNotificationSessionKey(): string {
   const auth = useAuthStore.getState();
@@ -145,10 +196,25 @@ async function consumeNotificationStream(
   isCurrent: () => boolean,
   onNotification: (notification: AppNotification) => void,
   onConnectionChange: (connected: boolean) => void,
+  onRetryExhausted: () => void,
 ): Promise<void> {
   const url = getSseUrl(role);
   let retryAttempt = 0;
   let refreshedAfterUnauthorized = false;
+
+  const retryAfterFailure = async (reason: string): Promise<boolean> => {
+    retryAttempt++;
+    onConnectionChange(false);
+    if (!shouldRetryNotificationStream(retryAttempt)) {
+      console.error(
+        `Notification stream stopped after ${retryAttempt} consecutive failures: ${reason}`,
+      );
+      onRetryExhausted();
+      return false;
+    }
+    await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
+    return !signal.aborted && isCurrent();
+  };
 
   while (!signal.aborted && isCurrent()) {
     const headers = new Headers({ Accept: "text/event-stream" });
@@ -156,36 +222,58 @@ async function consumeNotificationStream(
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
     let response: Response;
+    let connectTimedOut = false;
+    const connectController = new AbortController();
+    const abortConnect = () => connectController.abort();
+    signal.addEventListener("abort", abortConnect, { once: true });
+    const connectTimeout = window.setTimeout(() => {
+      connectTimedOut = true;
+      connectController.abort();
+    }, SSE_CONNECT_TIMEOUT_MS);
     try {
       response = await fetch(url, {
         method: "GET",
         headers,
         credentials: "include",
         cache: "no-store",
-        signal,
+        signal: connectController.signal,
       });
     } catch (error) {
+      window.clearTimeout(connectTimeout);
+      signal.removeEventListener("abort", abortConnect);
       if (signal.aborted) return;
-      console.error("Notification stream request failed", error);
-      retryAttempt++;
-      onConnectionChange(false);
-      await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
+      const reason = connectTimedOut
+        ? "connection timed out"
+        : error instanceof Error
+          ? error.message
+          : "network request failed";
+      if (connectTimedOut) {
+        console.error(
+          `Notification stream stopped after a ${SSE_CONNECT_TIMEOUT_MS / 1000}s connection timeout`,
+        );
+        onConnectionChange(false);
+        onRetryExhausted();
+        return;
+      }
+      if (!(await retryAfterFailure(reason))) return;
       continue;
     }
+    window.clearTimeout(connectTimeout);
+    signal.removeEventListener("abort", abortConnect);
 
     if (response.status === 401 && !refreshedAfterUnauthorized) {
+      await response.body?.cancel().catch(() => undefined);
       refreshedAfterUnauthorized = true;
       const refresh = await performTokenRefresh(undefined, role);
       if (refresh.success) continue;
       if (refresh.reason === "unavailable") {
         refreshedAfterUnauthorized = false;
-        retryAttempt++;
-        onConnectionChange(false);
-        await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
+        if (!(await retryAfterFailure("authentication service unavailable"))) return;
         continue;
       }
       console.error("Notification stream unauthorized; session refresh failed");
       onConnectionChange(false);
+      onRetryExhausted();
       return;
     }
 
@@ -194,21 +282,35 @@ async function consumeNotificationStream(
         `Notification stream stopped with HTTP ${response.status}; check the session and deployed API route`,
       );
       onConnectionChange(false);
+      onRetryExhausted();
       return;
     }
 
     if (!response.ok) {
-      console.error(`Notification stream returned HTTP ${response.status}`);
-      retryAttempt++;
+      await response.body?.cancel().catch(() => undefined);
+      if (response.status === 502) {
+        console.error(
+          "Notification stream stopped after HTTP 502; retry manually when the API is available",
+        );
+        onConnectionChange(false);
+        onRetryExhausted();
+        return;
+      }
+      if (shouldRetryNotificationHttpStatus(response.status)) {
+        if (!(await retryAfterFailure(`HTTP ${response.status}`))) return;
+        continue;
+      }
+      console.error(`Notification stream stopped with HTTP ${response.status}`);
       onConnectionChange(false);
-      await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
-      continue;
+      onRetryExhausted();
+      return;
     }
 
     const contentType = response.headers.get("content-type") ?? "";
     if (!contentType.includes("text/event-stream")) {
       console.error("Notification stream returned an unexpected content type", contentType);
       onConnectionChange(false);
+      onRetryExhausted();
       return;
     }
 
@@ -235,11 +337,20 @@ async function consumeNotificationStream(
       });
     } catch (error) {
       if (signal.aborted) return;
-      console.error("Notification stream closed unexpectedly", error);
+      const reason = error instanceof Error ? error.message : "stream closed unexpectedly";
+      if (!(await retryAfterFailure(reason))) return;
+      continue;
     }
 
     onConnectionChange(false);
     retryAttempt = Date.now() - connectedAt >= 30_000 ? 0 : retryAttempt + 1;
+    if (!shouldRetryNotificationStream(retryAttempt)) {
+      console.error(
+        `Notification stream stopped after ${retryAttempt} consecutive failures: connection closed`,
+      );
+      onRetryExhausted();
+      return;
+    }
     await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
   }
 }
@@ -249,6 +360,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   unreadCount: 0,
   isLoading: false,
   sseConnected: false,
+  sseRetryExhausted: false,
   hasNextPage: false,
   nextCursor: null,
 
@@ -473,6 +585,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
         unreadCount: 0,
         isLoading: false,
         sseConnected: false,
+        sseRetryExhausted: false,
         hasNextPage: false,
         nextCursor: null,
       });
@@ -485,8 +598,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       globalStreamController?.abort();
       globalStreamController = null;
       globalStreamKey = null;
+      globalStreamRole = null;
       streamRefCount = 0;
-      set({ sseConnected: false });
+      set({ sseConnected: false, sseRetryExhausted: false });
     }
 
     streamRefCount++;
@@ -494,33 +608,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       return createStreamCleanup(sessionKey, set);
     }
 
-    globalStreamKey = sessionKey;
-    const controller = new AbortController();
-    globalStreamController = controller;
-    const generation = ++streamGeneration;
-    const isCurrent = () =>
-      globalStreamController === controller &&
-      globalStreamKey === sessionKey &&
-      streamGeneration === generation;
-
-    void consumeNotificationStream(
-      role,
-      controller.signal,
-      isCurrent,
-      (notification) => {
-        if (get().addNotification(notification)) {
-          showIncomingNotification(notification);
-        }
-      },
-      (connected) => {
-        if (isCurrent()) {
-          set({ sseConnected: connected });
-          if (connected) void get().fetchUnreadCount();
-        }
-      },
-    );
+    startNotificationStream(role, sessionKey, set, get);
 
     return createStreamCleanup(sessionKey, set);
+  },
+
+  retryStream: () => {
+    if (!globalStreamKey || !globalStreamRole || streamRefCount === 0) return;
+    globalStreamController?.abort();
+    globalStreamController = null;
+    streamGeneration++;
+    startNotificationStream(globalStreamRole, globalStreamKey, set, get);
   },
 }));
 
@@ -538,8 +636,9 @@ function createStreamCleanup(
       globalStreamController?.abort();
       globalStreamController = null;
       globalStreamKey = null;
+      globalStreamRole = null;
       streamGeneration++;
-      set({ sseConnected: false });
+      set({ sseConnected: false, sseRetryExhausted: false });
     }
   };
 }

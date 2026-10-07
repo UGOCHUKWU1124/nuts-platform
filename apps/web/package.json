@@ -8,7 +8,7 @@
     "start": "cross-env NODE_ENV=production next start -p 5173",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --test src/lib/portal-role.test.mjs",
+    "test:unit": "node --experimental-strip-types --test src/lib/portal-role.test.mjs src/lib/product-path.test.mjs src/lib/notification-stream-policy.test.mjs",
     "start:staging": "cross-env NODE_ENV=staging next start -p 5173"
   },
   "dependencies": {

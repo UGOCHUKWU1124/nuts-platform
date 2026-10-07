@@ -6,6 +6,7 @@ import type { ProductCardDto,PublicProductResponseDto } from "@/api/dto/product"
 import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
 import { formatPrice } from "@/lib/util";
+import { resolveProductDetailPath } from "@/lib/product-path";
 import { useAuthStore } from "@/zustand/auth";
 import { Heart,Plus,ShoppingBag } from "lucide-react";
 import Image from "next/image";
@@ -72,7 +73,7 @@ export function ProductCard({
   priority = false,
 }: ProductCardProps) {
   const router = useRouter();
-  const targetHref = href || `/product/${product.slug}`;
+  const targetHref = resolveProductDetailPath(product.slug, categoryPath, href);
 
   const effectiveAddedFrom: AddedFromType =
     addedFrom || (categoryPath ? "CATEGORY_PAGE" : "PRODUCT_PAGE");

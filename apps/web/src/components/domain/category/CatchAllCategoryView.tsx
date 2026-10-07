@@ -348,7 +348,7 @@ export function CatchAllCategoryView({
           initialProduct={initialProduct ?? undefined}
           initialReviews={initialReviews}
           addedFrom="CATEGORY_PAGE"
-          fullPath={`/category/${slugPath}`}
+          fullPath={currentCategoryUrl}
           breadcrumbs={categoryProductBreadcrumbs}
           noLayout
         />
