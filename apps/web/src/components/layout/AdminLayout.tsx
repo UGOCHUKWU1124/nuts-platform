@@ -2,6 +2,7 @@
 
 import { Button } from "@/component/ui/button";
 import { cn } from "@/lib/util";
+import { logoutWithFeedback } from "@/lib/logout";
 import { useAuthStore } from "@/zustand/auth";
 import {
 BarChart3,
@@ -174,7 +175,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2.5 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors h-10"
-            onClick={() => logout({ redirectTo: "/auth/admin/login" })}
+            onClick={() => void logoutWithFeedback(logout, { redirectTo: "/auth/admin/login" })}
           >
             <LogOut className="h-4 w-4" />
             Sign Out of Admin

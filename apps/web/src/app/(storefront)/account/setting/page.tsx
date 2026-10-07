@@ -194,7 +194,7 @@ export default function AccountSettingPage() {
       toast.success(
         res.data?.message || "Account deactivated. You can sign in within the grace period to reactivate."
       );
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) => {
       toast.error(getApiErrorMessage(err, "Account deactivation failed. Check your OTP code."));
@@ -207,7 +207,7 @@ export default function AccountSettingPage() {
     onSuccess: async () => {
       setIsDeleteOpen(false);
       toast.success("Your account has been permanently deleted.");
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) => {
       toast.error(getApiErrorMessage(err, "Failed to permanently delete account."));

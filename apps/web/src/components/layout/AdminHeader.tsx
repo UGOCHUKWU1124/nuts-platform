@@ -3,6 +3,7 @@
 import { NotificationBell } from "@/component/notification/NotificationBell";
 import { Button } from "@/component/ui/button";
 import { useAuthStore } from "@/zustand/auth";
+import { logoutWithFeedback } from "@/lib/logout";
 import {
 Activity,
 ChevronDown,
@@ -199,9 +200,9 @@ export function AdminHeader({ onMobileMenuClick }: { onMobileMenuClick?: () => v
                 <div className="border-t border-border/60 my-1 pt-1">
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       setDropdownOpen(false);
-                      await logout({ redirectTo: "/auth/admin/login" });
+                      void logoutWithFeedback(logout, { redirectTo: "/auth/admin/login" });
                     }}
                     className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors"
                   >

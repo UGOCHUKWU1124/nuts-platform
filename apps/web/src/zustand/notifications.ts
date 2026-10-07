@@ -177,6 +177,13 @@ async function consumeNotificationStream(
       refreshedAfterUnauthorized = true;
       const refresh = await performTokenRefresh(undefined, role);
       if (refresh.success) continue;
+      if (refresh.reason === "unavailable") {
+        refreshedAfterUnauthorized = false;
+        retryAttempt++;
+        onConnectionChange(false);
+        await waitForRetry(getStreamRetryDelay(retryAttempt), signal);
+        continue;
+      }
       console.error("Notification stream unauthorized; session refresh failed");
       onConnectionChange(false);
       return;
