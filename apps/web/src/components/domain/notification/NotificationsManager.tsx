@@ -102,6 +102,7 @@ export function NotificationsManager({
     notifications,
     unreadCount,
     isLoading,
+    sseRetryExhausted,
     hasNextPage,
     nextCursor,
     markAsRead,
@@ -109,6 +110,7 @@ export function NotificationsManager({
     deleteNotification,
     clearAll,
     fetchNotifications,
+    retryStream,
   } = useNotifications();
 
   useEffect(() => {
@@ -153,6 +155,25 @@ export function NotificationsManager({
           </p>
         </div>
       </div>
+
+      {sseRetryExhausted && (
+        <div
+          role="status"
+          className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-muted-foreground">
+            Live notification updates are unavailable. Your notification list is still accessible.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={retryStream}
+          >
+            Reconnect
+          </Button>
+        </div>
+      )}
 
       {/* Action Header & Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">

@@ -11,6 +11,7 @@ export function useNotifications() {
   const unreadCount = useNotificationsStore((s) => s.unreadCount);
   const isLoading = useNotificationsStore((s) => s.isLoading);
   const sseConnected = useNotificationsStore((s) => s.sseConnected);
+  const sseRetryExhausted = useNotificationsStore((s) => s.sseRetryExhausted);
   const hasNextPage = useNotificationsStore((s) => s.hasNextPage);
   const nextCursor = useNotificationsStore((s) => s.nextCursor);
 
@@ -19,6 +20,7 @@ export function useNotifications() {
     unreadCount,
     isLoading,
     sseConnected,
+    sseRetryExhausted,
     hasNextPage,
     nextCursor,
     fetchNotifications: useNotificationsStore.getState().fetchNotifications,
@@ -27,6 +29,7 @@ export function useNotifications() {
     markAllAsRead: useNotificationsStore.getState().markAllAsRead,
     deleteNotification: useNotificationsStore.getState().deleteNotification,
     clearAll: useNotificationsStore.getState().clearAll,
+    retryStream: useNotificationsStore.getState().retryStream,
   };
 }
 
