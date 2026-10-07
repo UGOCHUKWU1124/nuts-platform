@@ -390,7 +390,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           if (currentRole === "admin") {
             const { data } = await adminAuthService.me();
-            if (data.user?.id) get().setSession(data.user, "admin");
+            if (data?.id) get().setSession(data, "admin");
           } else if (currentRole === "vendor") {
             const { data } = await vendorAccountService.me();
             if (data?.id) get().setSession(data, "vendor");

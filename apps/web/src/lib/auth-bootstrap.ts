@@ -1,34 +1,22 @@
-import { performTokenRefresh } from "@/api/core/client";
+import { adminAuthService, userService, vendorAccountService } from "@/api";
+import { AuthRefreshUnavailableError } from "@/api/core/client";
 import { clearAuthTokens } from "@/api/core/token-storage";
 import { clearBrowserQueryClient } from "@/lib/query-client";
 import { getActiveRole,useAuthStore,type AuthRole } from "@/zustand/auth";
 import { authBroadcast,type AuthEvent } from "./auth-events";
+import axios from "axios";
 
 const bootstrapPromises = new Map<AuthRole, Promise<void>>();
 let broadcastSubscribed = false;
 
-export function hasSessionIndicatorCookieForRole(role: AuthRole): boolean {
-  if (typeof document === "undefined") return false;
-  const cookies = new Map(
-    document.cookie
-      .split(";")
-      .map((cookie) => cookie.trim().split("="))
-      .filter((parts) => parts.length >= 2)
-      .map(([name, ...value]) => [name, value.join("=")]),
-  );
+async function getCurrentProfile(role: AuthRole): Promise<unknown> {
   if (role === "admin") {
-    return (
-      cookies.get("admin_session") === "1" ||
-      cookies.has("admin_access_token")
-    );
+    return (await adminAuthService.me()).data;
   }
   if (role === "vendor") {
-    return (
-      cookies.get("vendor_session") === "1" ||
-      cookies.has("vendor_access_token")
-    );
+    return (await vendorAccountService.me()).data;
   }
-  return cookies.get("user_session") === "1" || cookies.has("user_access_token");
+  return (await userService.me()).data;
 }
 
 /**
@@ -67,14 +55,10 @@ export const authBootstrap = async (): Promise<void> => {
   current.syncActiveRole(currentRole);
 
   const roleSession = current.sessions?.[currentRole];
-  const hasCookie = hasSessionIndicatorCookieForRole(currentRole);
 
-  // If Zustand session is already authenticated and the session cookie is still present,
-  // skip the refresh. The in-memory access token is intentionally excluded: it resets to null
-  // on every page reload (JS module re-init), so including it would trigger a needless /refresh
-  // on every page load even when the session is perfectly valid. Genuine token expiry is
-  // caught lazily by the 401 interceptor in client.ts, which then calls performTokenRefresh.
-  if (roleSession?.isAuthenticated && roleSession?.user && hasCookie) {
+  // Auth cookies are HttpOnly and may be host-only on a separate API origin, so
+  // the frontend cannot reliably use a readable cookie as proof of a session.
+  if (roleSession?.isAuthenticated && roleSession?.user) {
     return;
   }
 
@@ -84,45 +68,25 @@ export const authBootstrap = async (): Promise<void> => {
   }
 
   const bootstrapPromise = (async () => {
-    // If no explicit session indicator cookie exists for this portal, user is definitively a guest on this surface
-    if (!hasSessionIndicatorCookieForRole(currentRole)) {
-      useAuthStore.getState().clearSession(currentRole);
-      return;
-    }
-
     const state = useAuthStore.getState();
     const existingSession = state.sessions?.[currentRole];
-    const hasPersistedUser = Boolean(existingSession?.user);
+    const hasSessionUser = Boolean(existingSession?.user);
 
-    // If session is already authenticated and we have the user profile, skip refresh.
-    // Token expiry is handled lazily by the 401 interceptor in client.ts.
-    if (existingSession?.isAuthenticated && hasPersistedUser) {
-      return;
-    }
-
-    if (!hasPersistedUser && getActiveRole() === currentRole) {
+    if (!hasSessionUser && getActiveRole() === currentRole) {
       useAuthStore.getState().setStatus("hydrating");
     }
 
     try {
-      const refreshed = await performTokenRefresh(undefined, currentRole);
-      if (!refreshed.success) {
-        if (refreshed.reason === "expired") {
-          useAuthStore.getState().clearSession(currentRole);
-        } else if (getActiveRole() === currentRole) {
-          useAuthStore.getState().setStatus("unavailable");
-        }
-        return;
-      }
-
-      const refreshedUser = refreshed.user;
+      // Validate the access cookie first. The shared Axios interceptor refreshes
+      // and retries this request only when the access token has actually expired.
+      const profile = await getCurrentProfile(currentRole);
       if (
-        !refreshedUser ||
-        typeof refreshedUser !== "object" ||
-        !("id" in refreshedUser) ||
-        typeof refreshedUser.id !== "string" ||
-        !("email" in refreshedUser) ||
-        typeof refreshedUser.email !== "string"
+        !profile ||
+        typeof profile !== "object" ||
+        !("id" in profile) ||
+        typeof profile.id !== "string" ||
+        !("email" in profile) ||
+        typeof profile.email !== "string"
       ) {
         if (getActiveRole() === currentRole) {
           useAuthStore.getState().setStatus("unavailable");
@@ -130,28 +94,42 @@ export const authBootstrap = async (): Promise<void> => {
         return;
       }
 
-      const profile = refreshedUser as Record<string, unknown>;
+      const sessionProfile = profile as Record<string, unknown>;
       const optionalString = (value: unknown) =>
         typeof value === "string" ? value : undefined;
 
       useAuthStore.getState().setSession({
-        id: refreshedUser.id,
-        email: refreshedUser.email,
-        firstName: optionalString(profile.firstName) ?? null,
-        lastName: optionalString(profile.lastName) ?? null,
-        phone: optionalString(profile.phone) ?? null,
-        phoneNumber: optionalString(profile.phoneNumber) ?? null,
-        storeName: optionalString(profile.storeName),
-        storeSlug: optionalString(profile.storeSlug),
+        id: profile.id,
+        email: profile.email,
+        firstName: optionalString(sessionProfile.firstName) ?? null,
+        lastName: optionalString(sessionProfile.lastName) ?? null,
+        phone: optionalString(sessionProfile.phone) ?? null,
+        phoneNumber: optionalString(sessionProfile.phoneNumber) ?? null,
+        storeName: optionalString(sessionProfile.storeName),
+        storeSlug: optionalString(sessionProfile.storeSlug),
         storeLogoUrl:
-          typeof profile.storeLogoUrl === "string" || profile.storeLogoUrl === null
-            ? profile.storeLogoUrl
+          typeof sessionProfile.storeLogoUrl === "string" || sessionProfile.storeLogoUrl === null
+            ? sessionProfile.storeLogoUrl
             : undefined,
         isVerified:
-          typeof profile.isVerified === "boolean" ? profile.isVerified : undefined,
-        isActive: typeof profile.isActive === "boolean" ? profile.isActive : undefined,
+          typeof sessionProfile.isVerified === "boolean" ? sessionProfile.isVerified : undefined,
+        isActive:
+          typeof sessionProfile.isActive === "boolean" ? sessionProfile.isActive : undefined,
       }, currentRole);
     } catch (error) {
+      if (error instanceof AuthRefreshUnavailableError) {
+        if (getActiveRole() === currentRole) {
+          useAuthStore.getState().setStatus("unavailable");
+        }
+        return;
+      }
+
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      if (status === 401 || status === 403) {
+        useAuthStore.getState().clearSession(currentRole);
+        return;
+      }
+
       console.error("Session bootstrap failed unexpectedly", error);
       if (getActiveRole() === currentRole) {
         useAuthStore.getState().setStatus("unavailable");

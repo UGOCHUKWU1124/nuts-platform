@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Initializes tab-local UI state via idempotent authBootstrap without duplicate /me requests.
+ * Restores the active portal from its cookie-authenticated /me endpoint.
  * Tracks Next.js route changes at runtime so each portal uses its own session context.
  */
 export function SessionHydrator({ children }: { children: React.ReactNode }) {
