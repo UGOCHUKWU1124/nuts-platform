@@ -30,6 +30,18 @@ test("public storefront APIs never select portal credentials", () => {
 
 test("protected API namespaces use the matching account role", () => {
   assert.equal(
+    getPortalRoleForApiUrl("/api/v1/vendors/me", "/vendor/analytic"),
+    "vendor",
+  );
+  assert.equal(
+    getPortalRoleForApiUrl("/api/v1/admin/auth/me", "/admin"),
+    "admin",
+  );
+  assert.equal(
+    getPortalRoleForApiUrl("/api/v1/account", "/"),
+    "user",
+  );
+  assert.equal(
     getPortalRoleForApiUrl("/api/v1/vendors/products", "/vendor/my-store"),
     "vendor",
   );

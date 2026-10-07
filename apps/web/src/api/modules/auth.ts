@@ -2,6 +2,7 @@ import { api } from "@/api/core/client";
 import type {
 AdminLoginPayload,
 AdminSetupPayload,
+AuthUserDto,
 AuthResponseDto,
 LoginPayload,
 OtpRequestPayload,
@@ -56,7 +57,7 @@ export const adminAuthService = {
     return api.post<AuthResponseDto>("/admin/auth/login", payload);
   },
   me() {
-    return api.get<AuthResponseDto>("/admin/auth/me");
+    return api.get<AuthUserDto>("/admin/auth/me");
   },
   updateMe(payload: { firstName?: string; lastName?: string }) {
     return api.patch<AuthResponseDto>("/admin/auth/me", payload);

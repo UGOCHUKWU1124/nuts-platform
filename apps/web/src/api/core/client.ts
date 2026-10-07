@@ -91,6 +91,13 @@ export interface RefreshSessionResult {
   reason?: "expired" | "unavailable" | "invalid-response" | "unscoped";
 }
 
+export class AuthRefreshUnavailableError extends Error {
+  constructor() {
+    super("Authentication is temporarily unavailable. Please retry.");
+    this.name = "AuthRefreshUnavailableError";
+  }
+}
+
 export const getRoleForUrl = (
   url?: string,
 ): "admin" | "vendor" | "user" | null => {
@@ -258,6 +265,13 @@ axiosInstance.interceptors.response.use(
           setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
         }
         return axiosInstance(originalRequest);
+      }
+
+      if (
+        refreshed.reason === "unavailable" ||
+        refreshed.reason === "invalid-response"
+      ) {
+        return Promise.reject(new AuthRefreshUnavailableError());
       }
     }
 
