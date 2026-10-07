@@ -5,6 +5,7 @@ clearAuthTokens,
 getAuthToken,
 setAuthTokens,
 } from "./token-storage";
+import { getPortalRoleForApiUrl } from "@/lib/portal-role";
 import type { ApiSuccessEnvelope,PaginationMeta } from "./types";
 
 let inMemoryCsrfToken: string | null = null;
@@ -89,11 +90,12 @@ export interface RefreshSessionResult {
   user?: unknown;
 }
 
-export const getRoleForUrl = (url?: string): "admin" | "vendor" | "user" => {
-  const target = (url || (typeof window !== "undefined" ? window.location.pathname : "")).toLowerCase();
-  if (target.includes("/admin")) return "admin";
-  if (target.includes("/vendor")) return "vendor";
-  return "user";
+export const getRoleForUrl = (
+  url?: string,
+): "admin" | "vendor" | "user" | null => {
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname : "/";
+  return getPortalRoleForApiUrl(url, pathname);
 };
 
 /**
@@ -112,7 +114,7 @@ export const performTokenRefresh = async (
   specificRole?: "admin" | "vendor" | "user"
 ): Promise<RefreshSessionResult> => {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-  const role = specificRole || getRoleForUrl(hintUrl);
+  const role = specificRole || getRoleForUrl(hintUrl) || "user";
   try {
     const csrf = getCsrfToken();
     const headers: Record<string, string> = {};
@@ -163,17 +165,9 @@ axiosInstance.interceptors.request.use(async (config) => {
   config.headers = config.headers || {};
 
   // Attach role-aware access token from memory if present
-  const reqUrl = (config.url || "").toLowerCase();
-  let roleContext: string | undefined = undefined;
-  if (reqUrl.includes("/admin")) roleContext = "admin";
-  else if (reqUrl.includes("/vendor")) roleContext = "vendor";
-  else if (typeof window !== "undefined") {
-    const path = window.location.pathname.toLowerCase();
-    if (path.startsWith("/admin")) roleContext = "admin";
-    else if (path.startsWith("/vendor")) roleContext = "vendor";
-  }
+  const roleContext = getRoleForUrl(config.url);
 
-  const token = getAuthToken(roleContext);
+  const token = roleContext ? getAuthToken(roleContext) : null;
   if (token && !extractHeader(config.headers, "Authorization")) {
     setHeader(config.headers, "Authorization", `Bearer ${token}`);
   }
@@ -216,6 +210,9 @@ axiosInstance.interceptors.response.use(
     }
 
     const is401 = status === 401;
+    const role = getRoleForUrl(originalRequest.url);
+    if (!role) return Promise.reject(error);
+
     const isAuthEndpoint =
       originalRequest.url?.includes("/auth/refresh") ||
       originalRequest.url?.includes("/auth/login") ||
@@ -224,7 +221,6 @@ axiosInstance.interceptors.response.use(
 
     if (is401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
-      const role = getRoleForUrl(originalRequest.url);
 
       if (!refreshPromises[role]) {
         refreshPromises[role] = performTokenRefresh(originalRequest.url, role).finally(() => {

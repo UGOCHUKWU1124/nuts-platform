@@ -8,16 +8,7 @@ import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/component/notification/NotificationBell";
 import { useAuthStore } from "@/zustand/auth";
-
-const VENDOR_PORTAL_ROUTES = [
-  "/vendor/analytic",
-  "/vendor/discount",
-  "/vendor/notifications",
-  "/vendor/order",
-  "/vendor/product",
-  "/vendor/setting",
-  "/vendor/wallet",
-];
+import { VENDOR_PORTAL_PATHS } from "@/lib/portal-role";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -25,7 +16,7 @@ export function BottomNav() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
-  const isVendorPortalRoute = VENDOR_PORTAL_ROUTES.some(
+  const isVendorPortalRoute = VENDOR_PORTAL_PATHS.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
 

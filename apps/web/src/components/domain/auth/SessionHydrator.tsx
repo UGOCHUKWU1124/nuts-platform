@@ -1,15 +1,17 @@
 "use client";
 
 import { useAuthStore } from "@/zustand/auth";
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 /**
  * Initializes tab-local UI state via idempotent authBootstrap without duplicate /me requests.
- * Uses window location runtime listeners inside useEffect to avoid blocking Next.js static prerendering.
+ * Tracks Next.js route changes at runtime so each portal uses its own session context.
  */
 export function SessionHydrator({ children }: { children: React.ReactNode }) {
   const hydrateFromCookies = useAuthStore((state) => state.hydrateFromCookies);
   const syncActiveRole = useAuthStore((state) => state.syncActiveRole);
+  const pathname = usePathname();
 
   useEffect(() => {
     try {
@@ -19,20 +21,12 @@ export function SessionHydrator({ children }: { children: React.ReactNode }) {
         throw error;
       }
     }
+  }, []);
 
+  useEffect(() => {
     syncActiveRole();
     hydrateFromCookies();
-
-    const handleLocationChange = () => {
-      syncActiveRole();
-      hydrateFromCookies();
-    };
-
-    window.addEventListener("popstate", handleLocationChange);
-    return () => {
-      window.removeEventListener("popstate", handleLocationChange);
-    };
-  }, [syncActiveRole, hydrateFromCookies]);
+  }, [pathname, syncActiveRole, hydrateFromCookies]);
 
   return <>{children}</>;
 }
