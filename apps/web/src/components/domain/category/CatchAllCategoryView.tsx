@@ -1,13 +1,14 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { productService } from "@/api";
+import { categoryService,productService } from "@/api";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import type { ProductCardDto } from "@/api/dto/product";
+import type { ProductReviewsMetaDto, ReviewResponseDto } from "@/api/dto/review";
+import type { ProductCardDto,PublicProductResponseDto } from "@/api/dto/product";
 import { CategoryFilterDrawer } from "@/component/category/CategoryFilterDrawer";
-import { CategorySectionGrid } from "@/component/category/CategorySectionGrid";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { ProductCard } from "@/component/product/ProductCard";
+import { ProductDetailView } from "@/component/product/ProductDetailView";
 import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
@@ -24,16 +25,19 @@ SlidersHorizontal,
 X,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
+import { useParams } from "next/navigation";
 import { useDeferredValue,useMemo,useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
 const EMPTY_PRODUCTS: ProductCardDto[] = [];
 
-export interface CategoryBrowseViewProps {
+export interface CatchAllCategoryViewProps {
   slugs: string[];
   initialCategories: CategoryResponseDto[];
   initialCategoryNode?: CategoryResponseDto | null;
   initialProducts: ProductCardDto[];
+  initialProduct?: PublicProductResponseDto | null;
+  initialReviews?: { data: ReviewResponseDto[]; meta?: ProductReviewsMetaDto } | null;
   initialSearchParams?: {
     search?: string;
     sort?: string;
@@ -43,14 +47,24 @@ export interface CategoryBrowseViewProps {
   };
 }
 
-export function CategoryBrowseView({
+export function CatchAllCategoryView({
   slugs: propSlugs,
   initialCategories,
   initialCategoryNode,
   initialProducts,
+  initialProduct,
+  initialReviews,
   initialSearchParams,
-}: CategoryBrowseViewProps) {
-  const slugs = propSlugs;
+}: CatchAllCategoryViewProps) {
+  const params = useParams();
+  const rawSlug = params?.slug;
+  const slugs: string[] = propSlugs?.length
+    ? propSlugs
+    : Array.isArray(rawSlug)
+    ? rawSlug
+    : typeof rawSlug === "string"
+    ? [rawSlug]
+    : [];
 
   const slugPath = slugs.join("/");
   const currentCategoryUrl = `/category/${slugPath}`;
@@ -65,6 +79,7 @@ export function CategoryBrowseView({
   const [maxPrice, setMaxPrice] = useState(initialSearchParams?.maxPrice || "");
   const [inStock, setInStock] = useState(Boolean(initialSearchParams?.inStock));
   const [sortBy, setSortBy] = useState(initialSearchParams?.sort || "newest");
+  const [activeTab, setActiveTab] = useState<string>("");
 
   // 1. Categories delivered directly via RSC props with client fallback
   const { data: clientCategories } = usePublicCategories(initialCategories);
@@ -72,13 +87,58 @@ export function CategoryBrowseView({
   const tree = clientCategories ?? initialCategories ?? EMPTY_CATEGORIES;
   const traversal = resolveCategoryPath(tree, slugs);
 
+  // 2. Category node resolution with client fallback
+  const { data: clientCategoryNode, isLoading: isCategoryResolving } = useQuery({
+    queryKey: ["category-by-path", slugPath],
+    queryFn: async () => {
+      if (!slugPath) return null;
+      try {
+        const res = await categoryService.findByPath(slugPath);
+        return res.data || null;
+      } catch {
+        if (slugs.length > 1) {
+          const lastSlug = slugs[slugs.length - 1];
+          if (lastSlug) {
+            try {
+              const res = await categoryService.findByPath(lastSlug);
+              return res.data || null;
+            } catch {
+              return null;
+            }
+          }
+        }
+        return null;
+      }
+    },
+    initialData: initialCategoryNode ?? traversal.matchedNode ?? undefined,
+    enabled: Boolean(!initialProduct && !(initialCategoryNode ?? traversal.matchedNode) && slugs.length > 0),
+    staleTime: 1000 * 60 * 5,
+  });
+
   const categoryNode: CategoryResponseDto | null =
-    initialCategoryNode ?? traversal.matchedNode ?? null;
+    initialCategoryNode ?? traversal.matchedNode ?? clientCategoryNode ?? null;
+
+  // Determine if this path targets a product
+  const isProduct = Boolean(initialProduct);
+  const productSlug = isProduct
+    ? (initialProduct?.slug ?? slugs[slugs.length - 1])
+    : null;
 
   const rawChildren = getNodeChildren(categoryNode);
   const matchedChain = traversal.matchedChain ?? EMPTY_CATEGORIES;
   const rootNode = matchedChain[0] ?? categoryNode;
   const parentNode = matchedChain.length > 1 ? matchedChain[matchedChain.length - 2] : null;
+
+  const scrollToSubcategory = (subcatSlug: string) => {
+    setActiveTab(subcatSlug);
+    const element = document.getElementById(`subcat-${subcatSlug}`);
+    if (element) {
+      const yOffset = -120;
+      const y =
+        element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
+  };
 
   // Flattened Category Map for subcategory resolution
   const categoryMap = useMemo(() => {
@@ -101,12 +161,75 @@ export function CategoryBrowseView({
     return map;
   }, [tree]);
 
+  const getProductCategoryPath = (
+    product: ProductCardDto,
+    fallbackCategoryPath: string,
+  ): string => {
+    const categoryIds = [
+      product.subcategory?.id,
+      product.categoryId,
+      product.category?.id,
+      product.parentSubcategory?.id,
+    ].filter((id): id is string => Boolean(id));
+    let bestChain:
+      | { id: string; slug: string; parentId?: string | null }[]
+      | undefined;
+
+    for (const categoryId of categoryIds) {
+      const chain: { id: string; slug: string; parentId?: string | null }[] = [];
+      const visited = new Set<string>();
+      let current = categoryMap.get(categoryId);
+
+      while (current && !visited.has(current.id)) {
+        visited.add(current.id);
+        chain.push(current);
+        current = current.parentId
+          ? categoryMap.get(current.parentId)
+          : undefined;
+      }
+
+      const includesCurrentCategory = chain.some(
+        (item) => item.id === categoryNode?.id,
+      );
+      if (includesCurrentCategory && (!bestChain || chain.length > bestChain.length)) {
+        bestChain = chain;
+      }
+    }
+
+    if (bestChain) {
+      return `/category/${[...bestChain]
+        .reverse()
+        .map((item) => encodeURIComponent(item.slug))
+        .join("/")}`;
+    }
+
+    const categoryPath = [
+      product.subcategory?.path,
+      product.category?.path,
+      product.parentSubcategory?.path,
+    ]
+      .filter((path): path is string => Boolean(path))
+      .sort((left, right) => right.length - left.length)[0];
+    if (categoryPath) {
+      const normalizedPath = categoryPath.startsWith("/category/")
+        ? categoryPath.slice("/category/".length)
+        : categoryPath.replace(/^\/+/, "");
+      const pathSegments = normalizedPath.split("/").filter(Boolean);
+      if (pathSegments.length > 0) {
+        return `/category/${pathSegments.map(encodeURIComponent).join("/")}`;
+      }
+    }
+
+    return fallbackCategoryPath;
+  };
+
   const handleResetFilters = () => {
     setSearchInput("");
     setMinPrice("");
     setMaxPrice("");
     setInStock(false);
     setSortBy("newest");
+    setActiveTab("");
   };
 
   const activeFiltersCount = useMemo(() => {
@@ -120,7 +243,7 @@ export function CategoryBrowseView({
 
   const hasActiveFilters = activeFiltersCount > 0;
 
-  // Fetch client-side only if the server could not provide initial products.
+  // 3. Category products query with client fallback if initialProducts returned empty
   const { data: clientCategoryProducts, isLoading: isProductsLoading } = useQuery({
     queryKey: ["category-products", categoryNode?.id || slugPath],
     queryFn: async () => {
@@ -132,14 +255,13 @@ export function CategoryBrowseView({
       return Array.isArray(res.data) ? res.data : [];
     },
     initialData: initialProducts?.length ? initialProducts : undefined,
-    enabled: Boolean(categoryNode?.id && !initialProducts?.length),
+    enabled: Boolean(!initialProduct && categoryNode?.id && !initialProducts?.length),
     staleTime: 1000 * 60 * 2,
   });
 
   // Group products by subcategory
   const rawProducts = clientCategoryProducts ?? initialProducts ?? EMPTY_PRODUCTS;
   const subcategoryGroups = (() => {
-    if (!rawProducts.length) return [];
     const groupMap = new Map<string, { id: string; name: string; slug: string; products: ProductCardDto[] }>();
 
     // 1. Pre-populate with immediate children if any exist so display order matches navigation
@@ -203,7 +325,14 @@ export function CategoryBrowseView({
       }
     }
 
-    return Array.from(groupMap.values()).filter((g) => g.products.length > 0);
+    return Array.from(groupMap.values()).filter(
+      (group) =>
+        group.products.length > 0 ||
+        rawChildren.some(
+          (child) =>
+            child.id === group.id && getNodeChildren(child).length > 0,
+        ),
+    );
   })();
 
   // Filter & sort products within each group in-memory
@@ -242,7 +371,14 @@ export function CategoryBrowseView({
 
         return { ...group, products: prods };
       })
-      .filter((g) => g.products.length > 0);
+      .filter(
+        (group) =>
+          group.products.length > 0 ||
+          rawChildren.some(
+            (child) =>
+              child.id === group.id && getNodeChildren(child).length > 0,
+          ),
+      );
   })();
 
   // Breadcrumbs for category view
@@ -257,12 +393,16 @@ export function CategoryBrowseView({
     if (categoryNode?.breadcrumbs && categoryNode.breadcrumbs.length > 0) {
       return categoryNode.breadcrumbs.map((breadcrumb) => {
         const path = breadcrumb.path || breadcrumb.slug || breadcrumb.id;
-        const segments = path.startsWith("/category/")
-          ? path.slice("/category/".length).split("/")
-          : path.replace(/^\/+/, "").split("/");
+        const normalizedPath = path.startsWith("/category/")
+          ? path.slice("/category/".length)
+          : path.replace(/^\/+/, "");
         return {
           name: breadcrumb.name,
-          href: `/category/${segments.filter(Boolean).map(encodeURIComponent).join("/")}`,
+          href: `/category/${normalizedPath
+            .split("/")
+            .filter(Boolean)
+            .map(encodeURIComponent)
+            .join("/")}`,
         };
       });
     }
@@ -272,13 +412,54 @@ export function CategoryBrowseView({
     return categoryNode ? [{ name: categoryNode.name, href: currentCategoryUrl }] : [];
   })();
 
+  // Breadcrumbs for product detail view embedded in category catch-all
+  const categoryProductBreadcrumbs = isProduct && traversal.breadcrumbs.length > 0
+    ? traversal.breadcrumbs
+    : undefined;
+
+  const parentBreadcrumb =
+    breadcrumbItems.length > 1
+      ? breadcrumbItems[breadcrumbItems.length - 2]
+      : null;
   const parentBackHref =
     parentNode && matchedChain.length > 1
-      ? `/category/${matchedChain.slice(0, -1).map((c) => c.slug).join("/")}`
-      : null;
+      ? `/category/${matchedChain
+          .slice(0, -1)
+          .map((category) => encodeURIComponent(category.slug))
+          .join("/")}`
+      : parentBreadcrumb?.href ?? null;
+  const parentName = parentNode?.name ?? parentBreadcrumb?.name;
 
-  // Product detail routes are resolved independently by the server route.
+  // ─── RENDERING BRANCHES (ALL HOOKS DECLARED ABOVE) ───
+
+  // 1. PRODUCT DETAIL VIEW
+  if (isProduct && productSlug) {
+    return (
+      <CustomerLayout categories={tree}>
+        <ProductDetailView
+          slug={productSlug}
+          initialProduct={initialProduct ?? undefined}
+          initialReviews={initialReviews}
+          addedFrom="CATEGORY_PAGE"
+          fullPath={currentCategoryUrl}
+          breadcrumbs={categoryProductBreadcrumbs}
+          noLayout
+        />
+      </CustomerLayout>
+    );
+  }
+
+  // 2. CATEGORY NOT FOUND STATE
   if (!categoryNode) {
+    if (isCategoryResolving) {
+      return (
+        <CustomerLayout categories={tree}>
+          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+            <ProductGridSkeleton count={8} />
+          </div>
+        </CustomerLayout>
+      );
+    }
     return (
       <CustomerLayout categories={tree}>
         <div className="mx-auto max-w-7xl px-4 py-24 text-center sm:px-6 lg:px-8">
@@ -335,14 +516,14 @@ export function CategoryBrowseView({
           </nav>
 
           {/* Quick Return to Parent */}
-          {parentBackHref && parentNode && (
+          {parentBackHref && parentName && (
             <div className="mb-4">
               <Link
                 href={parentBackHref}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors group"
               >
                 <ChevronLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-                <span>Back to {parentNode.name}</span>
+                <span>Back to {parentName}</span>
               </Link>
             </div>
           )}
@@ -399,49 +580,61 @@ export function CategoryBrowseView({
             </div>
           </div>
 
-          {rawChildren.length > 0 && (
-            <section
-              aria-labelledby="subcategory-heading"
-              className="mb-10"
-            >
-              <div className="mb-4 flex items-end justify-between gap-4">
-                <div>
-                  <h2
-                    id="subcategory-heading"
-                    className="text-lg font-bold tracking-tight text-foreground sm:text-xl"
+          {/* Subcategory Pills & Filter Bar */}
+          <div className="mb-8 border-b border-border/60 pb-4">
+            <div className="flex items-center justify-between gap-4">
+              {filteredGroups.length > 0 ? (
+                <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className={`rounded-full px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
+                      !activeTab
+                        ? "bg-black text-white dark:bg-white dark:text-black"
+                        : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                    }`}
                   >
-                    Explore {categoryNode.name}
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Choose a section to browse its collections and products.
-                  </p>
+                    All Sections
+                  </button>
+                  {filteredGroups.map((group) => {
+                    const isSelected = activeTab === group.slug;
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() => scrollToSubcategory(group.slug)}
+                        className={`rounded-full px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-black text-white dark:bg-white dark:text-black"
+                            : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                        }`}
+                      >
+                        {group.name}
+                      </button>
+                    );
+                  })}
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {rawChildren.length} {rawChildren.length === 1 ? "section" : "sections"}
-                </span>
-              </div>
-
-              <CategorySectionGrid
-                categories={rawChildren}
-                parentPath={currentCategoryUrl}
-              />
-            </section>
-          )}
-
-          <div className="mb-6 flex justify-end border-b border-border/60 pb-4">
-            <button
-              type="button"
-              onClick={() => setIsFilterDrawerOpen(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
-            >
-              <span>Filters</span>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              {activeFiltersCount > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-                  {activeFiltersCount}
-                </span>
+              ) : (
+                <div />
               )}
-            </button>
+
+              <button
+                type="button"
+                onClick={() => setIsFilterDrawerOpen(true)}
+                className="flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-sm font-medium text-foreground hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors shrink-0 cursor-pointer"
+              >
+                <span>Filters</span>
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {activeFiltersCount > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Active Filter Chips */}
@@ -526,10 +719,10 @@ export function CategoryBrowseView({
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
                   {hasActiveFilters
                     ? "No products match your active filters. Try adjusting or clearing your filters."
-                    : "There are no products in this collection yet. Choose one of the sections above to continue browsing."}
+                    : `We are curating exclusive pieces for this collection. Explore other subcategories or check back soon.`}
                 </p>
 
-                {hasActiveFilters && (
+                {hasActiveFilters ? (
                   <Button
                     onClick={handleResetFilters}
                     variant="outline"
@@ -537,6 +730,20 @@ export function CategoryBrowseView({
                   >
                     Clear Filters
                   </Button>
+                ) : (
+                  rawChildren.length > 0 && (
+                    <div className="mt-6 flex flex-wrap justify-center gap-2">
+                      {rawChildren.slice(0, 4).map((child) => (
+                        <Link
+                          key={child.id}
+                          href={`/category/${slugPath}/${child.slug}`}
+                          className="rounded-full bg-secondary hover:bg-secondary/80 px-4 py-2 text-xs font-medium text-foreground transition-all cursor-pointer"
+                        >
+                          Explore {child.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
             ) : (
@@ -548,25 +755,53 @@ export function CategoryBrowseView({
                     className="scroll-mt-28"
                   >
                     <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground mb-6 flex items-center justify-between border-b border-border/40 pb-3">
-                      <span>{group.name}</span>
+                      {rawChildren.some((child) => child.id === group.id) ? (
+                        <Link
+                          href={`${currentCategoryUrl}/${encodeURIComponent(group.slug)}`}
+                          aria-label={`Browse ${group.name}`}
+                          className="group/section inline-flex items-center gap-1.5 hover:text-primary"
+                        >
+                          <span>{group.name}</span>
+                          <ChevronRight
+                            aria-hidden="true"
+                            className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover/section:translate-x-0.5 group-hover/section:text-primary group-hover/section:opacity-100"
+                          />
+                        </Link>
+                      ) : (
+                        <span>{group.name}</span>
+                      )}
                       <span className="text-xs font-normal text-muted-foreground">
                         ({group.products.length} {group.products.length === 1 ? "item" : "items"})
                       </span>
                     </h2>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 sm:gap-x-6 sm:gap-y-12">
-                      {group.products.map((product: ProductCardDto) => (
-                        <ProductCard
-                          key={product.id}
-                          product={product}
-                          categoryPath={
-                            group.id === categoryNode.id
-                              ? currentCategoryUrl
-                              : `${currentCategoryUrl}/${encodeURIComponent(group.slug)}`
-                          }
-                          addedFrom="CATEGORY_PAGE"
-                        />
-                      ))}
-                    </div>
+                    {group.products.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 sm:gap-x-6 sm:gap-y-12">
+                        {group.products.map((product: ProductCardDto) => (
+                          <ProductCard
+                            key={product.id}
+                            product={product}
+                            categoryPath={getProductCategoryPath(
+                              product,
+                              rawChildren.some((child) => child.id === group.id)
+                                ? `${currentCategoryUrl}/${encodeURIComponent(group.slug)}`
+                                : currentCategoryUrl,
+                            )}
+                            addedFrom="CATEGORY_PAGE"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No products here yet.{" "}
+                        <Link
+                          href={`${currentCategoryUrl}/${encodeURIComponent(group.slug)}`}
+                          className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                        >
+                          Explore {group.name} subcategories
+                        </Link>
+                        .
+                      </p>
+                    )}
                   </section>
                 ))}
               </div>
