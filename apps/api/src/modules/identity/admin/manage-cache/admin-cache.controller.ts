@@ -3,7 +3,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,13 +16,10 @@ import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - CACHE')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/cache')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(ROLE.ADMIN)
 export class AdminCacheController {
   constructor(private readonly cacheService: CacheService) {}
@@ -32,7 +28,7 @@ export class AdminCacheController {
   @HttpCode(HttpStatus.OK)
   @Message('Cache flushed successfully')
   @ApiOperation({
-    summary: '⚠️ Flush entire Redis cache',
+    summary: 'Flush entire Redis cache',
     description:
       '**Warning:** This endpoint permanently deletes ALL cached data (category tree, product listings, store profiles, etc.). ' +
       'Subsequent requests will hit the database directly until the cache is repopulated. ' +

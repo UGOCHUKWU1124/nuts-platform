@@ -63,4 +63,55 @@ describe('AuthSessionService', () => {
       UnauthorizedException,
     );
   });
+
+  it('uses cached Redis stamp and avoids querying Prisma user table on cache hit', async () => {
+    const redisMock = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === `auth:stamp:${ROLE.USER}:${payload.sub}`) {
+          return JSON.stringify({
+            id: payload.sub,
+            email: 'cached@example.com',
+            firstName: 'Cached',
+            lastName: 'User',
+            role: ROLE.USER,
+            isActive: true,
+            tokenVersion: payload.tokenVersion,
+            isApproved: true,
+          });
+        }
+        if (key === `auth:sess:${payload.sessionId}`) {
+          return '1';
+        }
+        return null;
+      }),
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+    };
+
+    const cachedService = new AuthSessionService(
+      prisma as never,
+      redisMock as never,
+    );
+
+    const result = await cachedService.validateAccessToken(payload);
+    expect(result.email).toBe('cached@example.com');
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.userAuthSession.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the Redis security stamp on demand', async () => {
+    const redisMock = {
+      get: jest.fn(),
+      set: jest.fn(),
+      del: jest.fn().mockResolvedValue(1),
+    };
+
+    const cachedService = new AuthSessionService(
+      prisma as never,
+      redisMock as never,
+    );
+
+    await cachedService.invalidateAccountStamp('user-1', ROLE.USER);
+    expect(redisMock.del).toHaveBeenCalledWith(`auth:stamp:${ROLE.USER}:user-1`);
+  });
 });

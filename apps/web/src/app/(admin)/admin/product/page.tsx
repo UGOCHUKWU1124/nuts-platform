@@ -2,7 +2,7 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import { adminCategoryService } from "@/api";
-import { api } from "@/api/core/client";
+import { adminApi } from "@/api/core/client";
 import type { CategoryResponseDto } from "@/api/dto/category";
 import type { AdminVariantResponseDto } from "@/api/dto/variant";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
@@ -149,7 +149,7 @@ export default function AdminProductPage() {
       if (status === "inactive") params.isActive = false;
       if (selectedCategory && selectedCategory !== "ALL") params.categoryId = selectedCategory;
 
-      const res = await api.get<AdminProductItem[]>("/admin/products", { params });
+      const res = await adminApi.get<AdminProductItem[]>("/admin/products", { params });
       return res;
     },
   });
@@ -159,7 +159,7 @@ export default function AdminProductPage() {
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
     queryFn: async () => {
-      const res = await api.get<{ id: string; storeName: string; email: string }[]>(
+      const res = await adminApi.get<{ id: string; storeName: string; email: string }[]>(
         "/admin/vendors",
         { params: { page: 1, limit: 100 } }
       );
@@ -194,7 +194,7 @@ export default function AdminProductPage() {
   const createMutation = useMutation({
     mutationFn: (values: ProductFormData) => {
       if (!values.vendorId) throw new Error("Vendor store is required");
-      return api.post("/admin/products", {
+      return adminApi.post("/admin/products", {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -220,7 +220,7 @@ export default function AdminProductPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, values }: { id: string; values: ProductFormData }) =>
-      api.patch(`/admin/products/${id}`, {
+      adminApi.patch(`/admin/products/${id}`, {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -243,7 +243,7 @@ export default function AdminProductPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/products/${id}`),
+    mutationFn: (id: string) => adminApi.delete(`/admin/products/${id}`),
     onSuccess: () => {
       toast.success("Product deleted successfully!");
       refreshProducts();
@@ -255,7 +255,7 @@ export default function AdminProductPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      api.patch(`/admin/products/${id}/${active ? "deactivate" : "reactivate"}`),
+      adminApi.patch(`/admin/products/${id}/${active ? "deactivate" : "reactivate"}`),
     onSuccess: () => {
       toast.success("Product status updated");
       refreshProducts();
@@ -274,7 +274,7 @@ export default function AdminProductPage() {
       quantity: number;
       description?: string;
     }) =>
-      api.patch(`/admin/products/${id}/stock`, {
+      adminApi.patch(`/admin/products/${id}/stock`, {
         quantity,
         ...(description ? { description } : {}),
       }),
@@ -312,7 +312,7 @@ export default function AdminProductPage() {
 
     if (product.hasVariants) {
       try {
-        const res = await api.get<{ variants?: AdminVariantResponseDto[] }>(`/admin/products/${product.id}`);
+        const res = await adminApi.get<{ variants?: AdminVariantResponseDto[] }>(`/admin/products/${product.id}`);
         const list = res.data?.variants || [];
         setVariantsList(
           list.map((v) => ({
@@ -719,6 +719,7 @@ export default function AdminProductPage() {
               {/* Variant builder section */}
               {hasVariants && (
                 <ProductVariantBuilder
+                  authRole="admin"
                   variants={variantsList}
                   onChange={setVariantsList}
                 />
@@ -736,6 +737,7 @@ export default function AdminProductPage() {
               <CategoryPicker categories={categoriesData ?? []} />
 
               <ImageUpload
+                authRole="admin"
                 name="imageUrls"
                 label="Product Showcase Images (up to 6)"
                 aspectHint="square or portrait"

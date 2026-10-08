@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { parseDateRange } from '@api/modules/shared/utils/date-range.util';
 import {
@@ -13,7 +14,10 @@ import {
 
 @Injectable()
 export class VendorAnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: CacheService,
+  ) {}
 
   async getAnalytics(
     vendorId: string,
@@ -27,6 +31,8 @@ export class VendorAnalyticsService {
       defaultDaysAgo,
     );
     const top = query.top ?? 10;
+
+    const compute = async (): Promise<VendorAnalyticsSummaryDto> => {
 
     const notCancelled = { status: { not: OrderStatus.CANCELLED } };
 
@@ -272,7 +278,15 @@ export class VendorAnalyticsService {
       ),
       conversionRate,
     };
+  };
+
+  if (this.cache) {
+    const cacheKey = `vendor:analytics:${vendorId}:${query.range ?? 'custom'}:${start.toISOString()}:${end.toISOString()}:${top}`;
+    return this.cache.wrap(cacheKey, 60, compute);
   }
+
+  return compute();
+}
 
   private async getTopProducts(vendorId: string, limit: number) {
     const rows = await this.prisma.orderItem.groupBy({

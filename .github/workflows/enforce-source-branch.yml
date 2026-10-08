@@ -1,25 +1,39 @@
-name: Enforce PR Source Branch
+name: Enforce Promotion Pipeline Gates
 
 on:
   pull_request:
     branches:
       - main
+      - staging
 
 jobs:
-  enforce-source-branch:
-    name: Assert PR source is 'development'
+  enforce-promotion-gates:
+    name: Assert Valid Branch Promotion Flow
     runs-on: ubuntu-latest
     steps:
-      - name: Check source branch
+      - name: Validate branch promotion rules
         run: |
+          TARGET="${{ github.base_ref }}"
           SOURCE="${{ github.head_ref }}"
-          echo "PR source branch: $SOURCE"
-          if [ "$SOURCE" != "development" ]; then
+          echo "Target branch: $TARGET"
+          echo "Source branch: $SOURCE"
+
+          if [ "$TARGET" = "main" ] && [ "$SOURCE" != "staging" ]; then
             echo ""
-            echo "❌ Direct PRs to 'main' are not allowed."
-            echo "   PRs to 'main' must come from the 'development' branch."
-            echo "   Open your PR against 'development' first, then merge development → main."
+            echo "Promotion Violation: Direct PRs to 'main' must originate from the 'staging' branch."
+            echo "   Required promotion pipeline: feature/* -> development -> staging -> main"
+            echo "   Please open or target your PR against 'staging' first."
             echo ""
             exit 1
           fi
-          echo "✅ Source branch is 'development'. Proceeding."
+
+          if [ "$TARGET" = "staging" ] && [ "$SOURCE" != "development" ]; then
+            echo ""
+            echo "Promotion Violation: PRs to 'staging' must originate from the 'development' branch."
+            echo "   Required promotion pipeline: feature/* -> development -> staging -> main"
+            echo "   Please merge your feature into 'development' before staging promotion."
+            echo ""
+            exit 1
+          fi
+
+          echo "Promotion rule validated successfully ($SOURCE -> $TARGET). Proceeding."

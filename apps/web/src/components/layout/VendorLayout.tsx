@@ -69,7 +69,7 @@ export function VendorLayout({ children }: { children: ReactNode }) {
                 NUTS <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border font-semibold uppercase tracking-wider">VENDOR</span>
               </span>
               <span className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mt-1">
-                Vendor Portal
+                Vendor Dashboard
               </span>
             </div>
           </Link>

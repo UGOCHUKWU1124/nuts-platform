@@ -11,6 +11,7 @@ Search,
 Settings,
 Shield,
 ShoppingCart,
+Store,
 User as UserIcon,
 Wallet,
 X,
@@ -73,17 +74,16 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
 
   const hasSessionCookie =
     typeof document !== "undefined" &&
-    (document.cookie.includes("user_session=1") ||
-      document.cookie.includes("vendor_session=1") ||
-      document.cookie.includes("admin_session=1") ||
-      document.cookie.includes("user_access_token") ||
-      document.cookie.includes("vendor_access_token") ||
-      document.cookie.includes("admin_access_token"));
+    document.cookie.includes("session_active=1");
 
   const isLoggedIn =
     (isAuthenticated && (!!user || !!role)) ||
     (Boolean(user) && hasSessionCookie);
-  const userRole = (role ?? user?.role ?? "").toLowerCase();
+  const capabilities = useAuthStore((state) => state.capabilities);
+  const canPurchase = capabilities ? capabilities.canPurchase : !isLoggedIn;
+  const canSell = capabilities?.canSell ?? false;
+  const canAdminister = capabilities?.canAdminister ?? false;
+
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
 
@@ -111,10 +111,10 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
     ? `${firstName[0]}${lastName ? lastName[0] : ""}`.toUpperCase()
     : user?.email?.[0]?.toUpperCase() || "U";
 
-  const roleLabel = userRole === "admin" ? "Administrator" : userRole === "vendor" ? "Vendor" : "Member";
-  const portalHref = userRole === "admin" ? "/admin" : userRole === "vendor" ? "/vendor/analytic" : null;
-  const portalLabel = userRole === "admin" ? "Admin Panel" : "Vendor Portal";
-  const PortalIcon = userRole === "admin" ? Shield : LayoutDashboard;
+  const roleLabel = canAdminister ? "Administrator" : canSell ? "Vendor" : "Member";
+  const dashboardHref = canAdminister ? "/admin" : canSell ? "/vendor/analytic" : null;
+  const dashboardLabel = canAdminister ? "Admin Dashboard" : "Vendor Dashboard";
+  const DashboardIcon = canAdminister ? Shield : LayoutDashboard;
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/95 backdrop-blur-md">
@@ -174,45 +174,51 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
           {/* Mobile Search Toggle Button */}
           <MobileSearchControl key={pathname} categories={navCategories} />
 
-          <Link
-            href="/wishlist"
-            className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
-              isLinkActive("/wishlist")
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-            aria-label="Wishlist"
-          >
-            <Heart className="h-5 w-5" />
-            {isMounted && wishlistCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
-                {wishlistCount}
-              </span>
-            )}
-          </Link>
+          {/* Wishlist and Cart - Only show for customer sessions */}
+          {canPurchase && (
+            <>
+              <Link
+                href="/wishlist"
+                className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
+                  isLinkActive("/wishlist")
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+                aria-label="Wishlist"
+              >
+                <Heart className="h-5 w-5" />
+                {isMounted && wishlistCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
 
-          <Link
-            href="/cart"
-            className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
-              isLinkActive("/cart")
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-            aria-label="Shopping Cart"
-          >
-            <ShoppingCart className="h-5 w-5" />
-            {isMounted && cartCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
-                {cartCount}
-              </span>
-            )}
-          </Link>
+              <Link
+                href="/cart"
+                className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
+                  isLinkActive("/cart")
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+                aria-label="Shopping Cart"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {isMounted && cartCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+            </>
+          )}
 
           {isMounted && isLoggedIn && (
             <div className="hidden xl:block">
               <NotificationBell />
             </div>
           )}
+
 
           {!isMounted ? (
             <div className="flex items-center gap-2 opacity-0 pointer-events-none" aria-hidden="true">
@@ -277,58 +283,142 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                   </div>
 
                   <div className="space-y-0.5">
-                    {portalHref && (
-                      <Link
-                        href={portalHref}
-                        onClick={() => setAccountOpen(false)}
-                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                      >
-                        <PortalIcon className="h-4 w-4 text-foreground" />
-                        {portalLabel}
-                      </Link>
+                    {canSell ? (
+                      <>
+                        <Link
+                          href="/vendor/analytic"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <DashboardIcon className="h-4 w-4 text-foreground" />
+                          Vendor Dashboard
+                        </Link>
+                        <Link
+                          href="/vendor/product"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                          My Products
+                        </Link>
+                        <Link
+                          href="/vendor/order"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                          Store Orders
+                        </Link>
+                        <Link
+                          href="/vendor/manage-wallet"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Wallet className="h-4 w-4 text-muted-foreground" />
+                          Vendor Wallet
+                        </Link>
+                        <Link
+                          href="/vendor/settings"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Settings className="h-4 w-4 text-muted-foreground" />
+                          Store Settings
+                        </Link>
+                      </>
+                    ) : canAdminister ? (
+                      <>
+                        <Link
+                          href="/admin"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <DashboardIcon className="h-4 w-4 text-foreground" />
+                          Admin Dashboard
+                        </Link>
+                        <Link
+                          href="/admin/product"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                          Manage Products
+                        </Link>
+                        <Link
+                          href="/admin/order"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                          Manage Orders
+                        </Link>
+                        <Link
+                          href="/admin/user"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          Manage Users
+                        </Link>
+                        <Link
+                          href="/admin/vendor"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Store className="h-4 w-4 text-muted-foreground" />
+                          Manage Vendors
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href="/account"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          My Account
+                        </Link>
+                        <Link
+                          href="/order"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                          My Orders
+                        </Link>
+                        <Link
+                          href="/wallet"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Wallet className="h-4 w-4 text-muted-foreground" />
+                          My Wallet
+                        </Link>
+                        <Link
+                          href="/wishlist"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Heart className="h-4 w-4 text-muted-foreground" />
+                          Saved Wishlist
+                        </Link>
+                        <Link
+                          href="/account/setting"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Settings className="h-4 w-4 text-muted-foreground" />
+                          Settings & Security
+                        </Link>
+                      </>
                     )}
 
                     <Link
-                      href="/account"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <UserIcon className="h-4 w-4 text-muted-foreground" />
-                      My Account
-                    </Link>
-
-                    <Link
-                      href="/order"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Package className="h-4 w-4 text-muted-foreground" />
-                      My Orders
-                    </Link>
-
-                    <Link
-                      href="/wallet"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Wallet className="h-4 w-4 text-muted-foreground" />
-                      My Wallet
-                    </Link>
-
-                    <Link
-                      href="/wishlist"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Heart className="h-4 w-4 text-muted-foreground" />
-                      Saved Wishlist
-                    </Link>
-
-                    <Link
                       href={
-                        userRole === "admin"
+                        canAdminister
                           ? "/admin/notifications"
-                          : userRole === "vendor"
+                          : canSell
                           ? "/vendor/notifications"
                           : "/account/notifications"
                       }
@@ -337,15 +427,6 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                     >
                       <Bell className="h-4 w-4 text-muted-foreground" />
                       Notifications
-                    </Link>
-
-                    <Link
-                      href="/account/setting"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Settings className="h-4 w-4 text-muted-foreground" />
-                      Settings & Security
                     </Link>
                   </div>
 

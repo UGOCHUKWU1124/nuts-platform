@@ -8,7 +8,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { PerformanceInterceptor } from './modules/shared/interceptors/performance.interceptor';
-import { StripRoleResponseInterceptor } from './modules/shared/interceptors/strip-role-response.interceptor';
 
 import { JwtAuthGuard } from './modules/shared/guards/jwt-auth.guard';
 import { OtpGuard } from './modules/shared/guards/otp.guard';
@@ -131,7 +130,6 @@ import { pinoLoggerConfig } from './modules/infrastructure/configuration/logger.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: OtpGuard },
     { provide: APP_INTERCEPTOR, useClass: PerformanceInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: StripRoleResponseInterceptor },
   ],
 })
 export class AppModule {}

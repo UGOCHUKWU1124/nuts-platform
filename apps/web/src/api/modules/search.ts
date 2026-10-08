@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi, publicApi, vendorApi } from "@/api/core/client";
 import type {
 QuerySearchBodyDto,
 SearchCategoryHitDto,
@@ -23,24 +23,24 @@ export interface AdminSearchResult {
 
 export const searchService = {
   query(body: QuerySearchBodyDto) {
-    return api.post<SearchProductsResponseDto>("/search/query", body);
+    return publicApi.post<SearchProductsResponseDto>("/search/query", body);
   },
   get(params: QuerySearchBodyDto) {
-    return api.get<SearchProductsResponseDto>("/search", { params });
+    return publicApi.get<SearchProductsResponseDto>("/search", { params });
   },
   autocomplete(params: { query?: string; types?: SearchIndex[]; limit?: number }) {
-    return api.get<SearchProductsResponseDto>("/search/autocomplete", { params });
+    return publicApi.get<SearchProductsResponseDto>("/search/autocomplete", { params });
   },
 };
 
 export const adminSearchService = {
   get(params: QuerySearchBodyDto) {
-    return api.get<AdminSearchResult>("/admin/search", { params });
+    return adminApi.get<AdminSearchResult>("/admin/search", { params });
   },
 };
 
 export const vendorSearchService = {
   get(params: QuerySearchBodyDto) {
-    return api.get<AdminSearchResult>("/vendors/search", { params });
+    return vendorApi.get<AdminSearchResult>("/vendors/search", { params });
   },
 };

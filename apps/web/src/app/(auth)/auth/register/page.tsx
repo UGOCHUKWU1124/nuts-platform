@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/api/core/client";
+import { publicApi } from "@/api/core/client";
 import type {
 RegisterResponseDto,
 VerifyOtpResponseDto
@@ -171,7 +171,7 @@ export default function RegisterPage() {
 
     setIsSendingOtp(true);
     try {
-      await api.post<VerifyOtpResponseDto>("/auth/otp/request", { email: currentEmail });
+      await publicApi.post<VerifyOtpResponseDto>("/auth/otp/request", { email: currentEmail });
       setOtpSent(true);
       setResendTimer(60);
       toast.success("6-digit verification code sent to your email!");
@@ -207,7 +207,7 @@ export default function RegisterPage() {
   // Final submit
   async function onSubmit(data: RegisterFormData) {
     try {
-      await api.post<RegisterResponseDto>("/auth/register", {
+      await publicApi.post<RegisterResponseDto>("/auth/register", {
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,

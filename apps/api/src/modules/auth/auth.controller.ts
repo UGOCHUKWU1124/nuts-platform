@@ -33,7 +33,6 @@ import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 
 import { Message } from '@api/modules/shared/decorators/message.decorator';
@@ -58,10 +57,7 @@ import { ROLE } from '@prisma/client';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
-import {
-  authCookieNames,
-  AuthCookieRole,
-} from './constants/auth-cookies.constants';
+import { AUTH_REFRESH_COOKIE } from './constants/auth-cookies.constants';
 
 function getCookieValue(cookies: unknown, name: string): string | undefined {
   if (typeof cookies !== 'object' || cookies === null || !(name in cookies)) {
@@ -79,26 +75,19 @@ export class AuthController {
     private readonly authCookies: AuthCookieService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
-  @Roles(ROLE.USER)
   @Get('me')
   @Message('Current session retrieved successfully')
   @ApiOperation({
-    summary: 'Get the authenticated user',
+    summary: 'Get the authenticated identity profile',
   })
   @ApiOkResponse({
-    description: 'Current authenticated user.',
+    description: 'Current authenticated identity profile.',
   })
   @ApiUnauthorizedResponse({
     description: 'Not authenticated',
   })
-  me(@GetUser() user: AuthenticatedUser) {
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-    };
+  async me(@GetUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user);
   }
 
   @Public()
@@ -131,7 +120,7 @@ export class AuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'user');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
@@ -167,7 +156,7 @@ export class AuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'user');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
@@ -206,14 +195,7 @@ export class AuthController {
      */
     const session = await this.authService.refresh(payload);
 
-    const roleScope: AuthCookieRole =
-      payload.role === ROLE.ADMIN
-        ? 'admin'
-        : payload.role === ROLE.VENDOR
-          ? 'vendor'
-          : 'user';
-
-    this.authCookies.setAuthCookies(res, session.tokens, roleScope);
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
@@ -221,7 +203,6 @@ export class AuthController {
     };
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @Message('Successfully logged out')
@@ -240,15 +221,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<null> {
-    const roleScope: AuthCookieRole =
-      user.role === ROLE.ADMIN
-        ? 'admin'
-        : user.role === ROLE.VENDOR
-          ? 'vendor'
-          : 'user';
     const refreshToken = getCookieValue(
       req.cookies as unknown,
-      authCookieNames(roleScope).refresh,
+      AUTH_REFRESH_COOKIE,
     );
 
     await this.authService.logout(
@@ -260,7 +235,7 @@ export class AuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.clearAuthCookies(res, roleScope);
+    this.authCookies.clearAuthCookies(res);
 
     return null;
   }

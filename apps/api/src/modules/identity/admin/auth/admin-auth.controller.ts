@@ -38,13 +38,11 @@ import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import {
   extractIpAddress,
   extractUserAgent,
 } from '@api/modules/shared/utils/request.util';
 import { AdminAuthService } from './admin-auth.service';
-import { AdminJwtAuthGuard } from './admin-jwt-auth.guard';
 import { AdminAuthResponseDto } from './dto/admin-auth-response.dto';
 import { AdminAuthUserDto } from './dto/admin-auth-user.dto';
 import { AdminRegisterDto } from './dto/admin-register.dto';
@@ -97,7 +95,7 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
@@ -145,7 +143,7 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
@@ -155,7 +153,7 @@ export class AdminAuthController {
 
   @Public()
   @RefreshTokenThrottle()
-  @UseGuards(JwtRefreshGuard, RolesGuard)
+  @UseGuards(JwtRefreshGuard)
   @Roles(ROLE.ADMIN)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -186,7 +184,7 @@ export class AdminAuthController {
       payload.refreshId,
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
@@ -194,7 +192,6 @@ export class AdminAuthController {
     };
   }
 
-  @UseGuards(AdminJwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
   @Get('me')
   @HttpCode(HttpStatus.OK)
@@ -223,7 +220,6 @@ export class AdminAuthController {
     return this.adminAuthService.me(adminId);
   }
 
-  @UseGuards(AdminJwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
   @Patch('me')
   @HttpCode(HttpStatus.OK)
@@ -251,7 +247,6 @@ export class AdminAuthController {
     return this.adminAuthService.updateProfile(adminId, dto);
   }
 
-  @UseGuards(AdminJwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
   @Post('logout')
   @HttpCode(HttpStatus.OK)

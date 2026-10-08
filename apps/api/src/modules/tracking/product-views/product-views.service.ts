@@ -40,46 +40,58 @@ export class ProductViewsService {
       timestamp: new Date().toISOString(),
     };
 
-    await this.redis.rpush(this.viewBufferKey, JSON.stringify(view));
+    try {
+      await this.redis.rpush(this.viewBufferKey, JSON.stringify(view));
+    } catch (err) {
+      this.logger.warn(
+        `Failed to buffer product view: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**
    * Flush buffered views to the analytics queue for DB insertion.
    */
   async flushViews(): Promise<void> {
-    const batchSize = TRACKING.PRODUCT_VIEW_BATCH_SIZE;
-    let processed = 0;
+    try {
+      const batchSize = TRACKING.PRODUCT_VIEW_BATCH_SIZE;
+      let processed = 0;
 
-    while (true) {
-      const raw = await this.redis.lpop(this.viewBufferKey, batchSize);
-      if (!raw || raw.length === 0) break;
+      while (true) {
+        const raw = await this.redis.lpop(this.viewBufferKey, batchSize);
+        if (!raw || raw.length === 0) break;
 
-      const views: BufferedView[] = raw
-        .map((item) => {
-          try {
-            return JSON.parse(item) as BufferedView;
-          } catch {
-            return null;
+        const views: BufferedView[] = raw
+          .map((item) => {
+            try {
+              return JSON.parse(item) as BufferedView;
+            } catch {
+              return null;
+            }
+          })
+          .filter((v): v is BufferedView => v !== null);
+
+        if (views.length > 0) {
+          for (const view of views) {
+            await this.rabbitmq.publish(RABBITMQ_QUEUES.ANALYTICS, {
+              type: 'product_view',
+              productId: view.productId,
+              userId: view.userId,
+              sessionId: view.sessionId,
+              timestamp: view.timestamp,
+            });
           }
-        })
-        .filter((v): v is BufferedView => v !== null);
-
-      if (views.length > 0) {
-        for (const view of views) {
-          await this.rabbitmq.publish(RABBITMQ_QUEUES.ANALYTICS, {
-            type: 'product_view',
-            productId: view.productId,
-            userId: view.userId,
-            sessionId: view.sessionId,
-            timestamp: view.timestamp,
-          });
+          processed += views.length;
         }
-        processed += views.length;
       }
-    }
 
-    if (processed > 0) {
-      this.logger.debug({ count: processed }, 'Flushed product views to queue');
+      if (processed > 0) {
+        this.logger.debug({ count: processed }, 'Flushed product views to queue');
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to flush product views: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -87,9 +99,8 @@ export class ProductViewsService {
     const interval = TRACKING.PRODUCT_VIEW_FLUSH_INTERVAL_MS;
     this.flushTimer = setInterval(() => {
       void this.flushViews().catch((err) => {
-        this.logger.error(
-          { err: err instanceof Error ? err.message : String(err) },
-          'Failed to flush product views',
+        this.logger.warn(
+          `Failed to flush product views interval: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
     }, interval);
@@ -108,6 +119,10 @@ export class ProductViewsService {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    await this.flushViews();
+    try {
+      await this.flushViews();
+    } catch {
+      // Ignore during shutdown
+    }
   }
 }

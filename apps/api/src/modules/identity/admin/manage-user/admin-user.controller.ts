@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -34,8 +33,6 @@ import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import {
@@ -50,7 +47,6 @@ import { UserResponseDto } from '@api/modules/users/dto/user-response.dto';
 import { UsersService } from '@api/modules/users/users.service';
 
 @Roles(ROLE.ADMIN)
-@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags('ADMIN - USERS')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/users')

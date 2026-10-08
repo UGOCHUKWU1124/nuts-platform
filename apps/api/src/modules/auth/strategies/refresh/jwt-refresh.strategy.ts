@@ -3,46 +3,31 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ROLE } from '@prisma/client';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import {
-  ADMIN_REFRESH_TOKEN_COOKIE,
-  USER_REFRESH_TOKEN_COOKIE,
-  VENDOR_REFRESH_TOKEN_COOKIE,
-} from '../../constants/auth-cookies.constants';
+import { AUTH_REFRESH_COOKIE } from '../../constants/auth-cookies.constants';
 import type { RefreshJwtPayload } from '../../types/refresh-jwt-payload.type';
 import { jwtFromCookie } from '../../utils/jwt-cookie.extractor';
-
 import type { Request } from 'express';
 
-function extractContextualRefreshToken(req: Request): string | null {
+function extractRefreshToken(req: Request): string | null {
   if (!req) return null;
 
-  // 1. Explicit body or bearer header token
+  // 1. Explicit body payload
   const body: unknown = req.body;
-  const bodyToken =
+  if (
     typeof body === 'object' &&
     body !== null &&
     'refreshToken' in body &&
-    typeof body.refreshToken === 'string'
-      ? body.refreshToken
-      : null;
-  if (bodyToken) return bodyToken;
+    typeof (body as Record<string, unknown>).refreshToken === 'string'
+  ) {
+    return (body as Record<string, string>).refreshToken;
+  }
 
+  // 2. Authorization: Bearer <refreshToken> header
   const bearerToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
   if (bearerToken) return bearerToken;
 
-  const url = (req.originalUrl || req.url || '').toLowerCase();
-
-  // 2. Strict refresh cookie isolation based on route namespace:
-  if (url.includes('/admin')) {
-    return jwtFromCookie(ADMIN_REFRESH_TOKEN_COOKIE)(req);
-  }
-
-  if (url.includes('/vendor')) {
-    return jwtFromCookie(VENDOR_REFRESH_TOKEN_COOKIE)(req);
-  }
-
-  // 3. User refresh endpoint strictly reads user refresh cookie
-  return jwtFromCookie(USER_REFRESH_TOKEN_COOKIE)(req);
+  // 3. Standard HttpOnly refresh_token cookie
+  return jwtFromCookie(AUTH_REFRESH_COOKIE)(req);
 }
 
 @Injectable()
@@ -52,7 +37,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
 ) {
   constructor(config: ConfigService) {
     super({
-      jwtFromRequest: extractContextualRefreshToken,
+      jwtFromRequest: extractRefreshToken,
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('JWT_REFRESH_SECRET'),
       issuer: config.getOrThrow<string>('JWT_ISSUER'),

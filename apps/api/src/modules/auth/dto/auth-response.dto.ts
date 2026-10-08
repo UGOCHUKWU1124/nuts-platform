@@ -57,3 +57,36 @@ export class VerifyOtpResponseDto {
   })
   verified!: boolean;
 }
+
+export class UserCapabilitiesDto {
+  @ApiProperty({ description: 'Whether the identity can place orders and create shopping carts', example: true })
+  canPurchase!: boolean;
+
+  @ApiProperty({ description: 'Whether the identity can manage a vendor catalog and receive orders', example: false })
+  canSell!: boolean;
+
+  @ApiProperty({ description: 'Whether the identity has administrative management privileges', example: false })
+  canAdminister!: boolean;
+}
+
+export class AuthProfileResponseDto {
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  id!: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  email!: string;
+
+  @ApiProperty({ example: 'Jane' })
+  firstName!: string | null;
+
+  @ApiProperty({ example: 'Doe' })
+  lastName!: string | null;
+
+  @ApiProperty({ enum: ['USER', 'VENDOR', 'ADMIN'], example: 'USER' })
+  role!: string;
+
+  @ApiProperty({ type: UserCapabilitiesDto })
+  capabilities!: UserCapabilitiesDto;
+}
+
+

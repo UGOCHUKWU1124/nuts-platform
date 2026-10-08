@@ -27,9 +27,11 @@ ChevronDown,
 ChevronRight,
 ChevronUp,
 Heart,
+LayoutDashboard,
 Minus,
 Plus,
 Share2,
+Shield,
 ShoppingBag,
 Truck
 } from "lucide-react";
@@ -69,6 +71,12 @@ export function ProductDetailView({
   const { data: cachedCategories } = usePublicCategories(categories);
   const productCategories = cachedCategories ?? categories;
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const capabilities = useAuthStore((state) => state.capabilities);
+  const canPurchase = capabilities ? capabilities.canPurchase : !isAuthenticated;
+  const canSell = capabilities?.canSell ?? false;
+  const canAdminister = capabilities?.canAdminister ?? false;
+  const isMerchantOrAdmin = isAuthenticated && !canPurchase;
+
   const {
     toggleItem,
     isInWishlist,
@@ -337,6 +345,11 @@ export function ProductDetailView({
       });
       return;
     }
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      toast.info("Your account type cannot make storefront purchases. Please sign in with a shopper account.");
+      return;
+    }
     if (p.hasVariants && !selectedVariant) {
       toast.error("Select an option before adding this product");
       return;
@@ -390,6 +403,11 @@ export function ProductDetailView({
           onClick: () => router.push("/auth/login"),
         },
       });
+      return;
+    }
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      toast.info("Your account type cannot maintain customer wishlists.");
       return;
     }
 
@@ -556,18 +574,20 @@ export function ProductDetailView({
               </h1>
 
               <div className="flex shrink-0 items-center gap-1 pt-1 sm:gap-2">
-                <button
-                  type="button"
-                  onClick={handleWishlist}
-                  aria-label="Save to wishlist"
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary hover:text-neutral-600"
-                >
-                  <Heart
-                    className={`h-5 w-5 ${
-                      isLiked ? "fill-black text-black" : "stroke-[1.6]"
-                    }`}
-                  />
-                </button>
+                {!isMerchantOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleWishlist}
+                    aria-label="Save to wishlist"
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary hover:text-neutral-600"
+                  >
+                    <Heart
+                      className={`h-5 w-5 ${
+                        isLiked ? "fill-black text-black" : "stroke-[1.6]"
+                      }`}
+                    />
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -676,45 +696,73 @@ export function ProductDetailView({
               </div>
             )}
 
-            {/* Quantity Stepper & Add to Cart Row (Screenshot 6) */}
-            <div className="mt-8 flex items-center gap-3">
-              {/* Stepper [- 1 +] */}
-              <div className="flex items-center rounded-xl bg-secondary p-1">
-                <button
-                  type="button"
-                  aria-label="Decrease quantity"
-                  disabled={quantity <= 1 || isOutOfStock}
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <span className="w-12 text-center text-base sm:text-lg font-bold text-foreground">
-                  {quantity}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Increase quantity"
-                  disabled={quantity >= stock || isOutOfStock}
-                  onClick={() => setQuantity((q) => Math.min(stock, q + 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+            {/* Quantity Stepper & Add to Cart Row or Merchant Preview Mode */}
+            {isMerchantOrAdmin ? (
+              <div className="mt-8 rounded-2xl border border-border bg-secondary/50 p-4">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                  {canSell ? (
+                    <LayoutDashboard className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Shield className="h-4 w-4 text-primary" />
+                  )}
+                  <span>
+                    {canSell ? "Vendor Catalog Preview" : "Administrator Preview"}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                  {canSell
+                    ? "You are previewing this product in merchant mode. Storefront purchasing and carts are reserved for customer shopper accounts."
+                    : "You are previewing this product in administrative mode. Storefront purchasing actions are disabled."}
+                </p>
+                {canSell && (
+                  <Link
+                    href="/vendor/product"
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                  >
+                    Manage Inventory in Vendor Dashboard &rarr;
+                  </Link>
+                )}
               </div>
+            ) : (
+              <div className="mt-8 flex items-center gap-3">
+                {/* Stepper [- 1 +] */}
+                <div className="flex items-center rounded-xl bg-secondary p-1">
+                  <button
+                    type="button"
+                    aria-label="Decrease quantity"
+                    disabled={quantity <= 1 || isOutOfStock}
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="w-12 text-center text-base sm:text-lg font-bold text-foreground">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Increase quantity"
+                    disabled={quantity >= stock || isOutOfStock}
+                    onClick={() => setQuantity((q) => Math.min(stock, q + 1))}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
 
-              {/* Add to Cart Pill Button */}
-              <Button
-                size="lg"
-                disabled={isOutOfStock || addToCart.isPending}
-                onClick={handleAddToCart}
-                className="flex-1 h-12 sm:h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-bold shadow-xs transition-all"
-              >
-                {isOutOfStock
-                  ? "Sold Out"
-                  : `Add to cart • ${formatPrice(basePrice * quantity)}`}
-              </Button>
-            </div>
+                {/* Add to Cart Pill Button */}
+                <Button
+                  size="lg"
+                  disabled={isOutOfStock || addToCart.isPending}
+                  onClick={handleAddToCart}
+                  className="flex-1 h-12 sm:h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-bold shadow-xs transition-all"
+                >
+                  {isOutOfStock
+                    ? "Sold Out"
+                    : `Add to cart • ${formatPrice(basePrice * quantity)}`}
+                </Button>
+              </div>
+            )}
 
             {/* ─── Expandable Accordions (Screenshot 6) ─── */}
             <div className="mt-10 divide-y divide-border/60 border-t border-border/60">

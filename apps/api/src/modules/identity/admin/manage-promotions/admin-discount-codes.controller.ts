@@ -9,7 +9,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -32,13 +31,10 @@ import {
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - DISCOUNT CODES')
 @Controller('admin/discounts')
 @Roles(ROLE.ADMIN)
-@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('JWT-auth')
 export class AdminDiscountCodesController {
   constructor(private readonly discountCodeService: DiscountCodeService) {}

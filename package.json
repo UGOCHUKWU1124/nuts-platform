@@ -8,7 +8,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "npm run db:up && turbo run dev",
+    "dev:turbo": "turbo run dev",
+    "db:up": "docker compose -f docker-compose.db.yml up -d",
+    "db:down": "docker compose -f docker-compose.db.yml down",
+    "db:studio": "prisma studio --schema=packages/database/schema.prisma",
     "dev:down": "docker compose --profile dev down",
     "dev:logs": "docker compose --profile dev logs -f",
     "dev:logs:api": "docker compose --profile dev logs -f api",

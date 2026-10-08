@@ -1,4 +1,4 @@
-import { notificationsApi } from "@/api/notifications";
+import { notificationsApiForRole } from "@/api/notifications";
 import { getAuthToken } from "@/api/core/token-storage";
 import { performTokenRefresh } from "@/api/core/client";
 import type { AppNotification, ListNotificationsParams } from "@/api/notifications";
@@ -109,6 +109,11 @@ function showIncomingNotification(notification: AppNotification): void {
         window.location.assign(notificationDetailPath(role, notification.id)),
     },
   });
+}
+
+function notificationsApiForCurrentRole() {
+  const auth = useAuthStore.getState();
+  return notificationsApiForRole(auth.role ?? auth.user?.role ?? "user");
 }
 
 function getSseUrl(role: AuthRole): string {
@@ -264,7 +269,7 @@ async function consumeNotificationStream(
     if (response.status === 401 && !refreshedAfterUnauthorized) {
       await response.body?.cancel().catch(() => undefined);
       refreshedAfterUnauthorized = true;
-      const refresh = await performTokenRefresh(undefined, role);
+      const refresh = await performTokenRefresh(role);
       if (refresh.success) continue;
       if (refresh.reason === "unavailable") {
         refreshedAfterUnauthorized = false;
@@ -378,7 +383,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const requestSequence = append ? listRequestSequence : ++listRequestSequence;
     set({ isLoading: true });
     try {
-      const res = await notificationsApi.list(
+      const res = await notificationsApiForRole(
+        auth.role ?? auth.user?.role ?? "user",
+      ).list(
         { cursor, limit, ...filters },
         requestController?.signal,
       );
@@ -441,7 +448,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
 
     const request = (async () => {
       try {
-        const res = await notificationsApi.getUnreadCount();
+        const res = await notificationsApiForRole(
+          auth.role ?? auth.user?.role ?? "user",
+        ).getUnreadCount();
         if (res.data) {
           const activeAuth = useAuthStore.getState();
           const activeUserId = activeAuth.user?.id;
@@ -484,7 +493,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     });
 
     try {
-      await notificationsApi.markAsRead(id);
+      await notificationsApiForCurrentRole().markAsRead(id);
     } catch {
       // Rollback on failure
       set({ notifications: prevList, unreadCount: prevCount });
@@ -505,7 +514,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     });
 
     try {
-      await notificationsApi.markAllAsRead();
+      await notificationsApiForCurrentRole().markAllAsRead();
     } catch {
       set({ notifications: prevList, unreadCount: prevCount });
     }
@@ -521,7 +530,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     });
 
     try {
-      await notificationsApi.delete(id);
+      await notificationsApiForCurrentRole().delete(id);
     } catch {
       get().fetchNotifications();
     }
@@ -529,7 +538,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
 
   clearAll: async () => {
     try {
-      await notificationsApi.clearAll();
+      await notificationsApiForCurrentRole().clearAll();
       set({
         notifications: get().notifications.filter((n) => !n.isRead),
       });

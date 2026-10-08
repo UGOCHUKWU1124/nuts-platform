@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/api/core/client";
+import { publicApi } from "@/api/core/client";
 import type {
 RegisterResponseDto,
 VerifyOtpResponseDto
@@ -70,7 +70,7 @@ export default function VendorRegisterPage() {
 
     setIsSendingOtp(true);
     try {
-      await api.post<VerifyOtpResponseDto>("/vendors/auth/otp/request", {
+      await publicApi.post<VerifyOtpResponseDto>("/vendors/auth/otp/request", {
         email: currentEmail,
       });
       setOtpSent(true);
@@ -87,7 +87,7 @@ export default function VendorRegisterPage() {
 
   async function onSubmit(data: VendorRegisterFormData) {
     try {
-      await api.post<RegisterResponseDto>("/vendors/auth/register", {
+      await publicApi.post<RegisterResponseDto>("/vendors/auth/register", {
         storeName: data.storeName,
         email: data.email,
         password: data.password,
