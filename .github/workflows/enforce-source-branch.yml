@@ -1,39 +1,46 @@
-name: Enforce Promotion Pipeline Gates
+name: Enforce PR Source Branch
 
 on:
   pull_request:
     branches:
-      - main
       - staging
+      - main
 
 jobs:
-  enforce-promotion-gates:
-    name: Assert Valid Branch Promotion Flow
+  assert-staging-source:
+    name: Assert PR source is 'development'
+    if: github.base_ref == 'staging'
     runs-on: ubuntu-latest
     steps:
-      - name: Validate branch promotion rules
+      - name: Validate source is development
         run: |
-          TARGET="${{ github.base_ref }}"
           SOURCE="${{ github.head_ref }}"
-          echo "Target branch: $TARGET"
-          echo "Source branch: $SOURCE"
-
-          if [ "$TARGET" = "main" ] && [ "$SOURCE" != "staging" ]; then
+          echo "PR source branch: $SOURCE"
+          if [ "$SOURCE" != "development" ]; then
             echo ""
-            echo "Promotion Violation: Direct PRs to 'main' must originate from the 'staging' branch."
+            echo "Promotion Violation: PRs to 'staging' must originate from 'development'."
             echo "   Required promotion pipeline: feature/* -> development -> staging -> main"
-            echo "   Please open or target your PR against 'staging' first."
+            echo "   Please merge your feature branch into 'development' first."
             echo ""
             exit 1
           fi
+          echo "Source branch is 'development'. Proceeding."
 
-          if [ "$TARGET" = "staging" ] && [ "$SOURCE" != "development" ]; then
+  assert-main-source:
+    name: Assert PR source is 'staging'
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source is staging
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          echo "PR source branch: $SOURCE"
+          if [ "$SOURCE" != "staging" ] && [[ ! "$SOURCE" =~ ^hotfix/ ]]; then
             echo ""
-            echo "Promotion Violation: PRs to 'staging' must originate from the 'development' branch."
+            echo "Promotion Violation: Direct PRs to 'main' must originate from 'staging'."
             echo "   Required promotion pipeline: feature/* -> development -> staging -> main"
-            echo "   Please merge your feature into 'development' before staging promotion."
+            echo "   Code must be deployed and verified on staging before promoting to production."
             echo ""
             exit 1
           fi
-
-          echo "Promotion rule validated successfully ($SOURCE -> $TARGET). Proceeding."
+          echo "Source branch is 'staging'. Proceeding."
