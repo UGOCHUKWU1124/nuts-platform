@@ -31,7 +31,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: extractAccessToken,
       ignoreExpiration: false,
-      secretOrKey: publicKey || secret || config.getOrThrow<string>('JWT_SECRET'),
+      secretOrKey:
+        publicKey || secret || config.getOrThrow<string>('JWT_SECRET'),
       issuer: config.getOrThrow<string>('JWT_ISSUER'),
       audience: config.getOrThrow<string>('JWT_ACCESS_AUDIENCE'),
       algorithms: publicKey ? ['RS256'] : ['HS256'],

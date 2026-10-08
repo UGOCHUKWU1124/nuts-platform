@@ -74,7 +74,6 @@ export function ProductDetailView({
   const capabilities = useAuthStore((state) => state.capabilities);
   const canPurchase = capabilities ? capabilities.canPurchase : !isAuthenticated;
   const canSell = capabilities?.canSell ?? false;
-  const canAdminister = capabilities?.canAdminister ?? false;
   const isMerchantOrAdmin = isAuthenticated && !canPurchase;
 
   const {

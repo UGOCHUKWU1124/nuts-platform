@@ -46,11 +46,7 @@ import { VendorsService } from './vendors.service';
     VendorProductsController,
     VendorWalletController,
   ],
-  providers: [
-    VendorAnalyticsService,
-    VendorsService,
-    OtpService,
-  ],
+  providers: [VendorAnalyticsService, VendorsService, OtpService],
   exports: [VendorsService],
 })
 export class VendorsModule {}

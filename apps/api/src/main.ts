@@ -268,7 +268,10 @@ The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to
       .setVersion('1.0.0');
 
     if (baseUrl) {
-      swaggerBuilder.addServer(baseUrl, isProduction ? 'Active Production / Staging Server' : 'Active Server');
+      swaggerBuilder.addServer(
+        baseUrl,
+        isProduction ? 'Active Production / Staging Server' : 'Active Server',
+      );
     }
     swaggerBuilder
       .addServer(`http://localhost:${port}`, 'Local Development Server')

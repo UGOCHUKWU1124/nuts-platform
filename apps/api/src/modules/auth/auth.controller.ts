@@ -53,8 +53,6 @@ import {
 
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 
-import { ROLE } from '@prisma/client';
-import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
 import { AUTH_REFRESH_COOKIE } from './constants/auth-cookies.constants';

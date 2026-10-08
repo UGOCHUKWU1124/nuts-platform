@@ -118,7 +118,9 @@ export class AuthSessionService {
         ]);
       }
     } catch (err) {
-      this.logger.warn(`Redis stamp invalidation failed: ${(err as Error).message}`);
+      this.logger.warn(
+        `Redis stamp invalidation failed: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -130,7 +132,9 @@ export class AuthSessionService {
     try {
       await this.redis.set(`auth:sess:${sessionId}`, '0', 'EX', 300);
     } catch (err) {
-      this.logger.warn(`Redis session invalidation failed: ${(err as Error).message}`);
+      this.logger.warn(
+        `Redis session invalidation failed: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -223,7 +227,9 @@ export class AuthSessionService {
           isValid ? AuthSessionService.STAMP_TTL_SECONDS : 300,
         );
       } catch (err) {
-        this.logger.warn(`Redis session write error: ${(err as Error).message}`);
+        this.logger.warn(
+          `Redis session write error: ${(err as Error).message}`,
+        );
       }
     }
 

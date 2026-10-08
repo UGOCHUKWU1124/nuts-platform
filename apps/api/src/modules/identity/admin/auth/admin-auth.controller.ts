@@ -279,7 +279,7 @@ export class AdminAuthController {
       extractIpAddress(req),
       extractUserAgent(req),
     );
-    this.authCookies.clearAuthCookies(res, 'admin');
+    this.authCookies.clearAuthCookies(res);
     return null;
   }
 }

@@ -112,8 +112,6 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
     : user?.email?.[0]?.toUpperCase() || "U";
 
   const roleLabel = canAdminister ? "Administrator" : canSell ? "Vendor" : "Member";
-  const dashboardHref = canAdminister ? "/admin" : canSell ? "/vendor/analytic" : null;
-  const dashboardLabel = canAdminister ? "Admin Dashboard" : "Vendor Dashboard";
   const DashboardIcon = canAdminister ? Shield : LayoutDashboard;
 
   return (

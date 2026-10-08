@@ -86,7 +86,10 @@ export class ProductViewsService {
       }
 
       if (processed > 0) {
-        this.logger.debug({ count: processed }, 'Flushed product views to queue');
+        this.logger.debug(
+          { count: processed },
+          'Flushed product views to queue',
+        );
       }
     } catch (err) {
       this.logger.warn(

@@ -112,6 +112,8 @@ describe('AuthSessionService', () => {
     );
 
     await cachedService.invalidateAccountStamp('user-1', ROLE.USER);
-    expect(redisMock.del).toHaveBeenCalledWith(`auth:stamp:${ROLE.USER}:user-1`);
+    expect(redisMock.del).toHaveBeenCalledWith(
+      `auth:stamp:${ROLE.USER}:user-1`,
+    );
   });
 });

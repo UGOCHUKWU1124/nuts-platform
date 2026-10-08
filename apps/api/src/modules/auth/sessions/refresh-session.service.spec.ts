@@ -241,9 +241,11 @@ describe('RefreshSessionService user sessions', () => {
     };
 
     const redisMock = {
-      get: jest.fn().mockResolvedValue(
-        JSON.stringify({ user: cachedUser, tokens: cachedTokens }),
-      ),
+      get: jest
+        .fn()
+        .mockResolvedValue(
+          JSON.stringify({ user: cachedUser, tokens: cachedTokens }),
+        ),
       set: jest.fn().mockResolvedValue('OK'),
     };
 

@@ -330,7 +330,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           event.user &&
           typeof event.user === "object"
         ) {
-          get().setSession(event.user as any, event.role as AuthRole);
+          get().setSession(event.user as SessionUserInput, event.role as AuthRole);
         }
       });
     }

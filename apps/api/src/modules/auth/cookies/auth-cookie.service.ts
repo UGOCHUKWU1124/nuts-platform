@@ -7,7 +7,6 @@ import {
   AUTH_REFRESH_COOKIE,
   AUTH_SESSION_COOKIE,
   AUTH_COOKIE_PATH,
-  AuthCookieRole,
 } from '../constants/auth-cookies.constants';
 import type { AuthTokens } from '../types/auth.types';
 
@@ -61,11 +60,7 @@ export class AuthCookieService {
     );
   }
 
-  setAuthCookies(
-    res: Response,
-    tokens: AuthTokens,
-    _role?: AuthCookieRole,
-  ): void {
+  setAuthCookies(res: Response, tokens: AuthTokens): void {
     // 1. Standard HttpOnly access_token cookie
     res.cookie(AUTH_ACCESS_COOKIE, tokens.accessToken, {
       ...this.baseOptions,
@@ -89,7 +84,7 @@ export class AuthCookieService {
     });
   }
 
-  clearAuthCookies(res: Response, _role?: AuthCookieRole): void {
+  clearAuthCookies(res: Response): void {
     res.clearCookie(AUTH_ACCESS_COOKIE, {
       ...this.baseOptions,
       path: AUTH_COOKIE_PATH,

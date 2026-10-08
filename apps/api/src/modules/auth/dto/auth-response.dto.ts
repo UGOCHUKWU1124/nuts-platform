@@ -59,13 +59,25 @@ export class VerifyOtpResponseDto {
 }
 
 export class UserCapabilitiesDto {
-  @ApiProperty({ description: 'Whether the identity can place orders and create shopping carts', example: true })
+  @ApiProperty({
+    description:
+      'Whether the identity can place orders and create shopping carts',
+    example: true,
+  })
   canPurchase!: boolean;
 
-  @ApiProperty({ description: 'Whether the identity can manage a vendor catalog and receive orders', example: false })
+  @ApiProperty({
+    description:
+      'Whether the identity can manage a vendor catalog and receive orders',
+    example: false,
+  })
   canSell!: boolean;
 
-  @ApiProperty({ description: 'Whether the identity has administrative management privileges', example: false })
+  @ApiProperty({
+    description:
+      'Whether the identity has administrative management privileges',
+    example: false,
+  })
   canAdminister!: boolean;
 }
 
@@ -88,5 +100,3 @@ export class AuthProfileResponseDto {
   @ApiProperty({ type: UserCapabilitiesDto })
   capabilities!: UserCapabilitiesDto;
 }
-
-
