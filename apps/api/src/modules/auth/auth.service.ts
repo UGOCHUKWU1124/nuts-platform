@@ -26,6 +26,7 @@ import { USER_AUTH_SELECT, USER_LOGIN_SELECT } from './auth.selects';
 import type { AuthSession } from './types/auth.types';
 import { RefreshSessionService } from './sessions/refresh-session.service';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
+import type { AuthenticatedUser } from './types/authenticated-user.type';
 
 @Injectable()
 export class AuthService {
@@ -412,6 +413,83 @@ export class AuthService {
     } catch (error) {
       this.logger.warn('Failed to upgrade password hash', error);
     }
+  }
+
+  async getProfile(user: AuthenticatedUser) {
+    if (user.role === ROLE.VENDOR) {
+      const vendor = await this.prisma.vendor.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          storeName: true,
+          storeSlug: true,
+          storeDescription: true,
+          storeLogoUrl: true,
+          isVerified: true,
+          isActive: true,
+          isApproved: true,
+        },
+      });
+      if (!vendor) throw new UnauthorizedException('Vendor profile not found');
+      return {
+        ...vendor,
+        role: 'vendor' as const,
+        capabilities: {
+          canPurchase: false,
+          canSell: Boolean(vendor.isApproved && vendor.isActive),
+          canAdminister: false,
+        },
+      };
+    }
+
+    if (user.role === ROLE.ADMIN) {
+      const admin = await this.prisma.admin.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isActive: true,
+        },
+      });
+      if (!admin) throw new UnauthorizedException('Admin profile not found');
+      return {
+        ...admin,
+        role: 'admin' as const,
+        capabilities: {
+          canPurchase: false,
+          canSell: false,
+          canAdminister: Boolean(admin.isActive),
+        },
+      };
+    }
+
+    const customer = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        isActive: true,
+      },
+    });
+    if (!customer) throw new UnauthorizedException('User profile not found');
+    return {
+      ...customer,
+      role: 'user' as const,
+      capabilities: {
+        canPurchase: Boolean(customer.isActive),
+        canSell: false,
+        canAdminister: false,
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------

@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -31,8 +30,6 @@ import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import {
   extractIpAddress,
   extractUserAgent,
@@ -42,7 +39,6 @@ import { QueryAdminVendorsDto } from './dto/query-admin-vendors.dto';
 
 @ApiBearerAuth('JWT-auth')
 @ApiTags('ADMIN - VENDORS')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(ROLE.ADMIN)
 @Controller('admin/vendors')
 export class AdminVendorsController {

@@ -5,7 +5,6 @@ import {
   Post,
   Query,
   UploadedFiles,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -19,7 +18,6 @@ import {
 import { ROLE } from '@prisma/client';
 import { StrictThrottle } from '../decorators/custom-throttler.decorator';
 import { Roles } from '../decorators/role.decorator';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import type { CloudinaryFile } from '../services/cloudinary.service';
 import {
   CloudinaryService,
@@ -66,7 +64,6 @@ function hasAllowedImageSignature(file: CloudinaryFile): boolean {
 
 @ApiTags('IMAGES')
 @Controller('images')
-@UseGuards(JwtAuthGuard)
 export class ImageUploadController {
   constructor(private readonly cloudinaryService: CloudinaryService) {}
 

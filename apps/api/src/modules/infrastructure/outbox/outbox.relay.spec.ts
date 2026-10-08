@@ -11,6 +11,7 @@ describe('OutboxRelay', () => {
       outboxEvent: {
         findMany: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
     };
 
@@ -44,13 +45,13 @@ describe('OutboxRelay', () => {
     ];
 
     mockPrisma.outboxEvent.findMany.mockResolvedValue(pendingEvents);
-    mockPrisma.outboxEvent.update.mockResolvedValue({});
+    mockPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 1 });
 
     await relay.processOutboxEvents();
 
-    // 1. Marked as PROCESSING
-    expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: 'evt-1' },
+    // 1. Batch claimed as PROCESSING in a single query
+    expect(mockPrisma.outboxEvent.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['evt-1'] } },
       data: { status: OutboxStatus.PROCESSING },
     });
 
@@ -59,10 +60,10 @@ describe('OutboxRelay', () => {
       orderId: 'ord-123',
     });
 
-    // 3. Marked as PUBLISHED
-    expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith(
+    // 3. Batch marked as PUBLISHED in a single query
+    expect(mockPrisma.outboxEvent.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'evt-1' },
+        where: { id: { in: ['evt-1'] } },
         data: expect.objectContaining({ status: OutboxStatus.PUBLISHED }),
       }),
     );
@@ -82,13 +83,13 @@ describe('OutboxRelay', () => {
     ];
 
     mockPrisma.outboxEvent.findMany.mockResolvedValue(pendingEvents);
-    mockPrisma.outboxEvent.update.mockResolvedValue({});
+    mockPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 1 });
 
     await relay.processOutboxEvents();
 
-    expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith(
+    expect(mockPrisma.outboxEvent.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'evt-2' },
+        where: { id: { in: ['evt-2'] } },
         data: expect.objectContaining({
           status: OutboxStatus.FAILED,
           attempts: { increment: 1 },

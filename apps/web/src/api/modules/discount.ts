@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi, vendorApi } from "@/api/core/client";
 import type { DiscountCodeResponseDto } from "@/api/dto/discount";
 import type { ProductQueryParams } from "./product";
 
@@ -21,37 +21,37 @@ export interface DiscountCodePayload {
 
 export const adminDiscountService = {
   list(params: ProductQueryParams) {
-    return api.get<DiscountCodeResponseDto[]>("/admin/discounts", { params });
+    return adminApi.get<DiscountCodeResponseDto[]>("/admin/discounts", { params });
   },
   create(payload: DiscountCodePayload) {
-    return api.post<DiscountCodeResponseDto>("/admin/discounts", payload);
+    return adminApi.post<DiscountCodeResponseDto>("/admin/discounts", payload);
   },
   update(id: string, payload: Partial<DiscountCodePayload>) {
-    return api.patch<DiscountCodeResponseDto>(`/admin/discounts/${id}`, payload);
+    return adminApi.patch<DiscountCodeResponseDto>(`/admin/discounts/${id}`, payload);
   },
   deactivate(id: string) {
-    return api.patch<DiscountCodeResponseDto>(`/admin/discounts/${id}/deactivate`);
+    return adminApi.patch<DiscountCodeResponseDto>(`/admin/discounts/${id}/deactivate`);
   },
   delete(id: string) {
-    return api.delete<void>(`/admin/discounts/${id}`);
+    return adminApi.delete<void>(`/admin/discounts/${id}`);
   },
 };
 
 export const vendorDiscountService = {
   list(params?: ProductQueryParams) {
-    return api.get<DiscountCodeResponseDto[]>("/vendors/discounts", { params });
+    return vendorApi.get<DiscountCodeResponseDto[]>("/vendors/discounts", { params });
   },
   create(payload: DiscountCodePayload) {
-    return api.post<DiscountCodeResponseDto>("/vendors/discounts", payload);
+    return vendorApi.post<DiscountCodeResponseDto>("/vendors/discounts", payload);
   },
   update(id: string, payload: Partial<DiscountCodePayload>) {
-    return api.patch<DiscountCodeResponseDto>(`/vendors/discounts/${id}`, payload);
+    return vendorApi.patch<DiscountCodeResponseDto>(`/vendors/discounts/${id}`, payload);
   },
   deactivate(id: string) {
-    return api.patch<DiscountCodeResponseDto>(`/vendors/discounts/${id}/deactivate`);
+    return vendorApi.patch<DiscountCodeResponseDto>(`/vendors/discounts/${id}/deactivate`);
   },
   delete(id: string) {
-    return api.delete<void>(`/vendors/discounts/${id}`);
+    return vendorApi.delete<void>(`/vendors/discounts/${id}`);
   },
 };
 

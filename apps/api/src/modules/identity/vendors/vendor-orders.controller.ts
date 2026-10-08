@@ -8,7 +8,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -27,16 +26,15 @@ import {
 import { UpdateOrderStatusDto } from '@api/modules/orders/dto/update-order-status.dto';
 import { VendorOrderResponseDto } from '@api/modules/orders/dto/vendor-order-response.dto';
 import { OrdersService } from '@api/modules/orders/orders.service';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - ORDERS')
 @Controller(['vendors/orders', 'dashboard/orders'])
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 @ApiBearerAuth('JWT-auth')
 export class VendorOrdersController {
   constructor(private readonly ordersService: OrdersService) {}

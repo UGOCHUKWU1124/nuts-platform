@@ -2,7 +2,7 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import { categoryService } from "@/api";
-import { api } from "@/api/core/client";
+import { vendorApi } from "@/api/core/client";
 import type { VendorVariantResponseDto } from "@/api/dto/variant";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
 import { PageHeader } from "@/component/common/PageHeader";
@@ -135,7 +135,7 @@ export default function DashboardProductPage() {
       if (status === "active") params.isActive = true;
       if (status === "inactive") params.isActive = false;
 
-      const res = await api.get<VendorProduct[]>("/vendors/products", { params });
+      const res = await vendorApi.get<VendorProduct[]>("/vendors/products", { params });
       return res;
     },
   });
@@ -166,7 +166,7 @@ export default function DashboardProductPage() {
 
   const createMutation = useMutation({
     mutationFn: (values: ProductFormData) =>
-      api.post("/vendors/products", {
+      vendorApi.post("/vendors/products", {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -189,7 +189,7 @@ export default function DashboardProductPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, values }: { id: string; values: ProductFormData }) =>
-      api.patch(`/vendors/products/${id}`, {
+      vendorApi.patch(`/vendors/products/${id}`, {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -211,7 +211,7 @@ export default function DashboardProductPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/vendors/products/${id}/permanent`),
+    mutationFn: (id: string) => vendorApi.delete(`/vendors/products/${id}/permanent`),
     onSuccess: () => {
       toast.success("Product permanently deleted from your store");
       refreshProducts();
@@ -222,7 +222,7 @@ export default function DashboardProductPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      api.patch(`/vendors/products/${id}/${active ? "deactivate" : "reactivate"}`),
+      vendorApi.patch(`/vendors/products/${id}/${active ? "deactivate" : "reactivate"}`),
     onSuccess: () => {
       toast.success("Product status updated");
       refreshProducts();
@@ -240,7 +240,7 @@ export default function DashboardProductPage() {
       quantity: number;
       description?: string;
     }) =>
-      api.patch(`/vendors/products/${id}/stock`, {
+      vendorApi.patch(`/vendors/products/${id}/stock`, {
         quantity,
         ...(description ? { description } : {}),
       }),
@@ -276,7 +276,7 @@ export default function DashboardProductPage() {
 
     if (product.hasVariants) {
       try {
-        const res = await api.get<{ variants: VendorVariantResponseDto[] }>(`/vendors/products/variants?productId=${product.id}`);
+        const res = await vendorApi.get<{ variants: VendorVariantResponseDto[] }>(`/vendors/products/variants?productId=${product.id}`);
         const list = res.data.variants;
         setVariantsList(
           list.map((v) => ({
@@ -615,6 +615,7 @@ export default function DashboardProductPage() {
               {/* Variant builder section */}
               {hasVariants && (
                 <ProductVariantBuilder
+                  authRole="vendor"
                   variants={variantsList}
                   onChange={setVariantsList}
                 />
@@ -623,6 +624,7 @@ export default function DashboardProductPage() {
               <CategoryPicker categories={categoriesData ?? []} />
 
               <ImageUpload
+                authRole="vendor"
                 name="imageUrls"
                 label="Product Images (up to 6)"
                 aspectHint="square or portrait"

@@ -1,6 +1,6 @@
 "use client";
 
-import { notificationsApi } from "@/api/notifications";
+import { notificationsApiForRole } from "@/api/notifications";
 import { Button } from "@/component/ui/button";
 import { queryKey } from "@/lib/query-key";
 import { safeInternalPath } from "@/lib/safe-internal-path";
@@ -18,7 +18,8 @@ export function NotificationDetail({ id }: { id: string }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const notification = useQuery({
     queryKey: [...queryKey.notification.detail(`${role}:${user?.id ?? ""}`, id)],
-    queryFn: async ({ signal }) => (await notificationsApi.getById(id, signal)).data,
+    queryFn: async ({ signal }) =>
+      (await notificationsApiForRole(role).getById(id, signal)).data,
     enabled: isAuthenticated && Boolean(user?.id && id),
   });
   const markAsRead = useNotificationsStore((state) => state.markAsRead);

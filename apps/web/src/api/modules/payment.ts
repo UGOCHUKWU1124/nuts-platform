@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { userApi } from "@/api/core/client";
 import type {
 InitializePaymentResponseDto,
 PaymentResponseDto,
@@ -6,14 +6,14 @@ PaymentResponseDto,
 
 export const paymentService = {
   requestOtp(orderId: string) {
-    return api.post<{ message?: string }>(
+    return userApi.post<{ message?: string }>(
       "/payment/otp/request",
       null,
       { params: { orderId } }
     );
   },
   initialize(orderId: string, otpCode?: string) {
-    return api.post<InitializePaymentResponseDto>(
+    return userApi.post<InitializePaymentResponseDto>(
       "/payment/initialize",
       otpCode ? { otpCode } : {},
       {
@@ -23,10 +23,10 @@ export const paymentService = {
     );
   },
   getByOrderId(orderId: string) {
-    return api.get<PaymentResponseDto>(`/payment/order/${orderId}`);
+    return userApi.get<PaymentResponseDto>(`/payment/order/${orderId}`);
   },
   verify(reference: string) {
-    return api.get<PaymentResponseDto>(
+    return userApi.get<PaymentResponseDto>(
       `/payments/callback?reference=${encodeURIComponent(reference)}`
     );
   },

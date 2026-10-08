@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi, userApi, vendorApi } from "@/api/core/client";
 import type {
 AdminOrderResponseDto,
 CheckoutResponseDto,
@@ -23,45 +23,45 @@ export interface CheckoutPayload {
 export const orderService = {
   checkout(payload: CheckoutPayload, idempotencyKey?: string) {
     const key = idempotencyKey || (typeof crypto !== "undefined" ? crypto.randomUUID() : `order-${Date.now()}`);
-    return api.post<CheckoutResponseDto>("/orders/checkout", payload, {
+    return userApi.post<CheckoutResponseDto>("/orders/checkout", payload, {
       headers: { "idempotency-key": key },
     });
   },
   list(params?: { page?: number; limit?: number; status?: string }) {
-    return api.get<OrderSummaryDto[]>("/orders", { params });
+    return userApi.get<OrderSummaryDto[]>("/orders", { params });
   },
   getById(id: string) {
-    return api.get<OrderResponseDto>(`/orders/${id}`);
+    return userApi.get<OrderResponseDto>(`/orders/${id}`);
   },
   cancel(id: string) {
-    return api.post<OrderResponseDto>(`/orders/${id}/cancel`);
+    return userApi.post<OrderResponseDto>(`/orders/${id}/cancel`);
   },
   updateShipping(id: string, shippingAddress: string) {
-    return api.patch<OrderResponseDto>(`/orders/${id}/shipping`, { shippingAddress });
+    return userApi.patch<OrderResponseDto>(`/orders/${id}/shipping`, { shippingAddress });
   },
 };
 
 export const adminOrderService = {
   list(params?: { page?: number; limit?: number; search?: string; status?: string }) {
-    return api.get<AdminOrderResponseDto[]>("/admin/orders", { params });
+    return adminApi.get<AdminOrderResponseDto[]>("/admin/orders", { params });
   },
   getById(id: string) {
-    return api.get<AdminOrderResponseDto>(`/admin/orders/${id}`);
+    return adminApi.get<AdminOrderResponseDto>(`/admin/orders/${id}`);
   },
   updateStatus(id: string, payload: { status: string; note?: string }) {
-    return api.patch<AdminOrderResponseDto>(`/admin/orders/${id}/status`, payload);
+    return adminApi.patch<AdminOrderResponseDto>(`/admin/orders/${id}/status`, payload);
   },
 };
 
 export const dashboardOrderService = {
   list(params?: { page?: number; limit?: number; search?: string; status?: string }) {
-    return api.get<VendorOrderResponseDto[]>("/vendors/orders", { params });
+    return vendorApi.get<VendorOrderResponseDto[]>("/vendors/orders", { params });
   },
   getById(id: string) {
-    return api.get<VendorOrderResponseDto>(`/vendors/orders/${id}`);
+    return vendorApi.get<VendorOrderResponseDto>(`/vendors/orders/${id}`);
   },
   updateStatus(id: string, payload: { status: string; note?: string }) {
-    return api.patch<VendorOrderResponseDto>(`/vendors/orders/${id}/status`, payload);
+    return vendorApi.patch<VendorOrderResponseDto>(`/vendors/orders/${id}/status`, payload);
   },
 };
 

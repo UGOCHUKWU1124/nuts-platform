@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi, publicApi, vendorApi } from "@/api/core/client";
 import type { CategoryResponseDto } from "@/api/dto/category";
 import type {
 AdminProductResponseDto,
@@ -56,13 +56,13 @@ export interface UpdateStockPayload {
 
 export const productService = {
   getBySlug(slug: string, signal?: AbortSignal) {
-    return api.get<PublicProductResponseDto>(`/products/${slug}`, { signal });
+    return publicApi.get<PublicProductResponseDto>(`/products/${slug}`, { signal });
   },
   getCards(params: ProductQueryParams, signal?: AbortSignal) {
-    return api.get<ProductCardDto[]>("/products", { params, signal });
+    return publicApi.get<ProductCardDto[]>("/products", { params, signal });
   },
   query(body: CursorQueryBody) {
-    return api.post<{ items: ProductCardDto[]; nextCursor?: string | null }>(
+    return publicApi.post<{ items: ProductCardDto[]; nextCursor?: string | null }>(
       "/products/query",
       body
     );
@@ -71,62 +71,62 @@ export const productService = {
 
 export const dashboardProductService = {
   list(params: ProductQueryParams) {
-    return api.get<VendorProductResponseDto[]>("/vendors/products", { params });
+    return vendorApi.get<VendorProductResponseDto[]>("/vendors/products", { params });
   },
   getBySlug(slug: string) {
-    return api.get<VendorProductResponseDto>(`/vendors/products/${slug}`);
+    return vendorApi.get<VendorProductResponseDto>(`/vendors/products/${slug}`);
   },
   create(payload: CreateProductPayload) {
-    return api.post<VendorProductResponseDto>("/vendors/products", payload);
+    return vendorApi.post<VendorProductResponseDto>("/vendors/products", payload);
   },
   update(id: string, payload: UpdateProductPayload) {
-    return api.patch<VendorProductResponseDto>(`/vendors/products/${id}`, payload);
+    return vendorApi.patch<VendorProductResponseDto>(`/vendors/products/${id}`, payload);
   },
   setActive(id: string, active: boolean) {
-    return api.patch<VendorProductResponseDto>(
+    return vendorApi.patch<VendorProductResponseDto>(
       `/vendors/products/${id}/${active ? "reactivate" : "deactivate"}`
     );
   },
   updateStock(id: string, payload: UpdateStockPayload) {
-    return api.patch<VendorProductResponseDto>(
+    return vendorApi.patch<VendorProductResponseDto>(
       `/vendors/products/${id}/stock`,
       payload
     );
   },
   permanentDelete(id: string) {
-    return api.delete<void>(`/vendors/products/${id}/permanent`);
+    return vendorApi.delete<void>(`/vendors/products/${id}/permanent`);
   },
   listVariants(productId: string) {
-    return api.get<VendorVariantResponseDto[]>(`/vendors/products/${productId}/variants`);
+    return vendorApi.get<VendorVariantResponseDto[]>(`/vendors/products/${productId}/variants`);
   },
 };
 
 export const adminProductService = {
   list(params: ProductQueryParams) {
-    return api.get<AdminProductResponseDto[]>("/admin/products", { params });
+    return adminApi.get<AdminProductResponseDto[]>("/admin/products", { params });
   },
   create(payload: CreateProductPayload) {
-    return api.post<AdminProductResponseDto>("/admin/products", payload);
+    return adminApi.post<AdminProductResponseDto>("/admin/products", payload);
   },
   update(id: string, payload: UpdateProductPayload) {
-    return api.patch<AdminProductResponseDto>(`/admin/products/${id}`, payload);
+    return adminApi.patch<AdminProductResponseDto>(`/admin/products/${id}`, payload);
   },
   setActive(id: string, active: boolean) {
-    return api.patch<AdminProductResponseDto>(
+    return adminApi.patch<AdminProductResponseDto>(
       `/admin/products/${id}/${active ? "reactivate" : "deactivate"}`
     );
   },
   updateStock(id: string, payload: UpdateStockPayload) {
-    return api.patch<AdminProductResponseDto>(`/admin/products/${id}/stock`, payload);
+    return adminApi.patch<AdminProductResponseDto>(`/admin/products/${id}/stock`, payload);
   },
   delete(id: string) {
-    return api.delete<void>(`/admin/products/${id}`);
+    return adminApi.delete<void>(`/admin/products/${id}`);
   },
 };
 
 export const productSummaryService = {
   list(params: { subcategory?: string; sort?: string; limit?: number }) {
-    return api.get<ProductSummaryDto[]>("/products", { params });
+    return publicApi.get<ProductSummaryDto[]>("/products", { params });
   },
 };
 

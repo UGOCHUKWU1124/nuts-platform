@@ -3,9 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Response } from 'express';
 
 import {
+  AUTH_ACCESS_COOKIE,
+  AUTH_REFRESH_COOKIE,
+  AUTH_SESSION_COOKIE,
   AUTH_COOKIE_PATH,
-  authCookieNames,
-  AuthCookieRole,
 } from '../constants/auth-cookies.constants';
 import type { AuthTokens } from '../types/auth.types';
 
@@ -26,7 +27,6 @@ export class AuthCookieService {
 
     /**
      * SameSite=None requires Secure.
-     *
      * Do not enable cross-site cookies accidentally.
      */
     const secure = isProduction || sameSiteConfig === 'none';
@@ -60,41 +60,23 @@ export class AuthCookieService {
     );
   }
 
-  setAuthCookies(
-    res: Response,
-    tokens: AuthTokens,
-    role: AuthCookieRole,
-  ): void {
-    const names = authCookieNames(role);
-
-    /**
-     * httpOnly prevents browser JavaScript from reading the credential.
-     *
-     * The cookie is scoped to the API because the frontend does not need
-     * direct access to the JWT.
-     */
-    res.cookie(names.access, tokens.accessToken, {
+  setAuthCookies(res: Response, tokens: AuthTokens): void {
+    // 1. Standard HttpOnly access_token cookie
+    res.cookie(AUTH_ACCESS_COOKIE, tokens.accessToken, {
       ...this.baseOptions,
       maxAge: this.accessMaxAge,
       path: AUTH_COOKIE_PATH,
     });
 
-    /**
-     * Refresh credentials are also API-only.
-     */
-    res.cookie(names.refresh, tokens.refreshToken, {
+    // 2. Standard HttpOnly refresh_token cookie
+    res.cookie(AUTH_REFRESH_COOKIE, tokens.refreshToken, {
       ...this.baseOptions,
       maxAge: this.refreshMaxAge,
       path: AUTH_COOKIE_PATH,
     });
 
-    /**
-     * This is intentionally NOT an authentication credential.
-     *
-     * Frontend JavaScript may read it as a "session probably exists"
-     * convenience indicator, but the backend never trusts it.
-     */
-    res.cookie(names.session, '1', {
+    // 3. Standard frontend session marker (non-HttpOnly)
+    res.cookie(AUTH_SESSION_COOKIE, '1', {
       ...this.baseOptions,
       httpOnly: false,
       maxAge: this.refreshMaxAge,
@@ -102,20 +84,16 @@ export class AuthCookieService {
     });
   }
 
-  clearAuthCookies(res: Response, role: AuthCookieRole): void {
-    const names = authCookieNames(role);
-
-    res.clearCookie(names.access, {
+  clearAuthCookies(res: Response): void {
+    res.clearCookie(AUTH_ACCESS_COOKIE, {
       ...this.baseOptions,
       path: AUTH_COOKIE_PATH,
     });
-
-    res.clearCookie(names.refresh, {
+    res.clearCookie(AUTH_REFRESH_COOKIE, {
       ...this.baseOptions,
       path: AUTH_COOKIE_PATH,
     });
-
-    res.clearCookie(names.session, {
+    res.clearCookie(AUTH_SESSION_COOKIE, {
       ...this.baseOptions,
       httpOnly: false,
       path: '/',

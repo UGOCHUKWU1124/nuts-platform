@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi, publicApi } from "@/api/core/client";
 import type {
 CategoryBreadcrumbDto,
 CategoryLevel,
@@ -30,71 +30,71 @@ export interface ReorderCategoriesPayload {
 
 export const categoryService = {
   getAll() {
-    return api.get<CategoryResponseDto[]>("/categories");
+    return publicApi.get<CategoryResponseDto[]>("/categories");
   },
   getTree() {
     return this.getAll();
   },
   getRoots() {
-    return api.get<CategoryResponseDto[]>("/categories/roots");
+    return publicApi.get<CategoryResponseDto[]>("/categories/roots");
   },
   search(q: string) {
-    return api.get<CategoryResponseDto[]>("/categories/search", {
+    return publicApi.get<CategoryResponseDto[]>("/categories/search", {
       params: { q },
     });
   },
   findBySlug(slug: string) {
-    return api.get<CategoryResponseDto>(`/categories/${slug}`);
+    return publicApi.get<CategoryResponseDto>(`/categories/${slug}`);
   },
   findByPath(path: string) {
-    return api.get<CategoryResponseDto>(`/categories/path/${path}`);
+    return publicApi.get<CategoryResponseDto>(`/categories/path/${path}`);
   },
   getBreadcrumbs(idOrSlug: string) {
-    return api.get<CategoryBreadcrumbDto[]>(`/categories/${idOrSlug}/breadcrumbs`);
+    return publicApi.get<CategoryBreadcrumbDto[]>(`/categories/${idOrSlug}/breadcrumbs`);
   },
   getChildren(idOrSlug: string) {
-    return api.get<CategoryResponseDto[]>(`/categories/${idOrSlug}/children`);
+    return publicApi.get<CategoryResponseDto[]>(`/categories/${idOrSlug}/children`);
   },
 };
 
 export const adminCategoryService = {
   get(params?: { includeArchived?: boolean }) {
-    return api.get<CategoryResponseDto[]>("/admin/categories", {
+    return adminApi.get<CategoryResponseDto[]>("/admin/categories", {
       params,
     });
   },
   getOne(idOrSlug: string) {
-    return api.get<CategoryResponseDto>(`/admin/categories/${idOrSlug}`);
+    return adminApi.get<CategoryResponseDto>(`/admin/categories/${idOrSlug}`);
   },
   create(payload: CreateCategoryPayload) {
-    return api.post<CategoryResponseDto>("/admin/categories", payload);
+    return adminApi.post<CategoryResponseDto>("/admin/categories", payload);
   },
   update(idOrSlug: string, payload: UpdateCategoryPayload) {
-    return api.patch<CategoryResponseDto>(`/admin/categories/${idOrSlug}`, payload);
+    return adminApi.patch<CategoryResponseDto>(`/admin/categories/${idOrSlug}`, payload);
   },
   move(id: string, newParentId: string | null) {
-    return api.post<CategoryResponseDto>(`/admin/categories/${id}/move`, {
+    return adminApi.post<CategoryResponseDto>(`/admin/categories/${id}/move`, {
       newParentId,
     });
   },
   reorder(parentId: string | null, categoryIds: string[]) {
-    return api.post<CategoryResponseDto[]>(
+    return adminApi.post<CategoryResponseDto[]>(
       `/admin/categories/reorder${parentId ? `?parentId=${parentId}` : ""}`,
       { categoryIds },
     );
   },
   setActive(idOrSlug: string, active: boolean) {
-    return api.patch<null>(
+    return adminApi.patch<null>(
       `/admin/categories/${idOrSlug}/${active ? "activate" : "deactivate"}`
     );
   },
   archive(idOrSlug: string) {
-    return api.patch<CategoryResponseDto>(`/admin/categories/${idOrSlug}/archive`);
+    return adminApi.patch<CategoryResponseDto>(`/admin/categories/${idOrSlug}/archive`);
   },
   restore(idOrSlug: string) {
-    return api.patch<CategoryResponseDto>(`/admin/categories/${idOrSlug}/restore`);
+    return adminApi.patch<CategoryResponseDto>(`/admin/categories/${idOrSlug}/restore`);
   },
   delete(idOrSlug: string) {
-    return api.delete<{ message: string }>(`/admin/categories/${idOrSlug}`);
+    return adminApi.delete<{ message: string }>(`/admin/categories/${idOrSlug}`);
   },
 };

@@ -14,7 +14,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -42,20 +41,19 @@ import { UpdateProductDto } from '@api/modules/products/dto/update-product.dto';
 import { UpdateStockDto } from '@api/modules/products/dto/update-stock.dto';
 import { VendorProductResponseDto } from '@api/modules/products/dto/vendor-product-response.dto';
 import { ProductsService } from '@api/modules/products/products.service';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import {
   ApiResponseDto,
   PaginationMetaDto,
 } from '@api/modules/shared/dto/api-response.dto';
-import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - PRODUCTS')
 @ApiBearerAuth('JWT-auth')
 @Controller(['vendors/products', 'dashboard/products'])
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 export class VendorProductsController {
   constructor(
     private readonly productsService: ProductsService,

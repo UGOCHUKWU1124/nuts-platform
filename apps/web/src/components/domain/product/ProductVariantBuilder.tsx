@@ -1,7 +1,7 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { api } from "@/api/core/client";
+import { adminApi, vendorApi } from "@/api/core/client";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { Label } from "@/component/ui/label";
@@ -31,6 +31,7 @@ export interface ProductVariantItem {
 }
 
 interface ProductVariantBuilderProps {
+  authRole: "admin" | "vendor";
   variants: ProductVariantItem[];
   onChange: (variants: ProductVariantItem[]) => void;
   className?: string;
@@ -39,10 +40,12 @@ interface ProductVariantBuilderProps {
 const COMMON_ATTRIBUTES = ["Size", "Color", "Material", "Style", "Flavour", "Weight"];
 
 export function ProductVariantBuilder({
+  authRole,
   variants,
   onChange,
   className,
 }: ProductVariantBuilderProps) {
+  const api = authRole === "admin" ? adminApi : vendorApi;
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadVariantIndex, setActiveUploadVariantIndex] = useState<number | null>(null);

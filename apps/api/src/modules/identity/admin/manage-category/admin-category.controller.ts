@@ -9,7 +9,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -32,14 +31,11 @@ import { UpdateCategoryDto } from '@api/modules/catalog/categories/dto/update-ca
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import { ApiEnvelopeResponse } from '@api/modules/shared/decorators/api-envelope-response.decorator';
 
 @ApiTags('ADMIN - CATEGORY')
 @ApiBearerAuth('JWT-auth')
 @Controller(['admin/category', 'admin/categories'])
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(ROLE.ADMIN)
 export class AdminCategoryController {
   constructor(private readonly categoriesService: CategoriesService) {}

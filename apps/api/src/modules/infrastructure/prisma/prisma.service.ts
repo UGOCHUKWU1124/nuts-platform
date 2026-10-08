@@ -95,7 +95,7 @@ export class PrismaService
      * Therefore, increasing this value blindly can exhaust PostgreSQL's
      * connection limit in production.
      */
-    const poolMax = getNumber('DB_CONNECTION_LIMIT', 10, 1);
+    const poolMax = getNumber('DB_CONNECTION_LIMIT', 15, 1);
 
     /**
      * How long an idle connection remains available in the pg pool.

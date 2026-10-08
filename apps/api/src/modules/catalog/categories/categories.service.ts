@@ -986,7 +986,7 @@ export class CategoriesService {
         WITH RECURSIVE category_descendants AS (
           SELECT id
           FROM "categories"
-          WHERE id = ${categoryId}::uuid
+          WHERE id = ${categoryId}
 
           UNION ALL
 

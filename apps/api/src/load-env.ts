@@ -55,7 +55,7 @@ export function loadAppEnv(): void {
   for (const file of candidateFiles) {
     const fullPath = path.resolve(appDir, file);
     if (fs.existsSync(fullPath)) {
-      dotenv.config({ path: fullPath });
+      dotenv.config({ path: fullPath, quiet: true });
     }
   }
 }

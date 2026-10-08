@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiExtraModels,
@@ -11,8 +11,6 @@ import { ROLE } from '@prisma/client';
 
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import { SearchService } from '@api/modules/shared/search/search.service';
 import { QuerySearchDto } from './dto/query-search.dto';
 import { SearchResponseDto, SearchResultDto } from './dto/search-result.dto';
@@ -21,7 +19,6 @@ import { SearchResponseDto, SearchResultDto } from './dto/search-result.dto';
 @ApiTags('ADMIN - SEARCH')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/search')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(ROLE.ADMIN)
 export class AdminSearchController {
   constructor(private readonly searchService: SearchService) {}

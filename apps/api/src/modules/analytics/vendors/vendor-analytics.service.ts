@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { parseDateRange } from '@api/modules/shared/utils/date-range.util';
 import {
@@ -13,7 +14,10 @@ import {
 
 @Injectable()
 export class VendorAnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: CacheService,
+  ) {}
 
   async getAnalytics(
     vendorId: string,
@@ -28,71 +32,72 @@ export class VendorAnalyticsService {
     );
     const top = query.top ?? 10;
 
-    const notCancelled = { status: { not: OrderStatus.CANCELLED } };
+    const compute = async (): Promise<VendorAnalyticsSummaryDto> => {
+      const notCancelled = { status: { not: OrderStatus.CANCELLED } };
 
-    // All aggregates run DB-side — the previous implementation pulled EVERY
-    // order item for the vendor into memory to sum/trend in JavaScript,
-    // which degrades linearly (and unboundedly) with sales volume.
-    // Independent read queries run in parallel on the connection pool.
-    const [
-      totalProducts,
-      activeProducts,
-      lowStockProducts,
-      outOfStockProducts,
-      totalVariants,
-      orderStatusCountsRaw,
-      totalRevenueAgg,
-      revenueInPeriodAgg,
-      revenueTrendRows,
-      orderTrendRows,
-      distinctOrders,
-      variantProducts,
-    ] = await Promise.all([
-      this.prisma.product.count({
-        where: { vendorId, isDeleted: false },
-      }),
-      this.prisma.product.count({
-        where: { vendorId, isDeleted: false, isActive: true },
-      }),
-      // Low stock products: computed differently for variants since stock is now per-option
-      this.prisma.product.count({
-        where: {
-          vendorId,
-          isDeleted: false,
-          OR: [{ hasVariants: false, stock: { gt: 0, lte: 5 } }],
-        },
-      }),
-      this.prisma.product.count({
-        where: {
-          vendorId,
-          isDeleted: false,
-          OR: [{ hasVariants: false, stock: 0 }],
-        },
-      }),
-      this.prisma.productVariant.count({
-        where: { product: { vendorId, isDeleted: false } },
-      }),
-      this.prisma.order.groupBy({
-        by: ['status'],
-        orderBy: { status: 'asc' },
-        where: { orderItems: { some: { vendorId } } },
-        _count: { status: true },
-      }),
-      // Lifetime revenue
-      this.prisma.orderItem.aggregate({
-        where: { vendorId, order: notCancelled },
-        _sum: { totalPrice: true },
-      }),
-      // Revenue within the requested period
-      this.prisma.orderItem.aggregate({
-        where: {
-          vendorId,
-          order: { ...notCancelled, createdAt: { gte: start, lte: end } },
-        },
-        _sum: { totalPrice: true },
-      }),
-      // Daily revenue trend — DATE_TRUNC buckets computed in the database
-      this.prisma.$queryRaw<{ date: string; value: string | number }[]>`
+      // All aggregates run DB-side — the previous implementation pulled EVERY
+      // order item for the vendor into memory to sum/trend in JavaScript,
+      // which degrades linearly (and unboundedly) with sales volume.
+      // Independent read queries run in parallel on the connection pool.
+      const [
+        totalProducts,
+        activeProducts,
+        lowStockProducts,
+        outOfStockProducts,
+        totalVariants,
+        orderStatusCountsRaw,
+        totalRevenueAgg,
+        revenueInPeriodAgg,
+        revenueTrendRows,
+        orderTrendRows,
+        distinctOrders,
+        variantProducts,
+      ] = await Promise.all([
+        this.prisma.product.count({
+          where: { vendorId, isDeleted: false },
+        }),
+        this.prisma.product.count({
+          where: { vendorId, isDeleted: false, isActive: true },
+        }),
+        // Low stock products: computed differently for variants since stock is now per-option
+        this.prisma.product.count({
+          where: {
+            vendorId,
+            isDeleted: false,
+            OR: [{ hasVariants: false, stock: { gt: 0, lte: 5 } }],
+          },
+        }),
+        this.prisma.product.count({
+          where: {
+            vendorId,
+            isDeleted: false,
+            OR: [{ hasVariants: false, stock: 0 }],
+          },
+        }),
+        this.prisma.productVariant.count({
+          where: { product: { vendorId, isDeleted: false } },
+        }),
+        this.prisma.order.groupBy({
+          by: ['status'],
+          orderBy: { status: 'asc' },
+          where: { orderItems: { some: { vendorId } } },
+          _count: { status: true },
+        }),
+        // Lifetime revenue
+        this.prisma.orderItem.aggregate({
+          where: { vendorId, order: notCancelled },
+          _sum: { totalPrice: true },
+        }),
+        // Revenue within the requested period
+        this.prisma.orderItem.aggregate({
+          where: {
+            vendorId,
+            order: { ...notCancelled, createdAt: { gte: start, lte: end } },
+          },
+          _sum: { totalPrice: true },
+        }),
+        // Daily revenue trend — DATE_TRUNC buckets computed in the database
+        this.prisma.$queryRaw<{ date: string; value: string | number }[]>`
         SELECT to_char(DATE_TRUNC('day', o."createdAt"), 'YYYY-MM-DD') AS date,
                SUM(oi."totalPrice") AS value
         FROM "order_items" oi
@@ -103,8 +108,8 @@ export class VendorAnalyticsService {
         GROUP BY 1
         ORDER BY 1
       `,
-      // Daily order-count trend — distinct orders per day bucket
-      this.prisma.$queryRaw<{ date: string; value: string | number }[]>`
+        // Daily order-count trend — distinct orders per day bucket
+        this.prisma.$queryRaw<{ date: string; value: string | number }[]>`
         SELECT to_char(DATE_TRUNC('day', o."createdAt"), 'YYYY-MM-DD') AS date,
                COUNT(DISTINCT o.id) AS value
         FROM "order_items" oi
@@ -115,163 +120,173 @@ export class VendorAnalyticsService {
         GROUP BY 1
         ORDER BY 1
       `,
-      // Distinct non-cancelled orders (for AOV)
-      this.prisma.order.count({
-        where: { orderItems: { some: { vendorId } }, ...notCancelled },
-      }),
-      this.prisma.product.findMany({
-        where: { vendorId, isDeleted: false, hasVariants: true },
-        select: {
-          id: true,
-          variants: {
-            where: { isDeleted: false, isActive: true },
-            select: { stock: true },
-          },
-        },
-      }),
-    ]);
-
-    const totalRevenue = Number(totalRevenueAgg._sum.totalPrice ?? 0);
-
-    const [topProducts, customers, productsSoldAgg, recentOrders] =
-      await Promise.all([
-        this.getTopProducts(vendorId, top),
-        this.getCustomerSummary(vendorId, totalRevenue, distinctOrders),
-        this.prisma.orderItem.aggregate({
-          where: { vendorId, order: notCancelled },
-          _sum: { quantity: true },
-        }),
-        this.prisma.order.findMany({
+        // Distinct non-cancelled orders (for AOV)
+        this.prisma.order.count({
           where: { orderItems: { some: { vendorId } }, ...notCancelled },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
+        }),
+        this.prisma.product.findMany({
+          where: { vendorId, isDeleted: false, hasVariants: true },
           select: {
             id: true,
-            orderNumber: true,
-            status: true,
-            totalAmount: true,
-            createdAt: true,
-            _count: { select: { orderItems: true } },
+            variants: {
+              where: { isDeleted: false, isActive: true },
+              select: { stock: true },
+            },
           },
         }),
       ]);
 
-    let variantLowStockCount = 0;
-    let variantOutOfStockCount = 0;
-    const threshold = 5; // same as the product-level threshold
+      const totalRevenue = Number(totalRevenueAgg._sum.totalPrice ?? 0);
 
-    for (const product of variantProducts) {
-      const hasLowStock = product.variants.some(
-        (v) => v.stock > 0 && v.stock <= threshold,
+      const [topProducts, customers, productsSoldAgg, recentOrders] =
+        await Promise.all([
+          this.getTopProducts(vendorId, top),
+          this.getCustomerSummary(vendorId, totalRevenue, distinctOrders),
+          this.prisma.orderItem.aggregate({
+            where: { vendorId, order: notCancelled },
+            _sum: { quantity: true },
+          }),
+          this.prisma.order.findMany({
+            where: { orderItems: { some: { vendorId } }, ...notCancelled },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              totalAmount: true,
+              createdAt: true,
+              _count: { select: { orderItems: true } },
+            },
+          }),
+        ]);
+
+      let variantLowStockCount = 0;
+      let variantOutOfStockCount = 0;
+      const threshold = 5; // same as the product-level threshold
+
+      for (const product of variantProducts) {
+        const hasLowStock = product.variants.some(
+          (v) => v.stock > 0 && v.stock <= threshold,
+        );
+        if (hasLowStock) variantLowStockCount++;
+
+        const hasOutOfStock = !product.variants.some((v) => v.stock > 0);
+        if (hasOutOfStock) variantOutOfStockCount++;
+      }
+
+      const adjustedLowStockProducts = lowStockProducts + variantLowStockCount;
+      const adjustedOutOfStockProducts =
+        outOfStockProducts + variantOutOfStockCount;
+
+      // ── Derive total orders from status breakdown ──
+      const totalOrders = orderStatusCountsRaw.reduce(
+        (s, r) =>
+          s +
+          (typeof r._count === 'object' && r._count !== null
+            ? ((r._count as Record<string, number>).status ?? 0)
+            : 0),
+        0,
       );
-      if (hasLowStock) variantLowStockCount++;
 
-      const hasOutOfStock = !product.variants.some((v) => v.stock > 0);
-      if (hasOutOfStock) variantOutOfStockCount++;
+      // ── Revenue calculations (DB-side aggregates) ──
+      const revenueInPeriod = Number(revenueInPeriodAgg._sum.totalPrice ?? 0);
+
+      // ── Trends (day buckets come pre-aggregated from the database — the
+      // previous in-memory grouping overwrote same-day keys, under-counting) ──
+      const revenueTrend = this.fillDateGaps(
+        revenueTrendRows.map((r) => ({ date: r.date, value: Number(r.value) })),
+        start,
+        end,
+      );
+
+      const newOrdersInPeriod = orderTrendRows.reduce(
+        (s, r) => s + Number(r.value),
+        0,
+      );
+      const orderTrend = this.fillDateGaps(
+        orderTrendRows.map((r) => ({ date: r.date, value: Number(r.value) })),
+        start,
+        end,
+      );
+
+      // ── Order status breakdown ──
+      const orderStatusCounts = orderStatusCountsRaw.map((entry) => ({
+        status: entry.status,
+        count:
+          typeof entry._count === 'object' && entry._count !== null
+            ? ((entry._count as Record<string, number>).status ?? 0)
+            : 0,
+      }));
+
+      // ── Products sold (total units across all order items) ──
+      const productsSold = productsSoldAgg._sum.quantity ?? 0;
+
+      // ── Conversion rate ──
+      const conversionRate =
+        totalProducts > 0
+          ? Math.min(
+              100,
+              Number(
+                ((distinctOrders / Math.max(totalProducts, 1)) * 100).toFixed(
+                  1,
+                ),
+              ),
+            )
+          : 0;
+
+      return {
+        totalProducts,
+        activeProducts,
+        lowStockProducts: adjustedLowStockProducts,
+        outOfStockProducts: adjustedOutOfStockProducts,
+        totalVariants,
+        totalOrders,
+        newOrdersInPeriod,
+        totalRevenue: totalRevenue.toFixed(2),
+        revenueInPeriod: revenueInPeriod.toFixed(2),
+        orderStatusCounts,
+        revenueTrend,
+        orderTrend,
+        topProducts,
+        customers,
+        // Frontend-expected aliases
+        revenue: totalRevenue.toFixed(2),
+        orderCount: totalOrders,
+        productsSold,
+        avgOrderValue: customers.averageOrderValue,
+        recentOrders: recentOrders.map(
+          (o: {
+            id: string;
+            orderNumber: string;
+            status: string;
+            totalAmount: { toNumber(): number } | number;
+            createdAt: Date;
+            _count: { orderItems: number };
+          }) => ({
+            id: o.id,
+            orderNumber: o.orderNumber,
+            status: o.status,
+            totalAmount:
+              typeof o.totalAmount === 'object' &&
+              o.totalAmount !== null &&
+              'toNumber' in o.totalAmount
+                ? o.totalAmount.toNumber()
+                : Number(o.totalAmount),
+            createdAt: o.createdAt,
+            itemCount: o._count.orderItems,
+          }),
+        ),
+        conversionRate,
+      };
+    };
+
+    if (this.cache) {
+      const cacheKey = `vendor:analytics:${vendorId}:${query.range ?? 'custom'}:${start.toISOString()}:${end.toISOString()}:${top}`;
+      return this.cache.wrap(cacheKey, 60, compute);
     }
 
-    const adjustedLowStockProducts = lowStockProducts + variantLowStockCount;
-    const adjustedOutOfStockProducts =
-      outOfStockProducts + variantOutOfStockCount;
-
-    // ── Derive total orders from status breakdown ──
-    const totalOrders = orderStatusCountsRaw.reduce(
-      (s, r) =>
-        s +
-        (typeof r._count === 'object' && r._count !== null
-          ? ((r._count as Record<string, number>).status ?? 0)
-          : 0),
-      0,
-    );
-
-    // ── Revenue calculations (DB-side aggregates) ──
-    const revenueInPeriod = Number(revenueInPeriodAgg._sum.totalPrice ?? 0);
-
-    // ── Trends (day buckets come pre-aggregated from the database — the
-    // previous in-memory grouping overwrote same-day keys, under-counting) ──
-    const revenueTrend = this.fillDateGaps(
-      revenueTrendRows.map((r) => ({ date: r.date, value: Number(r.value) })),
-      start,
-      end,
-    );
-
-    const newOrdersInPeriod = orderTrendRows.reduce(
-      (s, r) => s + Number(r.value),
-      0,
-    );
-    const orderTrend = this.fillDateGaps(
-      orderTrendRows.map((r) => ({ date: r.date, value: Number(r.value) })),
-      start,
-      end,
-    );
-
-    // ── Order status breakdown ──
-    const orderStatusCounts = orderStatusCountsRaw.map((entry) => ({
-      status: entry.status,
-      count:
-        typeof entry._count === 'object' && entry._count !== null
-          ? ((entry._count as Record<string, number>).status ?? 0)
-          : 0,
-    }));
-
-    // ── Products sold (total units across all order items) ──
-    const productsSold = productsSoldAgg._sum.quantity ?? 0;
-
-    // ── Conversion rate ──
-    const conversionRate =
-      totalProducts > 0
-        ? Math.min(
-            100,
-            Number(
-              ((distinctOrders / Math.max(totalProducts, 1)) * 100).toFixed(1),
-            ),
-          )
-        : 0;
-
-    return {
-      totalProducts,
-      activeProducts,
-      lowStockProducts: adjustedLowStockProducts,
-      outOfStockProducts: adjustedOutOfStockProducts,
-      totalVariants,
-      totalOrders,
-      newOrdersInPeriod,
-      totalRevenue: totalRevenue.toFixed(2),
-      revenueInPeriod: revenueInPeriod.toFixed(2),
-      orderStatusCounts,
-      revenueTrend,
-      orderTrend,
-      topProducts,
-      customers,
-      // Frontend-expected aliases
-      revenue: totalRevenue.toFixed(2),
-      orderCount: totalOrders,
-      productsSold,
-      avgOrderValue: customers.averageOrderValue,
-      recentOrders: recentOrders.map(
-        (o: {
-          id: string;
-          orderNumber: string;
-          status: string;
-          totalAmount: { toNumber(): number } | number;
-          createdAt: Date;
-          _count: { orderItems: number };
-        }) => ({
-          id: o.id,
-          orderNumber: o.orderNumber,
-          status: o.status,
-          totalAmount:
-            typeof o.totalAmount === 'object' &&
-            o.totalAmount !== null &&
-            'toNumber' in o.totalAmount
-              ? o.totalAmount.toNumber()
-              : Number(o.totalAmount),
-          createdAt: o.createdAt,
-          itemCount: o._count.orderItems,
-        }),
-      ),
-      conversionRate,
-    };
+    return compute();
   }
 
   private async getTopProducts(vendorId: string, limit: number) {

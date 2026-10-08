@@ -117,13 +117,18 @@ export class CacheService {
     return computePromise;
   }
 
+  private isRedisAvailable(): boolean {
+    return !this.redis.status || this.redis.status === 'ready';
+  }
+
   private canUseLocalCache(key: string): boolean {
     return (
       key.startsWith('category:') ||
+      key.startsWith('categories:') ||
       key.startsWith('product:') ||
-      key.startsWith('products:public:') ||
-      key.startsWith('vendor:store:') ||
-      key.startsWith('vendors:public:')
+      key.startsWith('products:') ||
+      key.startsWith('vendor:') ||
+      key.startsWith('vendors:')
     );
   }
 
@@ -188,6 +193,10 @@ export class CacheService {
       }
     }
 
+    if (!this.isRedisAvailable()) {
+      return undefined;
+    }
+
     try {
       const value = await this.redis.get(key);
 
@@ -229,6 +238,8 @@ export class CacheService {
     const serialized = JSON.stringify(value);
     if (serialized === undefined) return;
     this.rememberLocally(key, serialized);
+
+    if (!this.isRedisAvailable()) return;
 
     // Apply jitter to spread expiry times across instances, preventing
     // the synchronized-expiry stampede (all instances miss at the same second).
@@ -413,10 +424,15 @@ export class CacheService {
     const cached = await this.get<T>(key);
     if (cached !== undefined) return cached;
 
+    // Fail open immediately if Redis is unavailable rather than hanging
+    if (!this.isRedisAvailable()) {
+      return this.computeOnce(key, ttlSeconds, computeFn);
+    }
+
     const lockKey = `cache:lock:${key}`;
-    const lockTtlMs = options.lockTtlMs ?? 10_000;
-    const waitMs = options.waitMs ?? 150;
-    const maxWaitMs = options.maxWaitMs ?? 30_000;
+    const lockTtlMs = options.lockTtlMs ?? 5_000;
+    const waitMs = options.waitMs ?? 100;
+    const maxWaitMs = Math.min(options.maxWaitMs ?? 1_500, 2_000);
 
     // 2. Try to acquire the distributed lock
     try {
@@ -437,18 +453,20 @@ export class CacheService {
       );
       return result;
     } catch {
-      // Lock contention (another instance has it) — poll until cache is warm
+      // If Redis is not available, fail-open immediately to avoid any polling stall
+      if (!this.isRedisAvailable()) {
+        return this.computeOnce(key, ttlSeconds, computeFn);
+      }
+
+      // Lock contention (another instance has it) — poll briefly until cache is warm
       const deadline = Date.now() + maxWaitMs;
-      while (Date.now() < deadline) {
+      while (Date.now() < deadline && this.isRedisAvailable()) {
         await new Promise<void>((r) => setTimeout(r, waitMs));
         const polled = await this.get<T>(key);
         if (polled !== undefined) return polled;
       }
 
-      // Safety valve: fallback to a direct query rather than returning an error
-      this.logger.warn(
-        `wrapWithLock: max wait exceeded for "${key}", falling back to direct DB query`,
-      );
+      // Safety valve: fallback to direct query rather than returning an error
       return this.computeOnce(key, ttlSeconds, computeFn);
     }
   }
