@@ -1,7 +1,5 @@
-import { serverGetCategories } from "@/api/server";
-import { CategoryLandingView } from "@/component/category/CategoryLandingView";
+import { redirect } from "next/navigation";
 
-export default async function CategoryIndexPage() {
-  const categories = await serverGetCategories();
-  return <CategoryLandingView categories={categories} />;
+export default function CategoryIndexPage() {
+  redirect("/product");
 }
