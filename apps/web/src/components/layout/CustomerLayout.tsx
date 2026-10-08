@@ -7,16 +7,18 @@ import { type ReactNode } from "react";
 export function CustomerLayout({
   children,
   categories,
+  hideBottomNav = false,
 }: {
   children: ReactNode;
   categories?: CategoryResponseDto[];
+  hideBottomNav?: boolean;
 }) {
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground selection:bg-primary/20 selection:text-primary">
       <Navbar categories={categories} />
-      <main className="min-w-0 flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] xl:pb-0">{children}</main>
+      <main className={`min-w-0 flex-1 ${hideBottomNav ? "" : "pb-[calc(4.75rem+env(safe-area-inset-bottom))] xl:pb-0"}`}>{children}</main>
       <Footer />
-      <BottomNav />
+      {!hideBottomNav && <BottomNav />}
     </div>
   );
 }

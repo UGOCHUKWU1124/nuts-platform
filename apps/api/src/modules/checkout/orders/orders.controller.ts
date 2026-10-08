@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 
 import {
@@ -37,13 +36,11 @@ import { PaginationQueryDto } from '@api/modules/shared/dto/pagination-query.dto
 import { ROLE } from '@prisma/client';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import type { RequestWithUser } from '@api/modules/shared/interfaces/request-with-user.interface';
 
 @ApiTags('ORDERS')
 @ApiBearerAuth()
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
 @Roles(ROLE.USER)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}

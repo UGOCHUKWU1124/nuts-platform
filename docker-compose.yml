@@ -153,7 +153,7 @@ services:
       target: runner
       args:
         INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:3001}
-        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:?Set NEXT_PUBLIC_BACKEND_URL to the public HTTPS site origin}
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://api.nuts-commerce.com}
         NEXT_PUBLIC_API_URL: /api/v1
     image: nuts-client:latest
     container_name: nuts_client
@@ -211,7 +211,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the production hostname}
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-nuts-commerce.com}
       NGINX_ENVSUBST_FILTER: ^PUBLIC_DOMAIN$
     depends_on:
       api-prod:

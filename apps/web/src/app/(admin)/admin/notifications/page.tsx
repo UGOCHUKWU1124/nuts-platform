@@ -5,8 +5,8 @@ import { NotificationsManager } from "@/component/notification/NotificationsMana
 export default function AdminNotificationsPage() {
   return (
     <NotificationsManager
-      portalTitle="System Operations Notifications"
-      portalSubtitle="Real-time administrative feed for platform orders, payment alerts, and security events."
+      title="System Operations Notifications"
+      subtitle="Real-time administrative feed for platform orders, payment alerts, and security events."
       backHref="/admin"
       backLabel="Admin Console"
     />

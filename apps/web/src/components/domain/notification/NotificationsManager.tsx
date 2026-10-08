@@ -22,8 +22,8 @@ import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
 
 interface NotificationsManagerProps {
-  portalTitle: string;
-  portalSubtitle: string;
+  title?: string;
+  subtitle?: string;
   backHref?: string;
   backLabel?: string;
 }
@@ -90,8 +90,8 @@ function formatFullDate(dateString: string): string {
 }
 
 export function NotificationsManager({
-  portalTitle,
-  portalSubtitle,
+  title = "Notifications",
+  subtitle = "Platform alerts and updates",
   backHref,
   backLabel,
 }: NotificationsManagerProps) {
@@ -148,10 +148,10 @@ export function NotificationsManager({
             </Link>
           )}
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            {portalTitle}
+            {title}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {portalSubtitle}
+            {subtitle}
           </p>
         </div>
       </div>

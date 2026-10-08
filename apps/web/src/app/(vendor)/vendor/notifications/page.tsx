@@ -5,8 +5,8 @@ import { NotificationsManager } from "@/component/notification/NotificationsMana
 export default function VendorDashboardNotificationsPage() {
   return (
     <NotificationsManager
-      portalTitle="Vendor Studio Notifications"
-      portalSubtitle="Real-time alerts for customer purchases, wallet payouts, low inventory, and customer reviews."
+      title="Vendor Notifications"
+      subtitle="Real-time alerts for customer purchases, wallet payouts, low inventory, and customer reviews."
       backHref="/vendor/analytic"
       backLabel="Dashboard"
     />

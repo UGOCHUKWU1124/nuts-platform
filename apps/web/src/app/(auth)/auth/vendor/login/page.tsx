@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Store } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useRouter,useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -28,7 +28,17 @@ function VendorLoginForm() {
     searchParams.get("redirect"),
     "/vendor/analytic",
   );
-  const { login } = useAuthStore();
+  const { login, isAuthenticated, isInitialized, role, user } = useAuthStore();
+
+  useEffect(() => {
+    if (
+      isInitialized &&
+      isAuthenticated &&
+      (role === "vendor" || user?.role === "vendor")
+    ) {
+      router.replace(redirectUrl);
+    }
+  }, [isInitialized, isAuthenticated, role, user, redirectUrl, router]);
 
   const methods = useForm<VendorLoginFormData>({
     resolver: zodResolver(vendorLoginSchema),
@@ -59,7 +69,7 @@ function VendorLoginForm() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
           <Store className="h-6 w-6" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Vendor Portal</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Vendor Sign In</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">Sign in to manage your storefront &amp; sales</p>
       </div>
 

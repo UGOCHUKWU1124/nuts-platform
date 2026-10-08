@@ -7,7 +7,6 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 
 import {
@@ -27,7 +26,6 @@ import {
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 
 import { AddToWishlistDto, WishlistResponseDto } from './dto/wishlist.dto';
 
@@ -38,7 +36,6 @@ import { WishlistService } from './wishlist.service';
 @ApiTags('WISHLIST')
 @ApiBearerAuth('JWT-auth')
 @Controller('wishlist')
-@UseGuards(JwtAuthGuard)
 @Roles(ROLE.USER)
 export class WishlistController {
   constructor(private readonly wishlistService: WishlistService) {}

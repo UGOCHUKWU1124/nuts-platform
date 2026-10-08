@@ -21,17 +21,30 @@ export class TokenService {
     tokenId: string,
     expiresInMs: number,
   ): Promise<void> {
-    const key = `refresh:blacklist:${tokenId}`;
-    await this.redis.setex(key, Math.ceil(expiresInMs / 1000), '1');
+    try {
+      const key = `refresh:blacklist:${tokenId}`;
+      await this.redis.setex(key, Math.ceil(expiresInMs / 1000), '1');
+    } catch (err) {
+      this.logger.warn(
+        `Failed to invalidate refresh token in Redis: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**
    * Check if a refresh token has been invalidated.
    */
   async isRefreshTokenInvalidated(tokenId: string): Promise<boolean> {
-    const key = `refresh:blacklist:${tokenId}`;
-    const result = await this.redis.get(key);
-    return result !== null;
+    try {
+      const key = `refresh:blacklist:${tokenId}`;
+      const result = await this.redis.get(key);
+      return result !== null;
+    } catch (err) {
+      this.logger.warn(
+        `Failed to check refresh token blacklist in Redis: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
   }
 
   /**

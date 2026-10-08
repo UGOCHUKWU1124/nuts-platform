@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuthStore } from "@/zustand/auth";
+import { type AuthRole, useAuthStore } from "@/zustand/auth";
 import { useNotificationsStore } from "@/zustand/notifications";
 import { useEffect } from "react";
 
@@ -37,15 +37,16 @@ function useNotificationStreamLifecycle() {
   const user = useAuthStore((s) => s.user);
   const role = useAuthStore((s) => s.role);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const activeRole = role ?? user?.role ?? "user";
-  const currentUserId = user?.id ?? (isAuthenticated ? "auth" : null);
-  const sessionKey = currentUserId
-    ? `${activeRole.toLowerCase()}:${currentUserId}`
-    : null;
+  const activeRole = (role ?? user?.role ?? "user") as AuthRole;
+  const currentUserId = user?.id ?? null;
+  const sessionKey =
+    isAuthenticated && currentUserId
+      ? `${activeRole.toLowerCase()}:${currentUserId}`
+      : null;
 
   useEffect(() => {
     const store = useNotificationsStore.getState();
-    if (!isAuthenticated || !sessionKey) {
+    if (!isAuthenticated || !sessionKey || !currentUserId) {
       if (activeSessionKey !== null) {
         activeSessionKey = null;
         store.reset();
@@ -60,7 +61,7 @@ function useNotificationStreamLifecycle() {
 
     void store.fetchUnreadCount();
     return store.initStream(activeRole, sessionKey);
-  }, [activeRole, isAuthenticated, sessionKey]);
+  }, [activeRole, isAuthenticated, sessionKey, currentUserId]);
 }
 
 export function NotificationStreamHost() {

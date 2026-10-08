@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { LogIn } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useRouter,useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -25,7 +25,17 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = safeInternalPath(searchParams.get("redirect"), "/");
-  const login = useAuthStore((s) => s.login);
+  const { login, isAuthenticated, isInitialized, role, user } = useAuthStore();
+
+  useEffect(() => {
+    if (
+      isInitialized &&
+      isAuthenticated &&
+      (role === "user" || user?.role === "user")
+    ) {
+      router.replace(redirectUrl);
+    }
+  }, [isInitialized, isAuthenticated, role, user, redirectUrl, router]);
 
   const methods = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),

@@ -1,4 +1,9 @@
-import { api } from "@/api/core/client";
+import {
+  adminApi,
+  userApi,
+  vendorApi,
+} from "@/api/core/client";
+import type { AuthRole } from "../core/token-storage";
 
 export type NotificationType =
   | "ORDER_PLACED"
@@ -48,37 +53,50 @@ export interface NotificationsListResponse {
   meta: CursorPaginationMeta;
 }
 
-export const notificationsApi = {
-  list(params?: ListNotificationsParams, signal?: AbortSignal) {
-    return api.get<AppNotification[], CursorPaginationMeta>("/notifications", {
-      params,
-      signal,
-    });
-  },
+function createNotificationsApi(client: typeof userApi) {
+  return {
+    list(params?: ListNotificationsParams, signal?: AbortSignal) {
+      return client.get<AppNotification[], CursorPaginationMeta>("/notifications", {
+        params,
+        signal,
+      });
+    },
 
-  getById(id: string, signal?: AbortSignal) {
-    return api.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`, {
-      signal,
-    });
-  },
+    getById(id: string, signal?: AbortSignal) {
+      return client.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`, {
+        signal,
+      });
+    },
 
-  getUnreadCount() {
-    return api.get<{ count: number }>("/notifications/unread-count");
-  },
+    getUnreadCount() {
+      return client.get<{ count: number }>("/notifications/unread-count");
+    },
 
-  markAsRead(id: string) {
-    return api.patch<AppNotification>(`/notifications/${id}/read`);
-  },
+    markAsRead(id: string) {
+      return client.patch<AppNotification>(`/notifications/${id}/read`);
+    },
 
-  markAllAsRead() {
-    return api.patch<{ updated: number }>("/notifications/mark-all-read");
-  },
+    markAllAsRead() {
+      return client.patch<{ updated: number }>("/notifications/mark-all-read");
+    },
 
-  delete(id: string) {
-    return api.delete<void>(`/notifications/${id}`);
-  },
+    delete(id: string) {
+      return client.delete<void>(`/notifications/${id}`);
+    },
 
-  clearAll() {
-    return api.delete<{ count: number }>("/notifications/clear-all");
-  },
-};
+    clearAll() {
+      return client.delete<{ count: number }>("/notifications/clear-all");
+    },
+  };
+}
+
+export function notificationsApiForRole(role: AuthRole) {
+  switch (role) {
+    case "admin":
+      return createNotificationsApi(adminApi);
+    case "vendor":
+      return createNotificationsApi(vendorApi);
+    case "user":
+      return createNotificationsApi(userApi);
+  }
+}

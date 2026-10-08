@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { userApi } from "@/api/core/client";
 import type {
 AddToCartResponseDto,
 AddedFromType,
@@ -20,26 +20,26 @@ export interface UpdateCartItemPayload {
 
 export const cartService = {
   get() {
-    return api.get<CartResponseDto>("/cart");
+    return userApi.get<CartResponseDto>("/cart");
   },
   addItem(productId: string, payload: AddToCartPayload = {}) {
-    return api.post<AddToCartResponseDto>(
+    return userApi.post<AddToCartResponseDto>(
       `/cart/items/${productId}`,
       payload
     );
   },
   updateItem(productId: string, payload: UpdateCartItemPayload) {
-    return api.patch<CartResponseDto>(`/cart/items/${productId}`, payload);
+    return userApi.patch<CartResponseDto>(`/cart/items/${productId}`, payload);
   },
   removeItem(productId: string, variantId?: string) {
-    return api.delete<RemoveCartItemResponseDto>(`/cart/items/${productId}`, {
+    return userApi.delete<RemoveCartItemResponseDto>(`/cart/items/${productId}`, {
       params: variantId ? { variantId } : {},
     });
   },
   clear() {
-    return api.delete<CartResponseDto>("/cart");
+    return userApi.delete<CartResponseDto>("/cart");
   },
   previewDiscount(code: string) {
-    return api.get<DiscountPreviewDto>(`/cart/discount-preview?code=${encodeURIComponent(code)}`);
+    return userApi.get<DiscountPreviewDto>(`/cart/discount-preview?code=${encodeURIComponent(code)}`);
   },
 };

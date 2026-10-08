@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi, userApi } from "@/api/core/client";
 import type {
 AdminUserResponseDto,
 UserResponseDto,
@@ -27,65 +27,65 @@ export interface ShippingPayload {
 
 export const userService = {
   me() {
-    return api.get<UserResponseDto>("/account");
+    return userApi.get<UserResponseDto>("/account");
   },
   updateProfile(payload: UpdateUserProfilePayload) {
     const { phoneNumber, phone, ...rest } = payload;
     const effectivePhone = phone ?? phoneNumber;
-    return api.patch<UserResponseDto>("/account", {
+    return userApi.patch<UserResponseDto>("/account", {
       ...rest,
       ...(effectivePhone !== undefined ? { phone: effectivePhone } : {}),
     });
   },
   updateShipping(payload: ShippingPayload) {
-    return api.patch<UserResponseDto>("/account", {
+    return userApi.patch<UserResponseDto>("/account", {
       shippingInformation: payload,
     });
   },
   changePassword(payload: { currentPassword: string; newPassword: string }) {
-    return api.patch<null>("/account/password", payload);
+    return userApi.patch<null>("/account/password", payload);
   },
   requestDeactivateOtp() {
-    return api.post<{ message: string }>("/account/otp/request");
+    return userApi.post<{ message: string }>("/account/otp/request");
   },
   deactivate(otpCode: string) {
-    return api.patch<{ message: string }>("/account/deactivate", {}, {
+    return userApi.patch<{ message: string }>("/account/deactivate", {}, {
       headers: { "x-otp-code": otpCode },
     });
   },
   reactivate(payload: { email: string; password: string }) {
-    return api.post<UserResponseDto>("/account/reactivate", payload);
+    return userApi.post<UserResponseDto>("/account/reactivate", payload);
   },
   deleteAccount() {
-    return api.delete<null>("/account/delete");
+    return userApi.delete<null>("/account/delete");
   },
 };
 
 export const adminUserService = {
   list(params: ProductQueryParams & { search?: string; status?: string }) {
-    return api.get<AdminUserResponseDto[]>("/admin/users", { params });
+    return adminApi.get<AdminUserResponseDto[]>("/admin/users", { params });
   },
   reactivate(id: string, otpCode: string) {
-    return api.patch<{ success: boolean }>(`/admin/users/${id}/reactivate`, {}, {
+    return adminApi.patch<{ success: boolean }>(`/admin/users/${id}/reactivate`, {}, {
       headers: { "x-otp-code": otpCode },
     });
   },
   deactivate(id: string, payload: { reason: string }, otpCode: string) {
-    return api.patch<{ success: boolean }>(`/admin/users/${id}/deactivate`, payload, {
+    return adminApi.patch<{ success: boolean }>(`/admin/users/${id}/deactivate`, payload, {
       headers: { "x-otp-code": otpCode },
     });
   },
   delete(id: string) {
-    return api.delete<void>(`/admin/users/${id}`);
+    return adminApi.delete<void>(`/admin/users/${id}`);
   },
 };
 
 export const walletService = {
   getUserWallet() {
-    return api.get<UserWalletResponseDto>("/users/wallet");
+    return userApi.get<UserWalletResponseDto>("/users/wallet");
   },
   getUserTransactions(params?: { page?: number; limit?: number }) {
-    return api.get<{
+    return userApi.get<{
       data: WalletTransactionResponseDto[];
       meta: { total: number; page: number; limit: number; totalPages: number };
     }>("/users/wallet/transactions", { params });

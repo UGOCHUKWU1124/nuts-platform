@@ -28,9 +28,8 @@ function matchesCartItem(
 export function useCart(initialData?: CartResponseDto | null) {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const userRole = useAuthStore((state) => state.role ?? state.user?.role ?? null);
-  const normalizedRole = userRole?.toLowerCase();
-  const isCustomerSession = isAuthenticated && normalizedRole !== "admin" && normalizedRole !== "vendor";
+  const canPurchase = useAuthStore((state) => state.capabilities?.canPurchase ?? false);
+  const isCustomerSession = isAuthenticated && canPurchase;
 
   const { data, isLoading, error } = useQuery<CartResponseDto>({
     queryKey: queryKey.cart,
@@ -57,11 +56,13 @@ export function useCart(initialData?: CartResponseDto | null) {
       productId: string;
       delta: number;
       variantId?: string;
-    }) =>
-      cartService.updateItem(productId, {
+    }) => {
+      if (!isCustomerSession) return Promise.reject(new Error("Cart operations require a customer account."));
+      return cartService.updateItem(productId, {
         quantity: delta,
         ...(variantId ? { variantId } : {}),
-      }),
+      });
+    },
     onMutate: async ({ productId, delta, variantId }) => {
       await queryClient.cancelQueries({ queryKey: queryKey.cart });
       const previous = queryClient.getQueryData<CartResponseDto>(queryKey.cart);
@@ -108,8 +109,10 @@ export function useCart(initialData?: CartResponseDto | null) {
   });
 
   const removeItem = useMutation({
-    mutationFn: ({ productId, variantId }: { productId: string; variantId?: string }) =>
-      cartService.removeItem(productId, variantId),
+    mutationFn: ({ productId, variantId }: { productId: string; variantId?: string }) => {
+      if (!isCustomerSession) return Promise.reject(new Error("Cart operations require a customer account."));
+      return cartService.removeItem(productId, variantId);
+    },
     onMutate: async ({ productId, variantId }) => {
       await queryClient.cancelQueries({ queryKey: queryKey.cart });
       const previous = queryClient.getQueryData<CartResponseDto>(queryKey.cart);
@@ -148,7 +151,10 @@ export function useCart(initialData?: CartResponseDto | null) {
   });
 
   const clearCart = useMutation({
-    mutationFn: () => cartService.clear(),
+    mutationFn: () => {
+      if (!isCustomerSession) return Promise.reject(new Error("Cart operations require a customer account."));
+      return cartService.clear();
+    },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: queryKey.cart });
       const previous = queryClient.getQueryData<CartResponseDto>(queryKey.cart);
@@ -195,6 +201,7 @@ export function useCart(initialData?: CartResponseDto | null) {
       addedFrom?: AddToCartPayload["addedFrom"];
       path?: string;
     }) => {
+      if (!isCustomerSession) return Promise.reject(new Error("Cart operations require a customer account."));
       if (path) {
         storeItemAddedPath(productId, path, addedFrom);
       }

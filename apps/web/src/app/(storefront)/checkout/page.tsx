@@ -254,7 +254,7 @@ export default function CheckoutPage() {
 
   if (cartLoading) {
     return (
-      <CustomerLayout>
+      <CustomerLayout hideBottomNav>
         <div className="mx-auto max-w-7xl px-4 py-24 text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-neutral-400" />
           <p className="mt-4 text-sm text-neutral-500">Preparing checkout...</p>
@@ -265,7 +265,7 @@ export default function CheckoutPage() {
 
   if (cartError) {
     return (
-      <CustomerLayout>
+      <CustomerLayout hideBottomNav>
         <div className="mx-auto max-w-md px-4 py-20 text-center">
           <ShoppingBag className="mx-auto h-10 w-10 text-muted-foreground" />
           <h1 className="mt-4 text-xl font-semibold text-foreground">
@@ -295,7 +295,7 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <CustomerLayout>
+      <CustomerLayout hideBottomNav>
         <div className="mx-auto max-w-md py-24 text-center px-4">
           <ShoppingBag className="mx-auto h-12 w-12 text-muted-foreground stroke-[1.2]" />
           <h1 className="mt-4 text-2xl font-semibold text-foreground">Your cart is empty</h1>
@@ -311,7 +311,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <CustomerLayout>
+    <CustomerLayout hideBottomNav>
       <div className="mx-auto max-w-7xl px-3 pb-28 pt-5 sm:px-6 sm:py-8 lg:px-8 lg:pb-8">
         {/* Navigation & Header */}
         <div className="mb-6 flex items-center justify-between border-b border-border pb-4 sm:mb-8 sm:pb-5">

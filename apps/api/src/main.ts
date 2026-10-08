@@ -177,44 +177,115 @@ async function bootstrap() {
     !isProduction || config.get<boolean>('SWAGGER_ENABLED') === true;
 
   if (swaggerEnabled) {
-    const swaggerConfig = new DocumentBuilder()
+    const port = config.get<number>('PORT', 3001);
+    const baseUrl = config.get<string>('BASE_URL');
+
+    const swaggerBuilder = new DocumentBuilder()
       .setTitle('Nuts API — E-Commerce Platform')
       .setDescription(
-        `## Overview
+        `## Overview REST API for the **NUTS Multi-Vendor Marketplace Platform**.
+Architected with NestJS, TypeScript, PostgreSQL, Prisma, Redis, and RabbitMQ following Domain-Driven Design (DDD) principles.
 
-Production-ready REST API for the Nuts e-commerce platform. Handles multi-vendor marketplace operations including customer auth, shopping cart, checkout, payments via Paystack, vendor store management, and full admin controls.
+The platform enforces strict zero-trust role isolation across three autonomous security boundaries:
+1. **Customer Storefront Domain** (Shoppers, Cart, Checkout, Customer Orders, Customer Wallet, Reviews)
+2. **Vendor Merchant Domain** (Storefront Management, Products & Variants, Merchant Orders, Vendor Wallet, Analytics)
+3. **Platform Administration Domain** (Platform Governance, Merchant Approvals, Global Orders, Category Taxonomy, System Cache)
 
-## Authentication
+---
 
-All authenticated endpoints use **httpOnly cookies** set during login/register. The \`access_token\` cookie is read automatically by the server. A Bearer token may be sent via the \`Authorization\` header as a fallback.
+## Authentication & Authorization Model
 
-**Cookie-based auth (preferred):** The server sets \`access_token\` and \`refresh_token\` as httpOnly, secure, same-site cookies. These are sent automatically on every request.
+All protected operations enforce a **zero-trust capability-driven security model**. Authentication identities are strictly separated; role spoofing and cross-domain access are physically prevented by database isolation and backend \`RolesGuard\` validation.
 
-**Bearer auth (fallback):** Click the "Authorize" button and paste your JWT token. This is useful for testing in Swagger UI.
+### Security Principals & Server-Driven Capabilities
+Every authenticated identity returns a capability manifest from \`GET /api/v1/auth/me\` that dictates valid client actions:
 
-### Auth flows
-| Flow | Endpoints |
-|------|-----------|
-| Customer Auth | \`POST /api/v1/auth/register\`, \`/login\`, \`/refresh\`, \`/logout\` |
-| Vendor Auth | \`POST /api/v1/vendors/register\`, \`/login\`, \`/refresh\`, \`/logout\` |
-| Admin Auth | \`POST /api/v1/admin/auth/setup\`, \`/login\`, \`/refresh\`, \`/logout\` |
+| Principal | Role | Domain Scope & Permissions | Capability Flags |
+| :--- | :--- | :--- | :--- |
+| **Customer** | \`user\` | Storefront shopping, wishlist, cart, checkout, customer orders & wallet. | \`canPurchase: true\`, \`canSell: false\`, \`canAdminister: false\` |
+| **Vendor** | \`vendor\` | Store catalog, product variants, inventory, store orders, merchant wallet, analytics. | \`canPurchase: false\`, \`canSell: true\`, \`canAdminister: false\` |
+| **Admin** | \`admin\` | Platform governance, vendor approvals, user management, category taxonomy, system cache. | \`canPurchase: false\`, \`canSell: false\`, \`canAdminister: true\` |
 
-### Rate limiting
-Sensitive endpoints (auth, OTP, checkout) have strict rate limits. Responses include \`Retry-After\` headers when throttled.`,
+> **Zero-Trust Cross-Domain Boundary:** A valid access token for a \`vendor\` or \`admin\` will receive an immediate \`403 Forbidden\` on customer shopping endpoints (\`/cart\`, \`/checkout\`, \`/orders/my-orders\`, \`/users/wallet\`). Merchant and administrative accounts cannot make storefront purchases, maintain customer carts, or access customer wallets.
+
+---
+
+## Session & Token Management
+
+The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to OWASP ASVS:
+- **Access Token:** Short-lived JWT (15-minute lifespan). Encodes identity (\`sub\`, \`email\`, \`role\`) and permissions.
+- **Refresh Token:** Long-lived rotating cryptographic token (7-day lifespan). Bound to a single client device session stored in Redis/DB with automatic reuse detection and replay mitigation.
+
+### Supported Authentication Transports
+1. **HttpOnly Cookies (Standard for Web Clients):**
+   - Automatically issued upon successful authentication as \`Secure\`, \`HttpOnly\`, \`SameSite=Lax\` cookies:
+     - \`access_token\`: Primary authentication bearer cookie.
+     - \`refresh_token\`: Secret refresh cookie scoped to session endpoints.
+     - \`session_active\`: Client-readable session state hint.
+2. **Authorization Header (Mobile Clients & Swagger UI Testing):**
+   - Provide the JWT in the standard header:
+     \`Authorization: Bearer <access_token>\`
+   - Use the **"Authorize"** button in Swagger UI to test protected endpoints.
+
+---
+
+## Domain Authentication Endpoints
+
+### 1. Customer Authentication (\`/api/v1/auth\`)
+- \`POST /api/v1/auth/request-otp\` — Send registration / verification OTP
+- \`POST /api/v1/auth/register\` — Register customer account (requires verified email OTP)
+- \`POST /api/v1/auth/login\` — Customer credentials login (issues session cookies)
+- \`POST /api/v1/auth/refresh\` — Rotate customer refresh session and tokens
+- \`POST /api/v1/auth/logout\` — Revoke current device session and clear cookies
+- \`GET  /api/v1/auth/me\` — Retrieve authenticated identity and capability flags (\`canPurchase\`, \`canSell\`, \`canAdminister\`)
+- \`POST /api/v1/auth/forgot-password\` & \`POST /api/v1/auth/reset-password\`
+
+### 2. Vendor / Merchant Authentication (\`/api/v1/vendors/auth\` or \`/api/v1/vendors\`)
+- \`POST /api/v1/vendors/auth/otp/request\` — Request vendor registration email OTP
+- \`POST /api/v1/vendors/register\` — Register vendor store and wallet (requires verified email OTP)
+- \`POST /api/v1/vendors/login\` — Vendor merchant login (issues session cookies)
+- \`POST /api/v1/vendors/refresh\` — Rotate vendor refresh session and tokens
+- \`POST /api/v1/vendors/logout\` — Revoke vendor session and clear cookies
+- \`POST /api/v1/vendors/auth/forgot-password/otp/request\` & \`POST /api/v1/vendors/auth/forgot-password/reset\`
+
+### 3. Administrator Authentication (\`/api/v1/admin/auth\`)
+- \`POST /api/v1/admin/auth/login\` — Administrator login (enforces strict \`ADMIN\` role verification)
+- \`POST /api/v1/admin/auth/refresh\` — Rotate administrator session and tokens
+- \`POST /api/v1/admin/auth/logout\` — Revoke administrator session and clear cookies
+- \`GET  /api/v1/admin/auth/me\` — Retrieve authenticated administrator profile
+- \`POST /api/v1/admin/auth/create-admin\` — Provision additional administrator accounts (Admin only)
+
+---
+
+## Resiliency, Rate Limiting & Security
+
+- **Strict Throttling:** Sensitive endpoints (auth, OTP, checkout) enforce strict rate limits (e.g. 5 req/min). Throttled requests respond with \`429 Too Many Requests\` and include a \`Retry-After\` header.
+- **Account Lockout:** Multiple consecutive failed password attempts trigger temporary account locks with exponential backoff.
+- **CSRF Defense:** State-changing cookie-authenticated requests enforce double-submit CSRF origin and token validation.
+- **Unified Response Envelope:** All endpoints respond with the standard RFC-compliant envelope:
+  \`{ "success": boolean, "statusCode": number, "data": T, "timestamp": string, "requestId": string }\``,
       )
-      .setVersion('1.0.0')
-      .addServer(
-        `http://localhost:${config.getOrThrow<number>('PORT')}`,
-        'Development server',
-      )
-      .addServer('https://api.nuts-commerce.com', 'Production server')
+      .setVersion('1.0.0');
+
+    if (baseUrl) {
+      swaggerBuilder.addServer(
+        baseUrl,
+        isProduction ? 'Active Production / Staging Server' : 'Active Server',
+      );
+    }
+    swaggerBuilder
+      .addServer(`http://localhost:${port}`, 'Local Development Server')
+      .addServer('https://staging-api.nuts-commerce.com', 'Staging Environment')
+      .addServer('https://api.nuts-commerce.com', 'Production Environment');
+
+    const swaggerConfig = swaggerBuilder
       .addTag(
         'ADMIN - ANALYTICS',
         'Admin analytics — summary, revenue, top products/vendors/categories, funnel, activity audit',
       )
       .addTag(
         'ADMIN - AUTH',
-        'Admin authentication — setup, login, logout, token refresh',
+        'Admin authentication — login, logout, token refresh, administrator provisioning',
       )
       .addTag(
         'ADMIN - CACHE',
@@ -362,11 +433,18 @@ Sensitive endpoints (auth, OTP, checkout) have strict rate limits. Responses inc
           scheme: 'bearer',
           bearerFormat: 'JWT',
           description:
-            'Optional fallback. The server prefers httpOnly access_token cookies set during login. Use this header when cookies are unavailable (e.g., mobile clients).',
+            'Standard JWT Access Token. Enter your token here to test protected endpoints in Swagger UI or for external mobile clients.',
           in: 'header',
         },
         'JWT-auth',
       )
+      .addCookieAuth('access_token', {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'access_token',
+        description:
+          'HttpOnly access_token cookie automatically dispatched on login/register for browser-based clients.',
+      })
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig, {

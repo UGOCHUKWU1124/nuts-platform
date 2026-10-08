@@ -4,9 +4,21 @@ import {
 clearAuthTokens,
 getAuthToken,
 setAuthTokens,
+type AuthRole,
 } from "./token-storage";
-import { getPortalRoleForApiUrl } from "@/lib/portal-role";
 import type { ApiSuccessEnvelope,PaginationMeta } from "./types";
+
+declare module "axios" {
+  interface AxiosRequestConfig {
+    authRole?: AuthRole | null;
+    _retry?: boolean;
+  }
+
+  interface InternalAxiosRequestConfig {
+    authRole?: AuthRole | null;
+    _retry?: boolean;
+  }
+}
 
 let inMemoryCsrfToken: string | null = null;
 
@@ -33,12 +45,14 @@ export const setCsrfToken = (token: string | null | undefined) => {
   }
 };
 
-const axiosInstance = axios.create({
+const axiosConfig = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || "/api/v1",
   withCredentials: true,
   xsrfCookieName: "csrf_token",
   xsrfHeaderName: "x-csrf-token",
-});
+} as const;
+
+const axiosInstance = axios.create(axiosConfig);
 
 let csrfInitPromise: Promise<void> | null = null;
 
@@ -88,7 +102,7 @@ export interface RefreshSessionResult {
   success: boolean;
   accessToken?: string;
   user?: unknown;
-  reason?: "expired" | "unavailable" | "invalid-response" | "unscoped";
+  reason?: "expired" | "unavailable" | "invalid-response";
 }
 
 export class AuthRefreshUnavailableError extends Error {
@@ -98,23 +112,13 @@ export class AuthRefreshUnavailableError extends Error {
   }
 }
 
-export const getRoleForUrl = (
-  url?: string,
-): "admin" | "vendor" | "user" | null => {
-  const pathname =
-    typeof window !== "undefined" ? window.location.pathname : "/";
-  return getPortalRoleForApiUrl(url, pathname);
-};
-
-type AuthRole = "admin" | "vendor" | "user";
-
 const refreshPromises: Record<AuthRole, Promise<RefreshSessionResult> | null> = {
+  user: null,
   admin: null,
   vendor: null,
-  user: null,
 };
 
-async function refreshTokenForRole(
+async function executeTokenRefresh(
   role: AuthRole,
 ): Promise<RefreshSessionResult> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
@@ -129,7 +133,6 @@ async function refreshTokenForRole(
         : role === "vendor"
           ? `${apiUrl}/vendors/auth/refresh`
           : `${apiUrl}/auth/refresh`;
-
     const res = await axios.post(
       refreshEndpoint,
       {},
@@ -141,17 +144,20 @@ async function refreshTokenForRole(
       return { success: false, reason: "invalid-response" };
     }
 
+    const user = data.user ?? data.vendor;
     setAuthTokens(role, { accessToken: data.accessToken });
+    authBroadcast.publish({ type: "SESSION_REFRESHED", role, user });
+
     return {
       success: true,
       accessToken: data.accessToken,
-      user: data.user ?? data.vendor,
+      user,
     };
   } catch (error) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     if (status === 401 || status === 403) {
       clearAuthTokens(role);
-      authBroadcast.broadcast({ type: "SESSION_EXPIRED", role });
+      authBroadcast.publish({ type: "SESSION_EXPIRED", role });
       return { success: false, reason: "expired" };
     }
 
@@ -160,34 +166,30 @@ async function refreshTokenForRole(
 }
 
 /**
- * Single-flight refresh per role in this tab, plus a browser-wide lock when
- * available so multiple tabs cannot rotate the same cookie concurrently.
+ * Single-flight refresh lock across tabs and concurrent requests in this tab.
  */
 export const performTokenRefresh = (
-  hintUrl?: string,
-  specificRole?: AuthRole,
+  role: AuthRole,
 ): Promise<RefreshSessionResult> => {
-  const role = specificRole ?? getRoleForUrl(hintUrl);
-  if (!role) return Promise.resolve({ success: false, reason: "unscoped" });
-
   const pending = refreshPromises[role];
   if (pending) return pending;
 
-  const refresh = () => refreshTokenForRole(role);
-  const refreshPromise =
+  const runRefresh = () => executeTokenRefresh(role);
+  const promise =
     typeof navigator !== "undefined" && navigator.locks
       ? navigator.locks.request(
           `nuts-auth-refresh:${role}`,
           { mode: "exclusive" },
-          refresh,
+          runRefresh,
         )
-      : refresh();
+      : runRefresh();
 
-  const trackedPromise = refreshPromise.finally(() => {
+  const trackedPromise = promise.finally(() => {
     if (refreshPromises[role] === trackedPromise) {
       refreshPromises[role] = null;
     }
   });
+
   refreshPromises[role] = trackedPromise;
   return trackedPromise;
 };
@@ -199,10 +201,9 @@ axiosInstance.interceptors.request.use(async (config) => {
 
   config.headers = config.headers || {};
 
-  // Attach role-aware access token from memory if present
-  const roleContext = getRoleForUrl(config.url);
-
-  const token = roleContext ? getAuthToken(roleContext) : null;
+  // Attach in-memory access token as Bearer token if present
+  const role = config.authRole;
+  const token = role ? getAuthToken(role) : null;
   if (token && !extractHeader(config.headers, "Authorization")) {
     setHeader(config.headers, "Authorization", `Bearer ${token}`);
   }
@@ -237,29 +238,23 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config;
     if (!originalRequest) return Promise.reject(error);
 
-    const status = error.response?.status;
-
-    // 403 Forbidden is strictly an Authorization failure. Do NOT attempt refresh loops.
-    if (status === 403) {
+    const role = originalRequest.authRole;
+    if (
+      error.response?.status !== 401 ||
+      !role ||
+      originalRequest._retry
+    ) {
       return Promise.reject(error);
     }
 
-    const is401 = status === 401;
-    const role = getRoleForUrl(originalRequest.url);
-    if (!role) return Promise.reject(error);
-
-    const isAuthEndpoint =
-      originalRequest.url?.includes("/auth/refresh") ||
-      originalRequest.url?.includes("/auth/login") ||
-      originalRequest.url?.includes("/auth/register") ||
-      false;
-
-    if (is401 && !originalRequest._retry && !isAuthEndpoint) {
-      originalRequest._retry = true;
-
-      const refreshed = await performTokenRefresh(originalRequest.url, role);
+    originalRequest._retry = true;
+    const refreshed = await performTokenRefresh(role);
       if (refreshed?.success && refreshed.accessToken) {
-        setHeader(originalRequest.headers, "Authorization", `Bearer ${refreshed.accessToken}`);
+        setHeader(
+          originalRequest.headers,
+          "Authorization",
+          `Bearer ${refreshed.accessToken}`,
+        );
         const freshCsrf = getCsrfToken();
         if (freshCsrf) {
           setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
@@ -273,10 +268,8 @@ axiosInstance.interceptors.response.use(
       ) {
         return Promise.reject(new AuthRefreshUnavailableError());
       }
-    }
-
     return Promise.reject(error);
-  }
+  },
 );
 
 export interface ApiResult<T, TMeta = PaginationMeta> {
@@ -303,37 +296,42 @@ const unwrap = <T, TMeta = PaginationMeta>(payload: unknown): ApiResult<T, TMeta
   return { data: payload as T };
 };
 
-export const api = {
+const createApiClient = (authRole: AuthRole | null) => ({
   get<T, TMeta = PaginationMeta>(url: string, config?: AxiosRequestConfig): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.get(url, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.get(url, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   post<T, TMeta = PaginationMeta>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.post(url, body, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.post(url, body, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   put<T, TMeta = PaginationMeta>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.put(url, body, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.put(url, body, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   patch<T, TMeta = PaginationMeta>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.patch(url, body, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.patch(url, body, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   delete<T = void>(
     url: string,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T>> {
-    return axiosInstance.delete(url, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T>(res.data));
+    return axiosInstance.delete(url, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T>(res.data));
   },
-};
+});
+
+export const publicApi = createApiClient(null);
+export const userApi = createApiClient("user");
+export const vendorApi = createApiClient("vendor");
+export const adminApi = createApiClient("admin");
 
 export type { AxiosRequestConfig };

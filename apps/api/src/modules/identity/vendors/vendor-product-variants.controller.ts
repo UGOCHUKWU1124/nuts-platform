@@ -13,7 +13,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -37,16 +36,15 @@ import { ProductVariantListResponseDto } from '@api/modules/product-variants/dto
 import { VariantStockUpdateResponseDto } from '@api/modules/product-variants/dto/variant-stock-update-response.dto';
 import { VendorVariantResponseDto } from '@api/modules/product-variants/dto/vendor-variant-response.dto';
 import { ProductVariantsService } from '@api/modules/product-variants/product-variants.service';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - PRODUCT VARIANTS')
 @Controller(['vendors/products/variants', 'dashboard/products/variants'])
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 @ApiBearerAuth('JWT-auth')
 export class VendorProductVariantsController {
   constructor(

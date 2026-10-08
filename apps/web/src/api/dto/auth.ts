@@ -7,6 +7,28 @@ export interface AuthUserDto {
   lastName: string | null;
 }
 
+export interface UserCapabilities {
+  canPurchase: boolean;
+  canSell: boolean;
+  canAdminister: boolean;
+}
+
+export interface AuthProfileDto {
+  id: string;
+  email: string;
+  role: AuthRole;
+  capabilities?: UserCapabilities;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  phoneNumber?: string | null;
+  storeName?: string;
+  storeSlug?: string;
+  storeLogoUrl?: string | null;
+  isVerified?: boolean;
+  isActive?: boolean;
+}
+
 export interface AuthResponseDto {
   user: AuthUserDto;
   accessToken?: string;

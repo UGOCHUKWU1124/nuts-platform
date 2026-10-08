@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 
 import {
@@ -44,12 +43,9 @@ import { OtpThrottle } from '@api/modules/shared/decorators/custom-throttler.dec
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('PAYMENTS')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller(['payment', 'payments'])
 export class PaymentsController {
   constructor(
@@ -64,7 +60,6 @@ export class PaymentsController {
   @Post('otp/request')
   @HttpCode(HttpStatus.OK)
   @OtpThrottle()
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth()
   @ApiOperation({
@@ -116,7 +111,6 @@ export class PaymentsController {
 
   @Post('initialize')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @OtpRequired('payment')
   @ApiBearerAuth()
@@ -151,7 +145,6 @@ export class PaymentsController {
 
   @Get('order/:orderId')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth()
   @ApiOperation({
@@ -270,7 +263,6 @@ export class PaymentsController {
 
   @Post('refund')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @Roles(ROLE.ADMIN)
   @ApiOperation({

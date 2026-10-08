@@ -3,23 +3,44 @@ name: Enforce PR Source Branch
 on:
   pull_request:
     branches:
+      - staging
       - main
 
 jobs:
-  enforce-source-branch:
+  assert-staging-source:
     name: Assert PR source is 'development'
+    if: github.base_ref == 'staging'
     runs-on: ubuntu-latest
     steps:
-      - name: Check source branch
+      - name: Validate source is development
         run: |
           SOURCE="${{ github.head_ref }}"
           echo "PR source branch: $SOURCE"
           if [ "$SOURCE" != "development" ]; then
             echo ""
-            echo "❌ Direct PRs to 'main' are not allowed."
-            echo "   PRs to 'main' must come from the 'development' branch."
-            echo "   Open your PR against 'development' first, then merge development → main."
+            echo "Promotion Violation: PRs to 'staging' must originate from 'development'."
+            echo "   Required promotion pipeline: feature/* -> development -> staging -> main"
+            echo "   Please merge your feature branch into 'development' first."
             echo ""
             exit 1
           fi
-          echo "✅ Source branch is 'development'. Proceeding."
+          echo "Source branch is 'development'. Proceeding."
+
+  assert-main-source:
+    name: Assert PR source is 'staging'
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source is staging
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          echo "PR source branch: $SOURCE"
+          if [ "$SOURCE" != "staging" ] && [[ ! "$SOURCE" =~ ^hotfix/ ]]; then
+            echo ""
+            echo "Promotion Violation: Direct PRs to 'main' must originate from 'staging'."
+            echo "   Required promotion pipeline: feature/* -> development -> staging -> main"
+            echo "   Code must be deployed and verified on staging before promoting to production."
+            echo ""
+            exit 1
+          fi
+          echo "Source branch is 'staging'. Proceeding."
