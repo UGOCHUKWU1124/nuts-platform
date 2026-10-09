@@ -22,11 +22,6 @@ import { NormalizeInputPipe } from './modules/shared/pipes/normalize-input.pipe'
 import { SanitizeHtmlPipe } from './modules/shared/pipes/sanitize-html.pipe';
 import { removeDuplicateAdminCategoryPaths } from './modules/shared/utils/swagger-paths.util';
 
-const CSRF_EXEMPT_WEBHOOK_PATHS = new Set([
-  '/api/v1/payment/webhook',
-  '/api/v1/payments/webhook',
-]);
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
@@ -161,17 +156,6 @@ async function bootstrap() {
   // Apply CSRF middleware for state-changing operations
   const csrfMiddleware = new CsrfMiddleware(allowedOrigins);
   app.use((req: Request, res: Response, next: NextFunction) => {
-    // For read-only requests, always allow CSRF token generation
-    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-      return csrfMiddleware.use(req, res, next);
-    }
-
-    // Signed provider callbacks do not use browser authentication cookies.
-    // All other cookie-authenticated mutations must pass CSRF validation.
-    if (req.method === 'POST' && CSRF_EXEMPT_WEBHOOK_PATHS.has(req.path)) {
-      return next();
-    }
-
     csrfMiddleware.use(req, res, next);
   });
 

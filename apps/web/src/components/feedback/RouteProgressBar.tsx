@@ -130,7 +130,7 @@ export function RouteProgressBar() {
       }}
     >
       <div
-        className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-amber-600 transition-all duration-200 ease-out shadow-[0_0_10px_rgba(244,63,94,0.6)]"
+        className="h-full bg-black dark:bg-white transition-all duration-200 ease-out shadow-xs"
         style={{
           width: `${progress}%`,
         }}
