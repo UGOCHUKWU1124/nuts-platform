@@ -9,6 +9,8 @@ import {
   clearAuthTokens,
   getAuthToken,
   getRefreshToken,
+  markSessionAuthenticated,
+  markSessionUnauthenticated,
   setAuthTokens,
 } from "@/api/core/token-storage";
 import type { AuthRole, AuthResponseDto } from "@/api/dto/auth";
@@ -162,6 +164,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return;
     }
 
+    markSessionAuthenticated(userRole);
+
     const capabilities =
       rawUser.capabilities ??
       deriveCapabilities(
@@ -188,6 +192,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   clearSession: () => {
+    clearAuthTokens();
+    markSessionUnauthenticated();
     set({
       user: null,
       role: null,
@@ -292,6 +298,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       get().clearSession();
       return;
     }
+    markSessionAuthenticated(normalized);
     const capabilities = deriveCapabilities(normalized);
     set((state) => {
       const user = state.user

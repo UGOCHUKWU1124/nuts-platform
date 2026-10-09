@@ -21,6 +21,7 @@ import { queryKey } from "@/lib/query-key";
 import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
 import { formatPrice } from "@/lib/util";
 import { useShoppingDrawerStore } from "@/zustand/shopping-drawer";
+import { useAuthStore } from "@/zustand/auth";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import { Heart,Minus,Plus,ShoppingBag,Trash2,X } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
@@ -161,7 +162,12 @@ async function resolvePaymentInitialization(order: CheckoutResponseDto): Promise
 function CheckoutPanel({ total, discountCode, discountPreview }: { total: number; discountCode: string; discountPreview: DiscountPreviewDto | null }) {
   const queryClient = useQueryClient(); const [useAlternative, setUseAlternative] = useState(false); const [alternative, setAlternative] = useState<Address>(blankAddress);
   const router = useRouter();
-  const { data: user, isLoading } = useQuery({ queryKey: queryKey.user.profile, queryFn: async () => (await userService.me()).data });
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { data: user, isLoading } = useQuery({
+    queryKey: queryKey.user.profile,
+    queryFn: async () => (await userService.me()).data,
+    enabled: isAuthenticated,
+  });
   const defaultAddress = user?.shippingInformation; const selectedAddress = useAlternative ? alternative : defaultAddress; const alternativeComplete = Object.values(alternative).every(Boolean); const payable = discountPreview?.totalAmount ?? total;
   const checkout = useMutation({
     mutationFn: () => { if (!selectedAddress) throw new Error("Select a delivery address"); const { fullName, phone, street, city, state, country } = selectedAddress; return orderService.checkout({ shippingAddress: { fullName, phone, street, city, state, country }, ...(discountCode.trim() ? { discountCode: discountCode.trim() } : {}) } as CheckoutPayload); },
