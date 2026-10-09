@@ -47,8 +47,20 @@ export const setCsrfToken = (token: string | null | undefined) => {
   }
 };
 
+export const getApiBaseUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.startsWith("http")) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
+  }
+  const backend = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "");
+  const prefix = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
+  if (backend && backend.startsWith("http")) {
+    return `${backend}${prefix.startsWith("/") ? prefix : `/${prefix}`}`;
+  }
+  return prefix || "/api/v1";
+};
+
 const axiosConfig = {
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "/api/v1",
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
   xsrfCookieName: "csrf_token",
   xsrfHeaderName: "x-csrf-token",
@@ -61,7 +73,7 @@ let csrfInitPromise: Promise<void> | null = null;
 const ensureCsrfToken = async () => {
   if (getCsrfToken()) return;
   if (!csrfInitPromise) {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+    const apiUrl = getApiBaseUrl();
     csrfInitPromise = axios
       .get(`${apiUrl}/health`, {
         withCredentials: true,
@@ -123,7 +135,7 @@ const refreshPromises: Record<AuthRole, Promise<RefreshSessionResult> | null> = 
 async function executeTokenRefresh(
   role: AuthRole,
 ): Promise<RefreshSessionResult> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+  const apiUrl = getApiBaseUrl();
   try {
     const csrf = getCsrfToken();
     const headers: Record<string, string> = {};

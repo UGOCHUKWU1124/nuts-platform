@@ -5,11 +5,11 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development next dev -p 5173",
     "build": "next build",
-    "start": "cross-env NODE_ENV=production next start -p 5173",
+    "start": "cross-env NODE_ENV=production NODE_OPTIONS=\"--max-old-space-size=400\" next start -p 5173",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --experimental-strip-types --test src/api/core/token-storage.test.mjs src/lib/portal-role.test.mjs src/lib/safe-internal-path.test.mjs src/lib/product-path.test.mjs src/lib/notification-stream-policy.test.mjs src/lib/category-product-groups.test.mjs",
-    "start:staging": "cross-env NODE_ENV=staging next start -p 5173"
+    "start:staging": "cross-env NODE_ENV=staging NODE_OPTIONS=\"--max-old-space-size=400\" next start -p 5173"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -22,7 +22,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.7.0",
-    "next": "^16.3.5",
+    "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.53.0",
@@ -41,11 +41,11 @@
     "@typescript/native": "npm:typescript@^7.0.2",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.3.5",
+    "eslint-config-next": "^16.4.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   },
   "optionalDependencies": {
-    "@next/swc-linux-x64-gnu": "16.3.5",
+    "@next/swc-linux-x64-gnu": "16.4.0",
     "@tailwindcss/oxide-linux-x64-gnu": "4.3.3",
     "lightningcss-linux-x64-gnu": "1.32.0"
   }

@@ -75,6 +75,7 @@ RUN apt-get update \
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=400"
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 

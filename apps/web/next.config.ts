@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
+  // Limit in-memory cache to 25MB to prevent OOM on 512MB RAM cloud instances (Render)
+  cacheMaxMemorySize: 25 * 1024 * 1024,
+
   // Enable standalone output for minimal Docker image
   output: "standalone",
 
