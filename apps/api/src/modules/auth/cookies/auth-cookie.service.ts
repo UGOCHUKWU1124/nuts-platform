@@ -18,43 +18,51 @@ export class AuthCookieService {
 
   constructor(private readonly config: ConfigService) {
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    const isStaging = this.config.get<string>('NODE_ENV') === 'staging';
 
-    const sameSiteConfig = this.config.get<string>('COOKIE_SAME_SITE', 'lax');
+    const configuredSameSite =
+      this.config.get<string>('COOKIE_SAME_SITE') ||
+      this.config.get<string>('AUTH_COOKIE_SAME_SITE');
 
-    if (!['lax', 'strict', 'none'].includes(sameSiteConfig)) {
+    const effectiveSameSite = (configuredSameSite?.toLowerCase() || 'lax') as
+      | 'lax'
+      | 'strict'
+      | 'none';
+
+    if (!['lax', 'strict', 'none'].includes(effectiveSameSite)) {
       throw new Error('COOKIE_SAME_SITE must be lax, strict, or none');
     }
 
-    const isStaging = this.config.get<string>('NODE_ENV') === 'staging';
     const isSecureConfig =
       this.config.get<string | boolean>('AUTH_COOKIE_SECURE') ??
       this.config.get<string | boolean>('COOKIE_SECURE');
 
     /**
-     * SameSite=None requires Secure.
-     * Respect AUTH_COOKIE_SECURE / COOKIE_SECURE or default based on environment.
+     * SameSite=None strictly requires Secure per RFC 6265bis.
+     * Enforce secure in production/staging or when SameSite is None.
      */
     const secure =
       isSecureConfig !== undefined
         ? String(isSecureConfig) === 'true'
-        : isProduction || isStaging || sameSiteConfig === 'none';
+        : effectiveSameSite === 'none' || isProduction || isStaging;
 
-    if (sameSiteConfig === 'none' && !secure) {
+    if (effectiveSameSite === 'none' && !secure) {
       throw new Error('SameSite=None cookies require Secure');
     }
 
     this.baseOptions = {
       httpOnly: true,
       secure,
-      sameSite: sameSiteConfig as CookieOptions['sameSite'],
+      sameSite: effectiveSameSite,
     };
 
-    const sanitizedDomain = this.sanitizeDomain(
-      this.config.get<string>('COOKIE_DOMAIN'),
-    );
+    const rawDomain =
+      this.config.get<string>('COOKIE_DOMAIN') ||
+      this.config.get<string>('AUTH_COOKIE_DOMAIN');
+    const sanitizedDomain = this.sanitizeDomain(rawDomain);
 
-    // Production auth cookies stay host-only. A parent-domain cookie would
-    // expose credentials to every sibling subdomain and enable cookie tossing.
+    // Host-Only cookies by default (domain undefined).
+    // Only bind domain when explicitly configured in non-production environments.
     if (sanitizedDomain && !isProduction) {
       this.baseOptions.domain = sanitizedDomain;
     }

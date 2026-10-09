@@ -68,48 +68,35 @@ export function NutsLoadingScreen({
       aria-label="Loading NUTS marketplace"
       className={`flex flex-col items-center justify-center select-none text-center ${className}`}
     >
-      {/* Ambient Pulsing Aura & Orbital Ring */}
+      {/* Minimalist The Animated "NUTS" Signature Wordmark */}
       <div className="relative flex items-center justify-center">
-        {/* Soft background glow orb */}
-        <div
-          aria-hidden="true"
-          className="absolute -inset-8 rounded-full bg-gradient-to-tr from-amber-500/20 via-rose-500/20 to-primary/20 blur-2xl animate-nuts-glow pointer-events-none"
-        />
-
-        {/* Ambient rotating dotted orbital ring */}
-        <div
-          aria-hidden="true"
-          className="absolute -inset-6 rounded-full border border-dashed border-primary/15 animate-nuts-ring pointer-events-none"
-        />
-
-        {/* The Animated "NUTS" Signature Wordmark */}
         <div
           className={`relative z-10 flex items-center font-black tracking-wider uppercase font-heading ${sizeClasses}`}
         >
           {/* N */}
           <span
-            className="inline-block animate-nuts-letter-1 bg-gradient-to-br from-amber-500 via-amber-600 to-rose-500 bg-clip-text text-transparent transform-gpu"
+            className="inline-block animate-nuts-letter-1 text-black dark:text-white transform-gpu"
           >
             N
           </span>
 
           {/* U */}
           <span
-            className="inline-block animate-nuts-letter-2 bg-gradient-to-br from-amber-500 via-rose-500 to-rose-600 bg-clip-text text-transparent transform-gpu"
+            className="inline-block animate-nuts-letter-2 text-black dark:text-white transform-gpu"
           >
             U
           </span>
 
           {/* T */}
           <span
-            className="inline-block animate-nuts-letter-3 bg-gradient-to-br from-rose-500 via-rose-600 to-primary bg-clip-text text-transparent transform-gpu"
+            className="inline-block animate-nuts-letter-3 text-black dark:text-white transform-gpu"
           >
             T
           </span>
 
           {/* S */}
           <span
-            className="inline-block animate-nuts-letter-4 bg-gradient-to-br from-rose-600 via-primary to-amber-500 bg-clip-text text-transparent transform-gpu"
+            className="inline-block animate-nuts-letter-4 text-black dark:text-white transform-gpu"
           >
             S
           </span>
@@ -118,19 +105,19 @@ export function NutsLoadingScreen({
 
       {/* Dynamic Status Caption */}
       <div className="mt-6 flex flex-col items-center gap-1.5 px-4 max-w-sm">
-        <p className="text-sm sm:text-base font-medium text-foreground/80 tracking-tight transition-all duration-300">
+        <p className="text-sm sm:text-base font-semibold text-black dark:text-white tracking-tight transition-all duration-300">
           {activeMessage}
         </p>
 
         {sublabel && (
-          <p className="text-xs text-muted-foreground">{sublabel}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">{sublabel}</p>
         )}
 
-        {/* Micro Loading Progress Indicator Dots */}
-        <div className="mt-2 flex items-center gap-1.5" aria-hidden="true">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:-0.3s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-bounce [animation-delay:-0.15s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+        {/* Micro Loading Progress Indicator Dots in Crisp Monochrome */}
+        <div className="mt-2.5 flex items-center gap-1.5" aria-hidden="true">
+          <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white animate-bounce [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-black/60 dark:bg-white/60 animate-bounce [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-black/30 dark:bg-white/30 animate-bounce" />
         </div>
       </div>
     </div>

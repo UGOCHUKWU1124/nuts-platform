@@ -1,4 +1,4 @@
-import { serverGetCategories, serverGetProducts } from "@/api/server";
+import { serverGetCategories, serverGetProducts, serverGetVendors } from "@/api/server";
 import { ProductCatalogView } from "@/component/product/ProductCatalogView";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { GlobalSearchBar } from "@/component/search/GlobalSearchBar";
@@ -69,18 +69,22 @@ export default async function SearchPage({
     );
   }
 
-  const productsResult = await serverGetProducts({
-    limit: 24,
-    page: 1,
-    search,
-    sort: "newest",
-  });
+  const [productsResult, vendors] = await Promise.all([
+    serverGetProducts({
+      limit: 24,
+      page: 1,
+      search,
+      sort: "newest",
+    }),
+    serverGetVendors({ search, limit: 6 }),
+  ]);
 
   return (
     <ProductCatalogView
       initialCategories={categories}
       initialProducts={productsResult.data}
       initialMeta={productsResult.meta ?? undefined}
+      initialVendors={vendors}
       initialFilters={{ search, sort: "newest" }}
       searchPage
     />

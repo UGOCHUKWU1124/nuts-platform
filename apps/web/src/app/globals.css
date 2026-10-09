@@ -266,7 +266,7 @@ select {
   }
   50% {
     transform: translateY(-10px) scale(1.08);
-    filter: drop-shadow(0 8px 18px rgba(245, 158, 11, 0.45));
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.18));
   }
 }
 

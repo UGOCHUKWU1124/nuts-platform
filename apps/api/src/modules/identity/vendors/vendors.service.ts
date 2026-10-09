@@ -809,42 +809,38 @@ export class VendorsService {
           : {}),
       };
 
-      const vendors = await this.prisma.vendor.findMany({
-        where,
-        select: {
-          ...vendorSelect,
-          products: {
-            where: { isDeleted: false, isActive: true },
-            select: {
-              category: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  parent: {
-                    select: {
-                      id: true,
-                      name: true,
-                      slug: true,
-                      parent: {
-                        select: {
-                          id: true,
-                          name: true,
-                          slug: true,
-                        },
-                      },
-                    },
+      const [rootCategories, vendors] = await Promise.all([
+        this.prisma.category.findMany({
+          where: { parentId: null, isActive: true },
+          select: { id: true, name: true, slug: true },
+        }),
+        this.prisma.vendor.findMany({
+          where,
+          select: {
+            ...vendorSelect,
+            products: {
+              where: { isDeleted: false, isActive: true },
+              select: {
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    path: true,
                   },
                 },
               },
             },
           },
-        },
-        ...(limit ? { take: limit } : {}),
-        orderBy: {
-          storeName: 'asc',
-        },
-      });
+          ...(limit ? { take: limit } : {}),
+          orderBy: {
+            storeName: 'asc',
+          },
+        }),
+      ]);
+
+      const rootBySlug = new Map(rootCategories.map((c) => [c.slug, c]));
+      const rootById = new Map(rootCategories.map((c) => [c.id, c]));
 
       return vendors.map((vendor) => {
         const catMap = new Map<
@@ -853,8 +849,9 @@ export class VendorsService {
         >();
         for (const p of vendor.products || []) {
           if (p.category) {
+            const rootSlug = (p.category.path || p.category.slug).split('/')[0];
             const root =
-              p.category.parent?.parent ?? p.category.parent ?? p.category;
+              rootBySlug.get(rootSlug) || rootById.get(p.category.id);
             if (root && !catMap.has(root.id)) {
               catMap.set(root.id, {
                 id: root.id,
@@ -874,48 +871,44 @@ export class VendorsService {
       VENDOR_STORE(storeSlug),
       VENDOR_STORE_TTL,
       async () => {
-        const vendor = await this.prisma.vendor.findUnique({
-          where: {
-            storeSlug,
-          },
-          select: {
-            ...vendorSelect,
-            products: {
-              where: {
-                isDeleted: false,
-                isActive: true,
-              },
-              take: 100,
-              select: {
-                category: {
-                  select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    parent: {
-                      select: {
-                        id: true,
-                        name: true,
-                        slug: true,
-                        parent: {
-                          select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                          },
-                        },
-                      },
+        const [rootCategories, vendor] = await Promise.all([
+          this.prisma.category.findMany({
+            where: { parentId: null, isActive: true },
+            select: { id: true, name: true, slug: true },
+          }),
+          this.prisma.vendor.findUnique({
+            where: {
+              storeSlug,
+            },
+            select: {
+              ...vendorSelect,
+              products: {
+                where: {
+                  isDeleted: false,
+                  isActive: true,
+                },
+                take: 100,
+                select: {
+                  category: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                      path: true,
                     },
                   },
                 },
               },
             },
-          },
-        });
+          }),
+        ]);
 
         if (!vendor || !vendor.isActive || !vendor.isApproved) {
           throw new NotFoundException('Store not found');
         }
+
+        const rootBySlug = new Map(rootCategories.map((c) => [c.slug, c]));
+        const rootById = new Map(rootCategories.map((c) => [c.id, c]));
 
         const catMap = new Map<
           string,
@@ -923,8 +916,9 @@ export class VendorsService {
         >();
         for (const p of vendor.products || []) {
           if (p.category) {
+            const rootSlug = (p.category.path || p.category.slug).split('/')[0];
             const root =
-              p.category.parent?.parent ?? p.category.parent ?? p.category;
+              rootBySlug.get(rootSlug) || rootById.get(p.category.id);
             if (root && !catMap.has(root.id)) {
               catMap.set(root.id, {
                 id: root.id,

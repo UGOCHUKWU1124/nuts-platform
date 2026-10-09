@@ -10,7 +10,10 @@ export class CsrfMiddleware implements NestMiddleware {
   private readonly tokenLength = 32;
   private readonly trustedOrigins: Set<string>;
 
-  constructor(allowedOrigins: readonly string[] = []) {
+  constructor(
+    allowedOrigins: readonly string[] = [],
+    private readonly customExemptPaths: readonly (string | RegExp)[] = [],
+  ) {
     this.trustedOrigins = new Set(
       allowedOrigins
         .map((origin) => {
@@ -37,6 +40,7 @@ export class CsrfMiddleware implements NestMiddleware {
     const hasOrigin = typeof origin === 'string';
     const isOriginTrusted = hasOrigin && this.isTrustedOrigin(origin);
 
+    // 1. Strict Origin Verification for all mutating operations
     if (
       (hasOrigin && !isOriginTrusted) ||
       (!hasOrigin && fetchSite === 'cross-site')
@@ -58,13 +62,22 @@ export class CsrfMiddleware implements NestMiddleware {
       });
     }
 
-    // Requests authenticating via Bearer token are not vulnerable to CSRF
+    // 2. Unauthenticated auth endpoints and webhooks:
+    // Origin is already verified above. No pre-existing authenticated session exists
+    // to ride, so requiring a pre-existing cookie causes cross-site lockout.
+    // Issue a fresh CSRF token so the newly authenticated session has one ready.
+    if (this.isCsrfExempt(req.path)) {
+      this.generateAndSetCsrfToken(req, res);
+      return next();
+    }
+
+    // 3. Requests authenticating via Bearer token are not vulnerable to CSRF
     const authHeader = req.headers.authorization;
     if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       return next();
     }
 
-    // For state-changing methods, validate CSRF token
+    // 4. For state-changing operations on cookie-authenticated sessions, validate CSRF token
     const csrfToken = this.extractCsrfToken(req);
     const storedToken = this.getStoredCsrfToken(req);
 
@@ -110,36 +123,53 @@ export class CsrfMiddleware implements NestMiddleware {
         ? existingToken
         : this.generateToken();
 
-    // Set CSRF token as a JS-readable cookie.
-    // NOTE: The double-submit cookie pattern REQUIRES the client to read this
-    // cookie and echo it back in the `x-csrf-token` header. An httpOnly cookie
-    // would make that impossible and every state-changing request would 403.
     const isProduction = process.env.NODE_ENV === 'production';
     const isStaging = process.env.NODE_ENV === 'staging';
+
+    const sameSiteEnv =
+      process.env.COOKIE_SAME_SITE || process.env.AUTH_COOKIE_SAME_SITE;
+
+    const sameSite: 'lax' | 'strict' | 'none' = (
+      sameSiteEnv &&
+      ['lax', 'strict', 'none'].includes(sameSiteEnv.toLowerCase())
+        ? sameSiteEnv.toLowerCase()
+        : isProduction
+          ? 'strict'
+          : 'lax'
+    ) as 'lax' | 'strict' | 'none';
+
     const isSecure =
       process.env.AUTH_COOKIE_SECURE === 'true' ||
       process.env.COOKIE_SECURE === 'true' ||
+      sameSite === 'none' ||
       isProduction ||
       isStaging;
 
     const rawDomain =
       process.env.COOKIE_DOMAIN || process.env.AUTH_COOKIE_DOMAIN;
     let domain: string | undefined;
-    if (rawDomain) {
-      domain = rawDomain
+
+    // Host-Only cookie default (domain: undefined).
+    // Only bind domain when explicitly configured in non-production environments.
+    if (rawDomain && !isProduction) {
+      const host = req.headers.host?.split(':')[0].toLowerCase();
+      const parsedDomain = rawDomain
         .trim()
         .replace(/^https?:\/\//i, '')
         .split(':')[0]
         .split('/')[0]
         .trim();
-      if (!domain || domain === 'localhost' || domain === '127.0.0.1') {
-        domain = undefined;
+
+      if (
+        parsedDomain &&
+        parsedDomain !== 'localhost' &&
+        parsedDomain !== '127.0.0.1' &&
+        host &&
+        host.endsWith(parsedDomain.replace(/^\./, ''))
+      ) {
+        domain = parsedDomain;
       }
     }
-
-    const sameSite =
-      (process.env.COOKIE_SAME_SITE as 'lax' | 'strict' | 'none') ||
-      (isProduction ? 'strict' : 'lax');
 
     res.cookie(this.csrfCookieName, token, {
       httpOnly: false,
@@ -155,8 +185,6 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   private extractCsrfToken(req: Request): string | undefined {
-    // CSRF tokens belong in a custom header so they do not leak into URLs or
-    // application payloads that may be logged or forwarded downstream.
     const headerToken = req.headers[this.csrfHeaderName];
     return typeof headerToken === 'string' && headerToken
       ? headerToken
@@ -186,8 +214,6 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   private compareTokens(token1: string, token2: string): boolean {
-    // Use timing-safe comparison to prevent timing attacks.
-    // timingSafeEqual throws when buffer lengths differ, so guard first.
     if (
       !new RegExp(`^[a-f0-9]{${this.tokenLength * 2}}$`, 'i').test(token1) ||
       !new RegExp(`^[a-f0-9]{${this.tokenLength * 2}}$`, 'i').test(token2)
@@ -199,5 +225,50 @@ export class CsrfMiddleware implements NestMiddleware {
     if (buf1.length !== this.tokenLength || buf1.length !== buf2.length)
       return false;
     return crypto.timingSafeEqual(buf1, buf2);
+  }
+
+  /**
+   * Evaluates whether a mutating request is exempt from pre-existing CSRF token cookies.
+   *
+   * Note: Strict Origin verification has ALREADY passed before this check executes.
+   * Exempt paths include:
+   * 1. Server-to-server webhook endpoints (authenticated via HMAC signatures, zero browser cookies).
+   * 2. Unauthenticated authentication entrypoints (login, register, forgot-password, reset-password, OTPs).
+   *    Because no session exists yet, requiring a pre-existing CSRF cookie locks out legitimate
+   *    users in decoupled cross-site architectures.
+   * 3. Custom regex/string exemptions configured at initialization.
+   */
+  private isCsrfExempt(path: string | undefined): boolean {
+    if (!path) return false;
+
+    // Normalize: strip query strings, remove duplicate and trailing slashes, lowercase
+    const cleanPath = path.split('?')[0].replace(/\/+$/, '').toLowerCase();
+
+    // 1. Webhook endpoints (HMAC signature protected, server-to-server)
+    if (/\/webhooks?$/.test(cleanPath)) {
+      return true;
+    }
+
+    // 2. Unauthenticated authentication actions across any API version prefix (/api/v1, /api/v2, etc.)
+    const isPublicAuthAction =
+      /\/(auth|vendors\/auth|admin\/auth)\/(login|register|forgot-password|reset-password|verify-otp|resend-otp)$/.test(
+        cleanPath,
+      );
+
+    if (isPublicAuthAction) {
+      return true;
+    }
+
+    // 3. Extensible custom exemptions
+    for (const rule of this.customExemptPaths) {
+      if (typeof rule === 'string') {
+        const cleanRule = rule.split('?')[0].replace(/\/+$/, '').toLowerCase();
+        if (cleanPath === cleanRule) return true;
+      } else if (rule instanceof RegExp && rule.test(cleanPath)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
