@@ -94,6 +94,16 @@ async function bootstrap() {
       .map((o) => o.trim())
       .filter(Boolean) || [];
 
+  const allowedOriginsSet = new Set(
+    allowedOrigins.map((o) => {
+      try {
+        return new URL(o).origin;
+      } catch {
+        return o;
+      }
+    }),
+  );
+
   app.enableCors({
     origin: (
       requestOrigin: string | undefined,
@@ -105,18 +115,14 @@ async function bootstrap() {
         return;
       }
 
-      // In non-production, allow any localhost or 127.0.0.1 origin regardless of port
-      if (
-        !isProduction &&
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin)
-      ) {
-        callback(null, true);
-        return;
-      }
-
-      if (allowedOrigins.includes(requestOrigin)) {
-        callback(null, true);
-        return;
+      try {
+        const normalized = new URL(requestOrigin).origin;
+        if (allowedOriginsSet.has(normalized)) {
+          callback(null, true);
+          return;
+        }
+      } catch {
+        // Invalid origin format
       }
 
       callback(null, false);
@@ -153,7 +159,7 @@ async function bootstrap() {
   });
 
   // Apply CSRF middleware for state-changing operations
-  const csrfMiddleware = new CsrfMiddleware(allowedOrigins, isProduction);
+  const csrfMiddleware = new CsrfMiddleware(allowedOrigins);
   app.use((req: Request, res: Response, next: NextFunction) => {
     // For read-only requests, always allow CSRF token generation
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
