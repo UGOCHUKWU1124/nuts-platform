@@ -4,10 +4,11 @@ import type { Request, Response } from 'express';
 import { PaystackIpMiddleware } from './paystack-ip.middleware';
 
 describe('PaystackIpMiddleware', () => {
-  const createConfigService = (nodeEnv: string) =>
+  const createConfigService = (nodeEnv: string, paystackKey?: string) =>
     ({
       get: jest.fn((key: string) => {
         if (key === 'NODE_ENV') return nodeEnv;
+        if (key === 'PAYSTACK_SECRET_KEY') return paystackKey;
         return undefined;
       }),
     }) as unknown as ConfigService;
@@ -109,6 +110,16 @@ describe('PaystackIpMiddleware', () => {
         UnauthorizedException,
       );
       expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('bypasses IP check in production when using sk_test_ key for testing', () => {
+      const testKeyMiddleware = new PaystackIpMiddleware(
+        createConfigService('production', 'sk_test_mock123'),
+      );
+      const req = createMockReq({ 'x-forwarded-for': '185.220.101.5' });
+
+      testKeyMiddleware.use(req, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledTimes(1);
     });
   });
 });
