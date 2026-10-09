@@ -416,8 +416,6 @@ export function validateEnv(config: Record<string, unknown>) {
       );
     }
 
-
-
     const isLivePaystack =
       validated.PAYSTACK_SECRET_KEY?.startsWith('sk_live_');
 
