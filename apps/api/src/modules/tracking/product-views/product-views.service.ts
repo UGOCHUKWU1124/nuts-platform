@@ -33,6 +33,10 @@ export class ProductViewsService {
     userId?: string,
     sessionId?: string,
   ): Promise<void> {
+    if (!this.redis || this.redis.status !== 'ready') {
+      return;
+    }
+
     const view: BufferedView = {
       productId,
       userId,
@@ -53,6 +57,10 @@ export class ProductViewsService {
    * Flush buffered views to the analytics queue for DB insertion.
    */
   async flushViews(): Promise<void> {
+    if (!this.redis || this.redis.status !== 'ready') {
+      return;
+    }
+
     try {
       const batchSize = TRACKING.PRODUCT_VIEW_BATCH_SIZE;
       let processed = 0;

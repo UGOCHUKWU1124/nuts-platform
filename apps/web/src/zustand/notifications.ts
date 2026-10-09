@@ -117,17 +117,20 @@ function notificationsApiForCurrentRole() {
 }
 
 function getSseUrl(role: AuthRole): string {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
   const routeByRole: Record<AuthRole, string> = {
     user: "notifications/sse/stream",
     admin: "admin/notifications/sse/stream",
     vendor: "vendors/notifications/sse/stream",
   };
-  const apiPath = new URL(apiUrl, window.location.origin).pathname.replace(
-    /\/+$/,
-    "",
-  );
-  return `${apiPath}/${routeByRole[role]}`;
+  const backend = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "") || "";
+  const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
+  const base = apiUrl.startsWith("http")
+    ? apiUrl
+    : backend
+      ? `${backend}${apiUrl.startsWith("/") ? apiUrl : `/${apiUrl}`}`
+      : apiUrl;
+
+  return `${base}/${routeByRole[role]}`;
 }
 
 function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
