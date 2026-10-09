@@ -200,14 +200,16 @@ export const performTokenRefresh = (
   if (pending) return pending;
 
   const runRefresh = () => executeTokenRefresh(role);
-  const promise =
-    typeof navigator !== "undefined" && navigator.locks
-      ? navigator.locks.request(
-          `nuts-auth-refresh:${role}`,
-          { mode: "exclusive" },
-          runRefresh,
-        )
-      : runRefresh();
+  const promise: Promise<RefreshSessionResult> = (async () => {
+    if (typeof navigator !== "undefined" && navigator.locks) {
+      return await navigator.locks.request(
+        `nuts-auth-refresh:${role}`,
+        { mode: "exclusive" },
+        runRefresh,
+      );
+    }
+    return await runRefresh();
+  })();
 
   const trackedPromise = promise.finally(() => {
     if (refreshPromises[role] === trackedPromise) {
