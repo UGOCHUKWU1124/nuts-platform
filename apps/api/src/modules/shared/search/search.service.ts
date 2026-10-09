@@ -6,6 +6,9 @@ interface ProductRow {
   id: string;
   name: string;
   sku: string;
+  slug?: string;
+  price?: number | string;
+  imageUrl?: string | null;
   score: number | string;
   total_count: number;
 }
@@ -13,6 +16,8 @@ interface ProductRow {
 interface VendorRow {
   id: string;
   storeName: string;
+  storeSlug?: string;
+  storeLogoUrl?: string | null;
   storeDescription: string | null;
   email: string;
   firstName: string | null;
@@ -26,6 +31,10 @@ interface CategoryRow {
   name: string;
   description: string | null;
   slug: string;
+  parentId: string | null;
+  parentName: string | null;
+  parentSlug: string | null;
+  path: string | null;
   score: number | string;
   total_count: number;
 }
@@ -836,30 +845,39 @@ export class SearchService {
 
     const rows = await this.prisma.$queryRaw<ProductRow[]>`
         SELECT
-          id,
-          name,
-          sku,
+          p.id,
+          p.name,
+          p.sku,
+          p.slug,
+          p.price,
+          (
+            SELECT pi.url
+            FROM product_images pi
+            WHERE pi."productId" = p.id
+            ORDER BY pi."isPrimary" DESC, pi.position ASC
+            LIMIT 1
+          ) AS "imageUrl",
           (
             CASE
-              WHEN name ILIKE ${pattern}
-                THEN 2.0 + similarity(name, ${search})
-              WHEN sku ILIKE ${pattern}
-                THEN 1.5 + similarity(sku, ${search})
-              ELSE similarity(name, ${search})
+              WHEN p.name ILIKE ${pattern}
+                THEN 2.0 + similarity(p.name, ${search})
+              WHEN p.sku ILIKE ${pattern}
+                THEN 1.5 + similarity(p.sku, ${search})
+              ELSE similarity(p.name, ${search})
             END
           ) AS score,
           COUNT(*) OVER()::integer AS total_count
-        FROM products
+        FROM products p
         WHERE
-          "isActive" = true
-          AND "isDeleted" = false
+          p."isActive" = true
+          AND p."isDeleted" = false
           AND (
-            name ILIKE ${pattern}
-            OR sku ILIKE ${pattern}
-            OR similarity(name, ${search}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(sku, ${search}) > ${SIMILARITY_THRESHOLD}
+            p.name ILIKE ${pattern}
+            OR p.sku ILIKE ${pattern}
+            OR similarity(p.name, ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(p.sku, ${search}) > ${SIMILARITY_THRESHOLD}
           )
-        ORDER BY score DESC, "createdAt" DESC
+        ORDER BY score DESC, p."createdAt" DESC
         LIMIT ${limit};
       `;
 
@@ -877,6 +895,9 @@ export class SearchService {
           id: product.id,
           name: product.name,
           sku: product.sku,
+          slug: product.slug,
+          price: product.price ? Number(product.price) : 0,
+          imageUrl: product.imageUrl,
         },
       })),
     };
@@ -899,6 +920,8 @@ export class SearchService {
         SELECT
           id,
           "storeName",
+          "storeSlug",
+          "storeLogoUrl",
           "storeDescription",
           email,
           "firstName",
@@ -958,6 +981,8 @@ export class SearchService {
         payload: {
           id: vendor.id,
           storeName: vendor.storeName,
+          storeSlug: vendor.storeSlug,
+          storeLogoUrl: vendor.storeLogoUrl,
           storeDescription: vendor.storeDescription,
           email: vendor.email,
           firstName: vendor.firstName,
@@ -982,55 +1007,78 @@ export class SearchService {
 
     const rows = await this.prisma.$queryRaw<CategoryRow[]>`
         SELECT
-          id,
-          name,
-          description,
-          slug,
+          c.id,
+          c.name,
+          c.description,
+          c.slug,
+          c."parentId",
+          p.name AS "parentName",
+          p.slug AS "parentSlug",
+          c.path,
           (
             CASE
-              WHEN name ILIKE ${pattern}
-                THEN 2.0 + similarity(name, ${search})
-              WHEN description ILIKE ${pattern}
+              WHEN c.name ILIKE ${pattern}
+                THEN 2.0 + similarity(c.name, ${search})
+              WHEN c.description ILIKE ${pattern}
                 THEN 1.0 + similarity(
-                  COALESCE(description, ''),
+                  COALESCE(c.description, ''),
                   ${search}
                 )
-              ELSE similarity(name, ${search})
+              ELSE similarity(c.name, ${search})
             END
           ) AS score,
           COUNT(*) OVER()::integer AS total_count
-        FROM categories
+        FROM categories c
+        LEFT JOIN categories p ON c."parentId" = p.id
         WHERE
-          "isActive" = true
+          c."isActive" = true
           AND (
-            name ILIKE ${pattern}
-            OR COALESCE(description, '') ILIKE ${pattern}
-            OR slug ILIKE ${pattern}
-            OR similarity(name, ${search}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(COALESCE(description, ''), ${search}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(slug, ${search}) > ${SIMILARITY_THRESHOLD}
+            c.name ILIKE ${pattern}
+            OR COALESCE(c.description, '') ILIKE ${pattern}
+            OR c.slug ILIKE ${pattern}
+            OR similarity(c.name, ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(c.description, ''), ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(c.slug, ${search}) > ${SIMILARITY_THRESHOLD}
           )
-        ORDER BY score DESC, "createdAt" DESC
+        ORDER BY score DESC, c."createdAt" DESC
         LIMIT ${limit};
       `;
 
     return {
       total: rows.length > 0 ? Number(rows[0].total_count) : 0,
 
-      items: rows.map((category) => ({
-        id: category.id,
-        index: 'categories',
-        type: 'category',
-        title: category.name,
-        subtitle: category.description ?? undefined,
-        score: Number(category.score),
-        payload: {
+      items: rows.map((category) => {
+        const isSubcategory = Boolean(category.parentId);
+        const type = isSubcategory ? 'subcategory' : 'category';
+        const subtitle =
+          isSubcategory && category.parentName
+            ? `in ${category.parentName}`
+            : (category.description ?? undefined);
+
+        return {
           id: category.id,
-          name: category.name,
-          description: category.description,
-          slug: category.slug,
-        },
-      })),
+          index: 'categories',
+          type,
+          title: category.name,
+          subtitle,
+          score: Number(category.score),
+          payload: {
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            slug: category.slug,
+            parentId: category.parentId,
+            parentName: category.parentName,
+            parentSlug: category.parentSlug,
+            path:
+              category.path ??
+              (category.parentSlug
+                ? `${category.parentSlug}/${category.slug}`
+                : category.slug),
+            isSubcategory,
+          },
+        };
+      }),
     };
   }
 
