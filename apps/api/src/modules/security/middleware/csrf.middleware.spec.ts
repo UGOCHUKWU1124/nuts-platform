@@ -11,7 +11,7 @@ describe('CsrfMiddleware', () => {
   let json: jest.Mock;
 
   beforeEach(() => {
-    middleware = new CsrfMiddleware(['https://shop.example.com'], true);
+    middleware = new CsrfMiddleware(['https://shop.example.com']);
     req = {
       method: 'POST',
       path: '/api/v1/orders',
@@ -56,6 +56,42 @@ describe('CsrfMiddleware', () => {
       authorization: 'Bearer access-token',
     };
     middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  it('accepts a trusted origin even when sec-fetch-site is cross-site', () => {
+    req.headers = {
+      ...req.headers,
+      'sec-fetch-site': 'cross-site',
+    };
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  it('rejects cross-site requests missing an origin header', () => {
+    delete req.headers?.origin;
+    req.headers = {
+      ...req.headers,
+      'sec-fetch-site': 'cross-site',
+    };
+    middleware.use(req as Request, res as Response, next);
+    expect(status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('normalizes trailing slashes and paths in allowed origins', () => {
+    const customMiddleware = new CsrfMiddleware([
+      'https://nuts-platform-web-staging.onrender.com/',
+      'http://localhost:5173/app',
+    ]);
+    req.headers = {
+      ...req.headers,
+      origin: 'https://nuts-platform-web-staging.onrender.com',
+      'sec-fetch-site': 'cross-site',
+    };
+    customMiddleware.use(req as Request, res as Response, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(status).not.toHaveBeenCalled();
   });
