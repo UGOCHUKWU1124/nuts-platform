@@ -1,12 +1,14 @@
 import { authBroadcast } from "@/lib/auth-events";
 import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import {
-clearAuthTokens,
-getAuthToken,
-setAuthTokens,
-type AuthRole,
+  clearAuthTokens,
+  getAuthToken,
+  isSessionKnownUnauthenticated,
+  markSessionUnauthenticated,
+  setAuthTokens,
+  type AuthRole,
 } from "./token-storage";
-import type { ApiSuccessEnvelope,PaginationMeta } from "./types";
+import type { ApiSuccessEnvelope, PaginationMeta } from "./types";
 
 declare module "axios" {
   interface AxiosRequestConfig {
@@ -156,8 +158,15 @@ async function executeTokenRefresh(
   } catch (error) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     if (status === 401 || status === 403) {
+      const hadToken = Boolean(getAuthToken(role));
       clearAuthTokens(role);
-      authBroadcast.publish({ type: "SESSION_EXPIRED", role });
+      markSessionUnauthenticated(role);
+
+      // Only notify other tabs if the user actually had an active session that just expired.
+      // An unauthenticated guest checking session MUST NOT trigger SESSION_EXPIRED.
+      if (hadToken) {
+        authBroadcast.publish({ type: "SESSION_EXPIRED", role });
+      }
       return { success: false, reason: "expired" };
     }
 
@@ -171,6 +180,10 @@ async function executeTokenRefresh(
 export const performTokenRefresh = (
   role: AuthRole,
 ): Promise<RefreshSessionResult> => {
+  if (isSessionKnownUnauthenticated(role)) {
+    return Promise.resolve({ success: false, reason: "expired" });
+  }
+
   const pending = refreshPromises[role];
   if (pending) return pending;
 
@@ -247,27 +260,32 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    if (isSessionKnownUnauthenticated(role)) {
+      return Promise.reject(error);
+    }
+
     originalRequest._retry = true;
     const refreshed = await performTokenRefresh(role);
-      if (refreshed?.success && refreshed.accessToken) {
-        setHeader(
-          originalRequest.headers,
-          "Authorization",
-          `Bearer ${refreshed.accessToken}`,
-        );
-        const freshCsrf = getCsrfToken();
-        if (freshCsrf) {
-          setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
-        }
-        return axiosInstance(originalRequest);
+    if (refreshed?.success && refreshed.accessToken) {
+      setHeader(
+        originalRequest.headers,
+        "Authorization",
+        `Bearer ${refreshed.accessToken}`,
+      );
+      const freshCsrf = getCsrfToken();
+      if (freshCsrf) {
+        setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
       }
+      return axiosInstance(originalRequest);
+    }
 
-      if (
-        refreshed.reason === "unavailable" ||
-        refreshed.reason === "invalid-response"
-      ) {
-        return Promise.reject(new AuthRefreshUnavailableError());
-      }
+    if (
+      refreshed.reason === "unavailable" ||
+      refreshed.reason === "invalid-response"
+    ) {
+      return Promise.reject(new AuthRefreshUnavailableError());
+    }
+
     return Promise.reject(error);
   },
 );

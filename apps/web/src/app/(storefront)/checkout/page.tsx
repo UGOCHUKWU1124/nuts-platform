@@ -56,6 +56,7 @@ export default function CheckoutPage() {
   const { data: userProfile } = useQuery({
     queryKey: ["user", "profile"],
     queryFn: async () => (await userService.me()).data,
+    enabled: Boolean(authUser),
     staleTime: 1000 * 60 * 10,
     gcTime: 1000 * 60 * 15,
   });

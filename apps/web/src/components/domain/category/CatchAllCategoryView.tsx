@@ -13,6 +13,7 @@ import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { findCategoryBreadcrumbs,getNodeChildren,resolveCategoryPath } from "@/lib/cart-path";
+import { groupProductsByImmediateCategory } from "@/lib/category-product-groups";
 import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -38,6 +39,8 @@ export interface CatchAllCategoryViewProps {
   initialProducts: ProductCardDto[];
   initialProduct?: PublicProductResponseDto | null;
   initialReviews?: { data: ReviewResponseDto[]; meta?: ProductReviewsMetaDto } | null;
+  isCategoryIndex?: boolean;
+
   initialSearchParams?: {
     search?: string;
     sort?: string;
@@ -54,6 +57,7 @@ export function CatchAllCategoryView({
   initialProducts,
   initialProduct,
   initialReviews,
+  isCategoryIndex = false,
   initialSearchParams,
 }: CatchAllCategoryViewProps) {
   const params = useParams();
@@ -67,7 +71,7 @@ export function CatchAllCategoryView({
     : [];
 
   const slugPath = slugs.join("/");
-  const currentCategoryUrl = `/category/${slugPath}`;
+  const currentCategoryUrl = slugPath ? `/category/${slugPath}` : "/category";
 
   // Search input state
   const [searchInput, setSearchInput] = useState(initialSearchParams?.search || "");
@@ -124,10 +128,13 @@ export function CatchAllCategoryView({
     ? (initialProduct?.slug ?? slugs[slugs.length - 1])
     : null;
 
-  const rawChildren = getNodeChildren(categoryNode);
+  const rawChildren = isCategoryIndex
+    ? tree.filter((category) => category.isActive && !category.parentId)
+    : getNodeChildren(categoryNode);
   const matchedChain = traversal.matchedChain ?? EMPTY_CATEGORIES;
-  const rootNode = matchedChain[0] ?? categoryNode;
+  const rootNode = categoryNode;
   const parentNode = matchedChain.length > 1 ? matchedChain[matchedChain.length - 2] : null;
+  const categoryName = categoryNode?.name ?? "Categories";
 
   const scrollToSubcategory = (subcatSlug: string) => {
     setActiveTab(subcatSlug);
@@ -247,93 +254,30 @@ export function CatchAllCategoryView({
   const { data: clientCategoryProducts, isLoading: isProductsLoading } = useQuery({
     queryKey: ["category-products", categoryNode?.id || slugPath],
     queryFn: async () => {
-      if (!categoryNode?.id) return [];
+      if (!categoryNode?.id && !isCategoryIndex) return [];
       const res = await productService.getCards({
-        categoryId: categoryNode.id,
+        ...(categoryNode?.id ? { categoryId: categoryNode.id } : {}),
         limit: 100,
       });
       return Array.isArray(res.data) ? res.data : [];
     },
     initialData: initialProducts?.length ? initialProducts : undefined,
-    enabled: Boolean(!initialProduct && categoryNode?.id && !initialProducts?.length),
+    enabled: Boolean(
+      !initialProduct &&
+        (categoryNode?.id || isCategoryIndex) &&
+        !initialProducts?.length,
+    ),
     staleTime: 1000 * 60 * 2,
   });
 
   // Group products by subcategory
   const rawProducts = clientCategoryProducts ?? initialProducts ?? EMPTY_PRODUCTS;
-  const subcategoryGroups = (() => {
-    const groupMap = new Map<string, { id: string; name: string; slug: string; products: ProductCardDto[] }>();
-
-    // 1. Pre-populate with immediate children if any exist so display order matches navigation
-    if (rawChildren.length > 0) {
-      for (const child of rawChildren) {
-        groupMap.set(child.id, {
-          id: child.id,
-          name: child.name,
-          slug: child.slug || child.id,
-          products: [],
-        });
-      }
-    }
-
-    const isUnderChild = (targetId: string, childId: string): boolean => {
-      if (targetId === childId) return true;
-      let curr = categoryMap.get(targetId);
-      let depth = 0;
-      while (curr && curr.parentId && depth < 10) {
-        if (curr.parentId === childId) return true;
-        curr = categoryMap.get(curr.parentId);
-        depth++;
-      }
-      return false;
-    };
-
-    for (const product of rawProducts) {
-      let matchedGroup = false;
-
-      const candidateIds = [
-        product.subcategory?.id,
-        product.parentSubcategory?.id,
-        product.category?.id,
-        product.categoryId,
-      ].filter(Boolean) as string[];
-
-      if (rawChildren.length > 0) {
-        for (const child of rawChildren) {
-          if (candidateIds.some((cid) => isUnderChild(cid, child.id))) {
-            groupMap.get(child.id)!.products.push(product);
-            matchedGroup = true;
-            break;
-          }
-        }
-      }
-
-      if (!matchedGroup) {
-        const fallbackKey = categoryNode?.id || "collection";
-        const fallbackName = categoryNode?.name || "All Products";
-        const fallbackSlug = categoryNode?.slug || "all-products";
-
-        if (!groupMap.has(fallbackKey)) {
-          groupMap.set(fallbackKey, {
-            id: fallbackKey,
-            name: fallbackName,
-            slug: fallbackSlug,
-            products: [],
-          });
-        }
-        groupMap.get(fallbackKey)!.products.push(product);
-      }
-    }
-
-    return Array.from(groupMap.values()).filter(
-      (group) =>
-        group.products.length > 0 ||
-        rawChildren.some(
-          (child) =>
-            child.id === group.id && getNodeChildren(child).length > 0,
-        ),
-    );
-  })();
+  const subcategoryGroups = groupProductsByImmediateCategory({
+    products: rawProducts,
+    children: rawChildren,
+    categoryTree: tree,
+    fallbackCategory: categoryNode,
+  });
 
   // Filter & sort products within each group in-memory
   const filteredGroups = (() => {
@@ -385,6 +329,9 @@ export function CatchAllCategoryView({
   const breadcrumbItems = (() => {
     if (traversal.breadcrumbs && traversal.breadcrumbs.length > 1) {
       return traversal.breadcrumbs;
+    }
+    if (isCategoryIndex) {
+      return [{ name: "Categories", href: "/category" }];
     }
     if (categoryNode?.id || categoryNode?.slug) {
       const full = findCategoryBreadcrumbs(categoryNode.id || categoryNode.slug, tree);
@@ -450,7 +397,7 @@ export function CatchAllCategoryView({
   }
 
   // 2. CATEGORY NOT FOUND STATE
-  if (!categoryNode) {
+  if (!categoryNode && !isCategoryIndex) {
     if (isCategoryResolving) {
       return (
         <CustomerLayout categories={tree}>
@@ -543,11 +490,15 @@ export function CatchAllCategoryView({
                 )}
                 <div>
                   <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
-                    {categoryNode.name}
+                    {categoryName}
                   </h1>
-                  {categoryNode.description ? (
+                  {categoryNode?.description ? (
                     <p className="mt-1 text-xs sm:text-sm text-muted-foreground max-w-2xl">
                       {categoryNode.description}
+                    </p>
+                  ) : isCategoryIndex ? (
+                    <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                      Explore products by category, one section at a time.
                     </p>
                   ) : (
                     <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
@@ -564,7 +515,7 @@ export function CatchAllCategoryView({
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder={`Search in ${categoryNode.name}...`}
+                placeholder={`Search in ${categoryName}...`}
                 className="h-10 rounded-full border-border bg-secondary/40 pl-10 pr-9 text-xs sm:text-sm focus:bg-background transition-colors"
               />
               {searchInput && (
@@ -714,7 +665,7 @@ export function CatchAllCategoryView({
                   <ShoppingBag className="h-6 w-6" />
                 </div>
                 <h3 className="text-lg font-bold text-foreground">
-                  No pieces found in {categoryNode.name}
+                  No pieces found in {categoryName}
                 </h3>
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
                   {hasActiveFilters
