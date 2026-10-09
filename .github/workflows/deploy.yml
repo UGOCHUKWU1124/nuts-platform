@@ -1,20 +1,33 @@
 name: CD — Multi-Environment Deployment
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI — Monorepo Quality Gates"]
     branches:
       - staging
       - main
+    types:
+      - completed
   workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Target Environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: false
 
 jobs:
   resolve-environment:
     name: Determine Target Environment
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     outputs:
       env_name: ${{ steps.set-env.outputs.env_name }}
       docker_tag: ${{ steps.set-env.outputs.docker_tag }}
@@ -24,7 +37,8 @@ jobs:
         run: |
           image_repository="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           echo "image_repository=$image_repository" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          TARGET_BRANCH="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          if [ "$TARGET_BRANCH" = "main" ] || [ "${{ inputs.target_env }}" = "production" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
             echo "docker_tag=latest" >> $GITHUB_OUTPUT
           else
@@ -46,6 +60,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -82,7 +98,7 @@ jobs:
           push: true
           tags: |
             ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ needs.resolve-environment.outputs.docker_tag }}
-            ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ github.sha }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Build & Push Web Client Container Image
         uses: docker/build-push-action@v5
@@ -96,4 +112,4 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || '/api/v1' }}
           tags: |
             ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ needs.resolve-environment.outputs.docker_tag }}
-            ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ github.sha }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ github.event.workflow_run.head_sha || github.sha }}
