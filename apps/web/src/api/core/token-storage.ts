@@ -18,6 +18,28 @@ const accessTokens: Record<AuthRole, string | null> = {
   vendor: null,
 };
 
+const knownUnauthenticatedRoles = new Set<string>();
+
+export const isSessionKnownUnauthenticated = (role: string): boolean => {
+  return knownUnauthenticatedRoles.has(role.toLowerCase());
+};
+
+export const markSessionUnauthenticated = (role?: string) => {
+  if (role) {
+    knownUnauthenticatedRoles.add(role.toLowerCase());
+  } else {
+    ["user", "admin", "vendor"].forEach((r) => knownUnauthenticatedRoles.add(r));
+  }
+};
+
+export const markSessionAuthenticated = (role?: string) => {
+  if (role) {
+    knownUnauthenticatedRoles.delete(role.toLowerCase());
+  } else {
+    knownUnauthenticatedRoles.clear();
+  }
+};
+
 type TokenListener = (token: string | null, role: string) => void;
 const tokenListeners = new Set<TokenListener>();
 
@@ -34,6 +56,10 @@ export const setAuthTokens = (role: AuthRole, tokens: StoredTokens | null) => {
   const tokenValue = tokens?.accessToken ?? null;
   accessTokens[role] = tokenValue;
 
+  if (tokenValue) {
+    markSessionAuthenticated(role);
+  }
+
   tokenListeners.forEach((listener) => {
     try {
       listener(tokenValue, role);
@@ -47,10 +73,14 @@ export const setAuthToken = (role: AuthRole, token: string | null) => {
   setAuthTokens(role, { accessToken: token });
 };
 
-export const clearAuthTokens = (role?: AuthRole) => {
-  const roles = role ? [role] : (Object.keys(accessTokens) as AuthRole[]);
+export const clearAuthTokens = (role?: AuthRole | string) => {
+  const roles: AuthRole[] = role
+    ? [role.toLowerCase() as AuthRole]
+    : (Object.keys(accessTokens) as AuthRole[]);
+
   roles.forEach((tokenRole) => {
     accessTokens[tokenRole] = null;
+    markSessionUnauthenticated(tokenRole);
     tokenListeners.forEach((listener) => {
       try {
         listener(null, tokenRole);
@@ -81,4 +111,3 @@ export const getAuthSessionRole = (): AuthRole | null => {
   }
   return null;
 };
-
