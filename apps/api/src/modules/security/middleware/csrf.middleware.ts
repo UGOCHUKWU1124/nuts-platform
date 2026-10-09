@@ -99,10 +99,38 @@ export class CsrfMiddleware implements NestMiddleware {
     // NOTE: The double-submit cookie pattern REQUIRES the client to read this
     // cookie and echo it back in the `x-csrf-token` header. An httpOnly cookie
     // would make that impossible and every state-changing request would 403.
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isStaging = process.env.NODE_ENV === 'staging';
+    const isSecure =
+      process.env.AUTH_COOKIE_SECURE === 'true' ||
+      process.env.COOKIE_SECURE === 'true' ||
+      isProduction ||
+      isStaging;
+
+    const rawDomain =
+      process.env.COOKIE_DOMAIN || process.env.AUTH_COOKIE_DOMAIN;
+    let domain: string | undefined;
+    if (rawDomain) {
+      domain = rawDomain
+        .trim()
+        .replace(/^https?:\/\//i, '')
+        .split(':')[0]
+        .split('/')[0]
+        .trim();
+      if (!domain || domain === 'localhost' || domain === '127.0.0.1') {
+        domain = undefined;
+      }
+    }
+
+    const sameSite =
+      (process.env.COOKIE_SAME_SITE as 'lax' | 'strict' | 'none') ||
+      (isProduction ? 'strict' : 'lax');
+
     res.cookie(this.csrfCookieName, token, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      secure: isSecure,
+      sameSite,
+      ...(domain ? { domain } : {}),
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       path: '/',
     });

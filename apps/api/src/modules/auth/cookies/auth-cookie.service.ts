@@ -25,11 +25,19 @@ export class AuthCookieService {
       throw new Error('COOKIE_SAME_SITE must be lax, strict, or none');
     }
 
+    const isStaging = this.config.get<string>('NODE_ENV') === 'staging';
+    const isSecureConfig =
+      this.config.get<string | boolean>('AUTH_COOKIE_SECURE') ??
+      this.config.get<string | boolean>('COOKIE_SECURE');
+
     /**
      * SameSite=None requires Secure.
-     * Do not enable cross-site cookies accidentally.
+     * Respect AUTH_COOKIE_SECURE / COOKIE_SECURE or default based on environment.
      */
-    const secure = isProduction || sameSiteConfig === 'none';
+    const secure =
+      isSecureConfig !== undefined
+        ? String(isSecureConfig) === 'true'
+        : isProduction || isStaging || sameSiteConfig === 'none';
 
     if (sameSiteConfig === 'none' && !secure) {
       throw new Error('SameSite=None cookies require Secure');
