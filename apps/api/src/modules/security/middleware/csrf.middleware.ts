@@ -8,11 +8,21 @@ export class CsrfMiddleware implements NestMiddleware {
   private readonly csrfCookieName = 'csrf_token';
   private readonly csrfHeaderName = 'x-csrf-token';
   private readonly tokenLength = 32;
+  private readonly trustedOrigins: Set<string>;
 
-  constructor(
-    private readonly allowedOrigins: readonly string[] = [],
-    private readonly isProduction = process.env.NODE_ENV === 'production',
-  ) {}
+  constructor(allowedOrigins: readonly string[] = []) {
+    this.trustedOrigins = new Set(
+      allowedOrigins
+        .map((origin) => {
+          try {
+            return new URL(origin.trim()).origin;
+          } catch {
+            return origin.trim();
+          }
+        })
+        .filter(Boolean),
+    );
+  }
 
   use(req: Request, res: Response, next: NextFunction) {
     // Skip CSRF for GET, HEAD, OPTIONS requests (read-only)
@@ -23,14 +33,19 @@ export class CsrfMiddleware implements NestMiddleware {
 
     const origin = req.headers.origin;
     const fetchSite = req.headers['sec-fetch-site'];
+
+    const hasOrigin = typeof origin === 'string';
+    const isOriginTrusted = hasOrigin && this.isTrustedOrigin(origin);
+
     if (
-      (typeof origin === 'string' && !this.isTrustedOrigin(origin)) ||
-      fetchSite === 'cross-site'
+      (hasOrigin && !isOriginTrusted) ||
+      (!hasOrigin && fetchSite === 'cross-site')
     ) {
       this.logger.warn('CSRF origin validation failed', {
         method: req.method,
         path: req.path,
-        hasOrigin: typeof origin === 'string',
+        hasOrigin,
+        origin,
         fetchSite,
         ip: req.ip,
       });
@@ -164,11 +179,7 @@ export class CsrfMiddleware implements NestMiddleware {
   private isTrustedOrigin(origin: string): boolean {
     try {
       const normalizedOrigin = new URL(origin).origin;
-      if (this.allowedOrigins.includes(normalizedOrigin)) return true;
-      return (
-        !this.isProduction &&
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)
-      );
+      return this.trustedOrigins.has(normalizedOrigin);
     } catch {
       return false;
     }
