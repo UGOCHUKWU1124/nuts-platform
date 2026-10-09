@@ -548,7 +548,7 @@ export function CatchAllCategoryView({
                         : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                     }`}
                   >
-                    All Sections
+                    All Sections ({rawProducts.length})
                   </button>
                   {filteredGroups.map((group) => {
                     const isSelected = activeTab === group.slug;
@@ -563,7 +563,7 @@ export function CatchAllCategoryView({
                             : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                         }`}
                       >
-                        {group.name}
+                        {group.name} ({group.products.length})
                       </button>
                     );
                   })}
