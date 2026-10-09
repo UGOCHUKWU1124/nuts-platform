@@ -45,6 +45,18 @@ async function bootstrap() {
     .getInstance() as import('express').Express;
   expressApp.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
+  // Cloud platform health and liveness probe (e.g. Render HEAD / and GET /)
+  expressApp.get('/', (_req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      service: 'nuts-api',
+      timestamp: new Date().toISOString(),
+    });
+  });
+  expressApp.head('/', (_req, res) => {
+    res.status(200).end();
+  });
+
   // Raise the per-response listener ceiling before any middleware attaches its
   // own 'finish' handlers. The default of 10 is a leak-detection heuristic that
   // is too low for a production middleware stack (pino-http + OTel HTTP/Express
