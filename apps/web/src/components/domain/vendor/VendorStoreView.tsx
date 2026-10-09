@@ -9,6 +9,7 @@ import { CategoryFilterDrawer } from "@/component/category/CategoryFilterDrawer"
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { ProductCard } from "@/component/product/ProductCard";
 import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import {
 ArrowLeft,
@@ -37,7 +38,7 @@ function getStoreInitials(name: string): string {
   return ((first[0] ?? "") + (second[0] ?? "")).toUpperCase() || "CR";
 }
 
-interface SubcategoryGroup {
+interface RootCategoryGroup {
   id: string;
   name: string;
   slug: string;
@@ -103,24 +104,35 @@ export function VendorStoreView({
   // Categories delivered directly via RSC props
   const categoryTree = initialCategories;
 
-  // Flattened Category Map for infallible subcategory name resolution
-  const categoryMap = useMemo(() => {
+  // Flattened Map resolving every child/descendant category to its top-level Root Category
+  const rootCategoryMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string; slug: string }>();
-    function traverse(nodes: CategoryResponseDto[]) {
-      for (const node of nodes) {
-        if (node.id && node.name) {
-          map.set(node.id, { id: node.id, name: node.name, slug: node.slug || node.id });
-        }
-        if (node.slug && node.name) {
-          map.set(node.slug, { id: node.id || node.slug, name: node.name, slug: node.slug });
-        }
-        const children = node.children || node.subCategories || [];
-        if (Array.isArray(children) && children.length > 0) {
-          traverse(children);
+
+    function registerDescendants(
+      node: CategoryResponseDto,
+      root: { id: string; name: string; slug: string }
+    ) {
+      if (node.id) map.set(node.id, root);
+      if (node.slug) map.set(node.slug, root);
+
+      const children = node.children || node.subCategories || [];
+      if (Array.isArray(children)) {
+        for (const child of children) {
+          registerDescendants(child, root);
         }
       }
     }
-    traverse(categoryTree);
+
+    for (const rootNode of categoryTree) {
+      if (!rootNode.id && !rootNode.slug) continue;
+      const rootInfo = {
+        id: rootNode.id || rootNode.slug,
+        name: rootNode.name,
+        slug: rootNode.slug || rootNode.id,
+      };
+      registerDescendants(rootNode, rootInfo);
+    }
+
     return map;
   }, [categoryTree]);
 
@@ -130,28 +142,31 @@ export function VendorStoreView({
     [productsData, initialProducts],
   );
 
-  // Group products by subcategory
-  const subcategoryGroups: SubcategoryGroup[] = useMemo(() => {
+  // Group products strictly by Root Category
+  const rootCategoryGroups: RootCategoryGroup[] = useMemo(() => {
     if (!rawProducts.length) return [];
 
-    const groupMap = new Map<string, SubcategoryGroup>();
+    const groupMap = new Map<string, RootCategoryGroup>();
 
     for (const product of rawProducts) {
       const cat = product.category;
-      let groupKey = "uncategorized";
-      let groupName = "Other Products";
-      let groupSlug = "other";
+      let rootInfo: { id: string; name: string; slug: string } | null = null;
 
-      if (cat?.id && categoryMap.has(cat.id)) {
-        const resolved = categoryMap.get(cat.id)!;
-        groupKey = resolved.id;
-        groupName = resolved.name;
-        groupSlug = resolved.slug;
+      if (cat?.id && rootCategoryMap.has(cat.id)) {
+        rootInfo = rootCategoryMap.get(cat.id)!;
+      } else if (cat?.slug && rootCategoryMap.has(cat.slug)) {
+        rootInfo = rootCategoryMap.get(cat.slug)!;
       } else if (cat?.name) {
-        groupKey = cat.id || cat.slug || cat.name;
-        groupName = cat.name;
-        groupSlug = cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-");
+        rootInfo = {
+          id: cat.id || cat.slug || cat.name,
+          name: cat.name,
+          slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-"),
+        };
       }
+
+      const groupKey = rootInfo?.id || "uncategorized";
+      const groupName = rootInfo?.name || "Other Products";
+      const groupSlug = rootInfo?.slug || "other";
 
       if (!groupMap.has(groupKey)) {
         groupMap.set(groupKey, {
@@ -165,11 +180,11 @@ export function VendorStoreView({
     }
 
     return Array.from(groupMap.values());
-  }, [rawProducts, categoryMap]);
+  }, [rawProducts, rootCategoryMap]);
 
-  // Filter & sort products within each group
+  // Filter & sort products within each root category group
   const filteredGroups = useMemo(() => {
-    return subcategoryGroups
+    return rootCategoryGroups
       .map((group) => {
         let prods = [...group.products];
 
@@ -214,7 +229,7 @@ export function VendorStoreView({
         return { ...group, products: prods };
       })
       .filter((g) => g.products.length > 0);
-  }, [subcategoryGroups, searchInput, inStock, minPrice, maxPrice, sortBy]);
+  }, [rootCategoryGroups, searchInput, inStock, minPrice, maxPrice, sortBy]);
 
   const totalFilteredCount = useMemo(
     () => filteredGroups.reduce((acc, g) => acc + g.products.length, 0),
@@ -258,9 +273,9 @@ export function VendorStoreView({
     }
   };
 
-  const scrollToSubcategory = (subcatSlug: string) => {
-    setActiveTab(subcatSlug);
-    const element = document.getElementById(`subcat-${subcatSlug}`);
+  const scrollToCategory = (catSlug: string) => {
+    setActiveTab(catSlug);
+    const element = document.getElementById(`cat-${catSlug}`);
     if (element) {
       const yOffset = -120;
       const y =
@@ -275,7 +290,7 @@ export function VendorStoreView({
     return (
       <CustomerLayout categories={categoryTree}>
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="h-52 w-full animate-pulse rounded-3xl bg-neutral-100 mb-8" />
+          <Skeleton className="h-52 w-full rounded-3xl mb-8" />
           <ProductGridSkeleton />
         </div>
       </CustomerLayout>
@@ -429,7 +444,7 @@ export function VendorStoreView({
           </button>
         </div>
 
-        {/* Subcategory Navigation Pill Tabs */}
+        {/* Root Category Navigation Pill Tabs */}
         {filteredGroups.length > 1 && (
           <div className="mb-8 border-b border-border/60 pb-4">
             <div
@@ -448,7 +463,7 @@ export function VendorStoreView({
                     : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200"
                 }`}
               >
-                All Sections
+                All Departments ({totalFilteredCount})
               </button>
               {filteredGroups.map((group) => {
                 const isSelected = activeTab === group.slug;
@@ -456,14 +471,14 @@ export function VendorStoreView({
                   <button
                     key={group.id}
                     type="button"
-                    onClick={() => scrollToSubcategory(group.slug)}
+                    onClick={() => scrollToCategory(group.slug)}
                     className={`rounded-full px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                       isSelected
                         ? "bg-black text-white dark:bg-white dark:text-black"
                         : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200"
                     }`}
                   >
-                    {group.name}
+                    {group.name} ({group.products.length})
                   </button>
                 );
               })}
@@ -571,13 +586,18 @@ export function VendorStoreView({
             {filteredGroups.map((group) => (
               <section
                 key={group.id}
-                id={`subcat-${group.slug}`}
+                id={`cat-${group.slug}`}
                 className="scroll-mt-28"
               >
-                {/* Subcategory Heading */}
-                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground mb-6">
-                  {group.name}
-                </h2>
+                {/* Root Category Heading */}
+                <div className="mb-6 flex items-center justify-between border-b border-border/40 pb-3">
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                    {group.name}
+                  </h2>
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">
+                    {group.products.length} {group.products.length === 1 ? "product" : "products"}
+                  </span>
+                </div>
 
                 {/* Product Grid */}
                 <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-x-6 sm:gap-y-10">

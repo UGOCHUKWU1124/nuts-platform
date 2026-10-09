@@ -19,6 +19,11 @@ export class SearchResultDto {
 
   @ApiProperty({ description: 'Relevance score from Elasticsearch' })
   score!: number;
+
+  @ApiPropertyOptional({
+    description: 'Payload metadata for deep navigation and rich display',
+  })
+  payload?: Record<string, unknown>;
 }
 
 export class SearchResponseDto {
