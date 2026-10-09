@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { publicApi, userApi } from "@/api/core/client";
 
 export interface ReferralValidateResult {
   valid: boolean;
@@ -20,7 +20,7 @@ export const referralService = {
    * reject self-referral early (optional at pre-check stage).
    */
   validate(code: string, email?: string): Promise<{ data: ReferralValidateResult }> {
-    return api.post<ReferralValidateResult>("/account/referral/validate", {
+    return publicApi.post<ReferralValidateResult>("/account/referral/validate", {
       code: code.trim().toUpperCase(),
       ...(email ? { email } : {}),
     });
@@ -31,6 +31,6 @@ export const referralService = {
    * Returns their own code, total referrals made, rewarded count, pending count.
    */
   getStats(): Promise<{ data: ReferralStatsDto }> {
-    return api.get<ReferralStatsDto>("/account/referral/stats");
+    return userApi.get<ReferralStatsDto>("/account/referral/stats");
   },
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/api/core/client";
+import { adminApi } from "@/api/core/client";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
 import { PageHeader } from "@/component/common/PageHeader";
 import { DataTable,type Column } from "@/component/data/DataTable";
@@ -84,7 +84,7 @@ export default function AdminDiscountPage() {
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
     queryFn: async () => {
-      const res = await api.get<AdminDiscount[]>("/admin/discounts");
+      const res = await adminApi.get<AdminDiscount[]>("/admin/discounts");
       return res.data;
     },
   });
@@ -124,7 +124,7 @@ export default function AdminDiscountPage() {
 
   const createMutation = useMutation({
     mutationFn: (values: CreateDiscountFormData) =>
-      api.post("/admin/discounts", discountPayload(values)),
+      adminApi.post("/admin/discounts", discountPayload(values)),
     onSuccess: () => {
       toast.success("Discount coupon code created successfully!");
       refreshDiscounts();
@@ -144,7 +144,7 @@ export default function AdminDiscountPage() {
     }: {
       id: string;
       values: CreateDiscountFormData;
-    }) => api.patch(`/admin/discounts/${id}`, discountPayload(values)),
+    }) => adminApi.patch(`/admin/discounts/${id}`, discountPayload(values)),
     onSuccess: () => {
       toast.success("Discount coupon updated successfully!");
       refreshDiscounts();
@@ -156,7 +156,7 @@ export default function AdminDiscountPage() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (id: string) => api.patch(`/admin/discounts/${id}/deactivate`),
+    mutationFn: (id: string) => adminApi.patch(`/admin/discounts/${id}/deactivate`),
     onSuccess: () => {
       toast.success("Discount code deactivated");
       refreshDiscounts();
@@ -167,7 +167,7 @@ export default function AdminDiscountPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/discounts/${id}`),
+    mutationFn: (id: string) => adminApi.delete(`/admin/discounts/${id}`),
     onSuccess: () => {
       toast.success("Discount code deleted permanently");
       refreshDiscounts();

@@ -225,4 +225,145 @@ describe('RefreshSessionService user sessions', () => {
     ).rejects.toThrow(UnauthorizedException);
     expect(prisma.userAuthSession.updateMany).not.toHaveBeenCalled();
   });
+
+  it('accepts concurrent refresh within grace period from Redis cache', async () => {
+    const cachedTokens = {
+      accessToken: 'grace-access-token',
+      refreshToken: 'grace-refresh-token',
+      refreshId: 'new-refresh-id',
+    };
+    const cachedUser = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+
+    const redisMock = {
+      get: jest
+        .fn()
+        .mockResolvedValue(
+          JSON.stringify({ user: cachedUser, tokens: cachedTokens }),
+        ),
+      set: jest.fn().mockResolvedValue('OK'),
+    };
+
+    prisma.user.findUnique.mockResolvedValue({
+      ...user,
+      isActive: true,
+    });
+    prisma.userAuthSession.findUnique.mockResolvedValue({
+      id: 'device-session-1',
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+      refreshToken: 'stored-hash',
+      refreshTokenId: 'new-refresh-id', // already rotated
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+    });
+
+    const configService = {
+      getOrThrow: jest.fn((key: string) => {
+        const map: Record<string, string> = {
+          JWT_ISSUER: 'nuts-test',
+          JWT_ACCESS_AUDIENCE: 'nuts-access',
+          JWT_REFRESH_AUDIENCE: 'nuts-refresh',
+          JWT_SECRET: 'test-secret',
+          JWT_REFRESH_SECRET: refreshSecret,
+          JWT_ACCESS_EXPIRES_IN: '15m',
+          JWT_REFRESH_EXPIRES_IN: '7d',
+        };
+        return map[key];
+      }),
+    };
+
+    const graceService = new RefreshSessionService(
+      prisma as never,
+      jwtService as never,
+      configService as never,
+      undefined,
+      redisMock as never,
+    );
+
+    const result = await graceService.refresh({
+      sub: user.id,
+      role: ROLE.USER,
+      refreshId: 'old-refresh-id',
+      sessionId: 'device-session-1',
+    });
+
+    expect(result.tokens.accessToken).toBe('grace-access-token');
+    expect(redisMock.get).toHaveBeenCalledWith(
+      `auth:grace:user:${user.id}:old-refresh-id`,
+    );
+  });
+
+  it('triggers family revocation when token reuse is attempted outside grace period', async () => {
+    const redisMock = {
+      get: jest.fn().mockResolvedValue(null), // grace window expired
+      set: jest.fn(),
+    };
+
+    prisma.user.findUnique.mockResolvedValue({
+      ...user,
+      isActive: true,
+    });
+    prisma.userAuthSession.findUnique.mockResolvedValue({
+      id: 'device-session-1',
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+      refreshToken: 'stored-hash',
+      refreshTokenId: 'rotated-refresh-id',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+    });
+
+    const configService = {
+      getOrThrow: jest.fn((key: string) => {
+        const map: Record<string, string> = {
+          JWT_ISSUER: 'nuts-test',
+          JWT_ACCESS_AUDIENCE: 'nuts-access',
+          JWT_REFRESH_AUDIENCE: 'nuts-refresh',
+          JWT_SECRET: 'test-secret',
+          JWT_REFRESH_SECRET: refreshSecret,
+          JWT_ACCESS_EXPIRES_IN: '15m',
+          JWT_REFRESH_EXPIRES_IN: '7d',
+        };
+        return map[key];
+      }),
+    };
+
+    const reuseService = new RefreshSessionService(
+      prisma as never,
+      jwtService as never,
+      configService as never,
+      undefined,
+      redisMock as never,
+    );
+
+    await expect(
+      reuseService.refresh({
+        sub: user.id,
+        role: ROLE.USER,
+        refreshId: 'stolen-refresh-id',
+        sessionId: 'device-session-1',
+      }),
+    ).rejects.toThrow('Security violation: refresh token reuse detected');
+
+    // Confirms session family revocation was executed
+    expect(prisma.userAuthSession.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'device-session-1',
+          userId: user.id,
+        }),
+        data: expect.objectContaining({
+          revokedAt: expect.any(Date),
+          refreshToken: null,
+          refreshTokenId: null,
+        }),
+      }),
+    );
+  });
 });

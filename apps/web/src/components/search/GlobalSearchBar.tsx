@@ -1,7 +1,7 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { api } from "@/api/core/client";
+import { publicApi } from "@/api/core/client";
 import type { CategoryResponseDto } from "@/api/dto/category";
 import type { ProductCardDto } from "@/api/dto/product";
 import type { VendorResponseDto } from "@/api/dto/vendor";
@@ -94,11 +94,11 @@ export function GlobalSearchBar({
         .slice(0, 4);
 
       const [prodRes, vendorRes] = await Promise.allSettled([
-        api.get<ProductCardDto[]>("/products", {
+        publicApi.get<ProductCardDto[]>("/products", {
           params: { search: debouncedQuery, limit: 5 },
           signal,
         }),
-        api.get<VendorResponseDto[]>("/vendors/store", {
+        publicApi.get<VendorResponseDto[]>("/vendors/store", {
           params: { search: debouncedQuery, limit: 3 },
           signal,
         }),

@@ -11,7 +11,6 @@ import {
   Post,
   Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -28,7 +27,6 @@ import {
 import type { Request, Response } from 'express';
 
 import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
@@ -37,17 +35,17 @@ import {
   extractIpAddress,
   extractUserAgent,
 } from '@api/modules/shared/utils/request.util';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { VendorReactivateDto } from './dto/vendor-reactivate.dto';
 import { VendorProfileDto } from './dto/vendor-response.dto';
 import { VendorStatusResponseDto } from './dto/vendor-status-response.dto';
-import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 import { VendorsService } from './vendors.service';
 
 @ApiTags('VENDORS - ACCOUNT')
 @Controller('vendors')
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 export class VendorAccountController {
   constructor(
     private readonly vendorsService: VendorsService,
@@ -195,7 +193,7 @@ export class VendorAccountController {
       extractUserAgent(req),
     );
 
-    this.authCookies.clearAuthCookies(res, 'vendor');
+    this.authCookies.clearAuthCookies(res);
 
     return result;
   }
@@ -227,7 +225,7 @@ export class VendorAccountController {
       extractUserAgent(req),
     );
 
-    this.authCookies.clearAuthCookies(res, 'vendor');
+    this.authCookies.clearAuthCookies(res);
 
     return null;
   }

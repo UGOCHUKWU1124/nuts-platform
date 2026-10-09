@@ -19,14 +19,37 @@ export class OutboxRelay {
     private readonly rabbitmq: RabbitMQService,
   ) {}
 
+  private hasPendingEvents = true;
+  private lastCheckedAt = 0;
+  private readonly IDLE_POLL_INTERVAL_MS = 60_000;
+
   /**
-   * Polls the outbox_events table every 10 seconds for PENDING events when RabbitMQ is online.
-   * Atomically claims batches and relays them to RabbitMQ.
+   * Signals the relay that a new outbox event has been persisted.
+   * Wakes up the relay immediately without waiting for the interval ticker.
+   */
+  public notifyNewEvent(): void {
+    this.hasPendingEvents = true;
+    void this.processOutboxEvents();
+  }
+
+  /**
+   * Polls the outbox_events table for PENDING events when RabbitMQ is online.
+   * Uses adaptive backoff when idle and batches all updates into atomic operations.
    */
   @Interval(10000)
   async processOutboxEvents(): Promise<void> {
     if (this.isProcessing) return;
     if (!this.rabbitmq.isAvailable()) return;
+
+    const now = Date.now();
+    // If the outbox is known to be empty, avoid hammering the remote database every 10s
+    if (
+      !this.hasPendingEvents &&
+      now - this.lastCheckedAt < this.IDLE_POLL_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastCheckedAt = now;
     this.isProcessing = true;
 
     try {
@@ -51,38 +74,57 @@ export class OutboxRelay {
         take: 50,
       });
 
-      if (pendingEvents.length === 0) return;
+      if (pendingEvents.length === 0) {
+        this.hasPendingEvents = false;
+        return;
+      }
 
-      for (const event of pendingEvents) {
-        // Mark as processing
-        await this.prisma.outboxEvent.update({
-          where: { id: event.id },
-          data: { status: OutboxStatus.PROCESSING },
+      // 1. Atomically claim batch as PROCESSING in a single roundtrip
+      const eventIds = pendingEvents.map((e) => e.id);
+      await this.prisma.outboxEvent.updateMany({
+        where: { id: { in: eventIds } },
+        data: { status: OutboxStatus.PROCESSING },
+      });
+
+      // 2. Publish concurrently to RabbitMQ
+      const publishedIds: string[] = [];
+      const failedIds: string[] = [];
+
+      await Promise.all(
+        pendingEvents.map(async (event) => {
+          const success = await this.rabbitmq.publish(
+            event.eventType,
+            event.payload,
+          );
+          if (success) {
+            publishedIds.push(event.id);
+          } else {
+            failedIds.push(event.id);
+          }
+        }),
+      );
+
+      // 3. Batch settle successful publishes in a single updateMany
+      if (publishedIds.length > 0) {
+        await this.prisma.outboxEvent.updateMany({
+          where: { id: { in: publishedIds } },
+          data: {
+            status: OutboxStatus.PUBLISHED,
+            processedAt: new Date(),
+          },
         });
+      }
 
-        const success = await this.rabbitmq.publish(
-          event.eventType,
-          event.payload,
-        );
-
-        if (success) {
-          await this.prisma.outboxEvent.update({
-            where: { id: event.id },
-            data: {
-              status: OutboxStatus.PUBLISHED,
-              processedAt: new Date(),
-            },
-          });
-        } else {
-          await this.prisma.outboxEvent.update({
-            where: { id: event.id },
-            data: {
-              status: OutboxStatus.FAILED,
-              attempts: { increment: 1 },
-              lastError: 'RabbitMQ publish failed or disconnected',
-            },
-          });
-        }
+      // 4. Batch settle failed publishes with attempt increment
+      if (failedIds.length > 0) {
+        await this.prisma.outboxEvent.updateMany({
+          where: { id: { in: failedIds } },
+          data: {
+            status: OutboxStatus.FAILED,
+            attempts: { increment: 1 },
+            lastError: 'RabbitMQ publish failed or disconnected',
+          },
+        });
       }
     } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);

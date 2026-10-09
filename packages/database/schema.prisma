@@ -273,6 +273,7 @@ model ProductImage {
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([productId, isPrimary], map: "product_images_product_id_is_primary_idx")
+  @@index([productId, position])
   @@index([variantId])
   @@map("product_images")
 }

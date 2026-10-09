@@ -2,9 +2,14 @@
 
 import { useAuthStore } from "@/zustand/auth";
 import { useRouter } from "next/navigation";
-import { useEffect,type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 type Role = "user" | "admin" | "vendor";
+
+function hasActiveSessionCookie(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith("session_active="));
+}
 
 export function RoleGuardLayout({
   allow,
@@ -13,16 +18,23 @@ export function RoleGuardLayout({
   allow: Role[];
   children: ReactNode;
 }) {
-  const { isAuthenticated, isInitialized, role, status, hydrateFromCookies } = useAuthStore();
+  const { isAuthenticated, isInitialized, role, status, hydrateFromCookies } =
+    useAuthStore();
   const router = useRouter();
+
+  const isHydrating =
+    !isInitialized ||
+    status === "hydrating" ||
+    status === "unknown";
 
   useEffect(() => {
     // Wait for session hydration to complete before making any redirect decisions.
-    // Without this, a page reload would see isAuthenticated=false before
-    // hydrateFromCookies/fetchUser runs and incorrectly redirect to login.
-    if (!isInitialized || status === "unavailable") return;
+    if (isHydrating || status === "unavailable") return;
 
     if (!isAuthenticated) {
+      // If a session cookie is present, do not redirect while hydration catches up
+      if (hasActiveSessionCookie()) return;
+
       if (allow.includes("admin")) {
         router.replace("/auth/admin/login");
       } else if (allow.includes("vendor")) {
@@ -39,18 +51,26 @@ export function RoleGuardLayout({
         router.replace("/");
       }
     }
-  }, [isAuthenticated, isInitialized, role, status, allow, router]);
+  }, [isAuthenticated, isHydrating, isInitialized, role, status, allow, router]);
 
-  // Show nothing until the auth store has finished initializing
-  if (!isInitialized) return null;
+  // Show nothing while hydrating or while a cookie session is being verified
+  if (isHydrating || (!isAuthenticated && hasActiveSessionCookie())) {
+    return null;
+  }
 
   if (status === "unavailable") {
     return (
       <main className="flex min-h-[50svh] items-center justify-center px-4">
-        <section role="alert" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-foreground">Can’t verify your session</h1>
+        <section
+          role="alert"
+          className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm"
+        >
+          <h1 className="text-lg font-semibold text-foreground">
+            Can’t verify your session
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Authentication is temporarily unavailable. Your session has not been signed out.
+            Authentication is temporarily unavailable. Your session has not been
+            signed out.
           </p>
           <button
             type="button"

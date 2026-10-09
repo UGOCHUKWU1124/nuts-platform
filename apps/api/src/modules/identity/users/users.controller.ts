@@ -11,7 +11,6 @@ import {
   Post,
   Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -36,7 +35,6 @@ import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorat
 import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import {
   extractIpAddress,
   extractUserAgent,
@@ -65,7 +63,6 @@ export class UsersController {
    * authentication-specific request handling out of the controller.
    */
   @Get()
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth('JWT-auth')
   @Message('Profile retrieved successfully')
@@ -93,7 +90,6 @@ export class UsersController {
    * IP address and user-agent are passed to the service for audit logging.
    */
   @Patch()
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth('JWT-auth')
   @Message('Profile updated successfully')
@@ -136,7 +132,6 @@ export class UsersController {
    * hashing the replacement password, and invalidating refresh sessions.
    */
   @Patch('password')
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
@@ -179,7 +174,6 @@ export class UsersController {
    * account operations such as deactivation.
    */
   @Post(['deactivate/otp', 'otp/request'])
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
@@ -209,7 +203,6 @@ export class UsersController {
    * because cookies are an HTTP concern, not a service/database concern.
    */
   @Patch('deactivate')
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @OtpRequired()
   @ApiBearerAuth('JWT-auth')
@@ -241,7 +234,7 @@ export class UsersController {
       extractUserAgent(req),
     );
 
-    this.authCookies.clearAuthCookies(res, 'user');
+    this.authCookies.clearAuthCookies(res);
 
     return result;
   }
@@ -287,7 +280,6 @@ export class UsersController {
    * retain stale authentication state.
    */
   @Delete('delete')
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
@@ -323,7 +315,7 @@ export class UsersController {
 
     // Prevent the browser from retaining authentication cookies
     // after the underlying account has been permanently removed.
-    this.authCookies.clearAuthCookies(res, 'user');
+    this.authCookies.clearAuthCookies(res);
 
     return null;
   }
@@ -369,7 +361,6 @@ export class UsersController {
    * - Total wallet credits earned via referrals
    */
   @Get('referral/stats')
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @ApiBearerAuth('JWT-auth')
   @Message('Referral stats retrieved successfully')

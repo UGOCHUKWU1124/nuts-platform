@@ -11,7 +11,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 
 import {
@@ -31,7 +30,6 @@ import {
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 
 import { CartService } from './cart.service';
 
@@ -49,7 +47,6 @@ import { UpdateCartItemResponseDto } from './dto/responses/update-cart-item.resp
 @ApiTags('CART')
 @ApiBearerAuth('JWT-auth')
 @Controller('cart')
-@UseGuards(JwtAuthGuard)
 @Roles(ROLE.USER)
 export class CartController {
   constructor(private readonly cartService: CartService) {}

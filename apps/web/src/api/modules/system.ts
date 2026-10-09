@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi } from "@/api/core/client";
 
 export interface CacheStatsResponse {
   connected: boolean;
@@ -17,24 +17,24 @@ export interface AdminSearchResponse {
 
 export const adminSystemService = {
   getCacheStats() {
-    return api.get<CacheStatsResponse>("/admin/cache/stats").catch(() => ({
+    return adminApi.get<CacheStatsResponse>("/admin/cache/stats").catch(() => ({
       data: { connected: true, totalKeys: 0, memoryUsed: "Redis in-memory store" } as CacheStatsResponse,
     }));
   },
   flushAllCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return adminApi.get<{ message: string }>("/admin/cache/flush");
   },
   clearCategoryCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return adminApi.get<{ message: string }>("/admin/cache/flush");
   },
   clearProductCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return adminApi.get<{ message: string }>("/admin/cache/flush");
   },
   clearAllCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return adminApi.get<{ message: string }>("/admin/cache/flush");
   },
   globalSearch(q: string) {
-    return api.get<AdminSearchResponse>("/admin/search", { params: { q } });
+    return adminApi.get<AdminSearchResponse>("/admin/search", { params: { q } });
   },
   reindexSearch() {
     return Promise.resolve({
@@ -42,7 +42,7 @@ export const adminSystemService = {
     });
   },
   getSearchStatus() {
-    return api.get<{ ready: boolean; totalDocuments?: number }>("/admin/search/status").catch(() => ({
+    return adminApi.get<{ ready: boolean; totalDocuments?: number }>("/admin/search/status").catch(() => ({
       data: { ready: true, totalDocuments: 0 },
     }));
   },

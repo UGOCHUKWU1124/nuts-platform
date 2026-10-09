@@ -12,6 +12,7 @@ import { formatPrice } from "@/lib/util";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { ArrowRight,Heart,ShoppingBag,Trash2 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
+import { useAuthStore } from "@/zustand/auth";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -28,6 +29,10 @@ export function WishlistPageView({ initialItems, categories }: WishlistPageViewP
   const { addItem: addToCart } = useCart();
 
   const handleAddToCart = (item: (typeof items)[0]) => {
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      return;
+    }
     addToCart.mutate(
       {
         productId: item.productId,

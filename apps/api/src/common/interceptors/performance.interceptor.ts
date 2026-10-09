@@ -22,8 +22,13 @@ export class PerformanceInterceptor implements NestInterceptor {
     // Exclude query values so searches and other user input never enter logs.
     const url = request.path;
 
-    // Suppress routine health check probes from polluting application logs
-    if (url?.includes('/health')) {
+    // Suppress routine health checks and long-lived streaming endpoints (SSE / events) from request-duration logs
+    const isSseStream =
+      url?.includes('/sse') ||
+      url?.includes('/stream') ||
+      request.headers?.accept?.includes('text/event-stream');
+
+    if (url?.includes('/health') || isSseStream) {
       return next.handle();
     }
 

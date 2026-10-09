@@ -7,7 +7,7 @@ import { useAuthStore } from "@/zustand/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -21,7 +21,17 @@ type AdminLoginFormData = z.infer<typeof adminLoginSchema>;
 
 function AdminLoginForm() {
   const router = useRouter();
-  const { login } = useAuthStore();
+  const { login, isAuthenticated, isInitialized, role, user } = useAuthStore();
+
+  useEffect(() => {
+    if (
+      isInitialized &&
+      isAuthenticated &&
+      (role === "admin" || user?.role === "admin")
+    ) {
+      router.replace("/admin");
+    }
+  }, [isInitialized, isAuthenticated, role, user, router]);
 
   const methods = useForm<AdminLoginFormData>({
     resolver: zodResolver(adminLoginSchema),
@@ -50,7 +60,7 @@ function AdminLoginForm() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
           <ShieldCheck className="h-6 w-6" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Admin Portal</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Admin Sign In</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">Sign in to access the admin dashboard</p>
       </div>
 

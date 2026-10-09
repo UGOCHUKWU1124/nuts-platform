@@ -546,11 +546,23 @@ export class ProductsService {
     private readonly auditLog: AuditLogService,
   ) {}
 
+  private categoryLookupCache: {
+    map: CategoryLookupMap;
+    expiresAt: number;
+  } | null = null;
+
   /**
    * Cached map of all active categories for O(1) in-memory ancestor resolution.
    * Eliminates recursive N+1 database queries when rendering product lists.
    */
   async getCategoryLookupMap(): Promise<CategoryLookupMap> {
+    if (
+      this.categoryLookupCache &&
+      this.categoryLookupCache.expiresAt > Date.now()
+    ) {
+      return this.categoryLookupCache.map;
+    }
+
     const cacheKey = 'categories:lookup:map:v2';
     const list = await this.cacheService.wrap(cacheKey, 300, async () => {
       return this.prisma.category.findMany({
@@ -569,6 +581,12 @@ export class ProductsService {
         map.set(cat.id, cat);
       }
     }
+
+    this.categoryLookupCache = {
+      map,
+      expiresAt: Date.now() + 60_000,
+    };
+
     return map;
   }
 
@@ -2935,12 +2953,33 @@ export class ProductsService {
       resolvedId = found.id;
     }
 
+    // High-performance O(1) in-memory resolution from cached category map
+    try {
+      const categoryMap = await this.getCategoryLookupMap();
+      if (categoryMap.has(resolvedId)) {
+        const descendants: string[] = [resolvedId];
+        const queue: string[] = [resolvedId];
+        while (queue.length > 0) {
+          const currentId = queue.shift()!;
+          for (const cat of categoryMap.values()) {
+            if (cat.parentId === currentId && !descendants.includes(cat.id)) {
+              descendants.push(cat.id);
+              queue.push(cat.id);
+            }
+          }
+        }
+        return descendants;
+      }
+    } catch {
+      // Fallback to recursive CTE below
+    }
+
     try {
       const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
         WITH RECURSIVE category_descendants AS (
           SELECT id
           FROM "categories"
-          WHERE id = ${resolvedId}::uuid
+          WHERE id = ${resolvedId}
 
           UNION ALL
 
@@ -3362,6 +3401,8 @@ export class ProductsService {
       exactKeys.push(`product:id:${params.id}`);
     }
 
+    this.categoryLookupCache = null;
+
     const operations = [
       ...exactKeys.map((key) => this.cacheService.del(key)),
 
@@ -3384,6 +3425,7 @@ export class ProductsService {
        * Invalidate category trees and listings so product counts remain accurate.
        */
       this.cacheService.delByPattern('category:*'),
+      this.cacheService.delByPattern('categories:*'),
     ];
 
     if (params.vendorStoreSlug) {

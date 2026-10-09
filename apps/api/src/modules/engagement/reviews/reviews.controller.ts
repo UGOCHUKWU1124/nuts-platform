@@ -7,7 +7,6 @@ import {
   HttpStatus,
   Param,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -27,7 +26,6 @@ import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import {
   CreateReviewDto,
   ProductReviewsResponseDto,
@@ -40,7 +38,6 @@ import { ReviewsService } from './reviews.service';
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @Post()
   @ApiBearerAuth('JWT-auth')
@@ -86,7 +83,6 @@ export class ReviewsController {
     return this.reviewsService.findByProduct(productId);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Roles(ROLE.USER)
   @Delete(':id')
   @ApiBearerAuth('JWT-auth')

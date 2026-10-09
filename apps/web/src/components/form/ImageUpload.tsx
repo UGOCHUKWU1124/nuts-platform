@@ -1,7 +1,7 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { api } from "@/api/core/client";
+import { adminApi, vendorApi } from "@/api/core/client";
 import { Label } from "@/component/ui/label";
 import { cn } from "@/lib/util";
 import {
@@ -44,6 +44,7 @@ interface ImageUploadProps {
   /** Max images allowed — server hard-caps at 6 */
   maxImages?: number;
   single?: boolean;
+  authRole: "admin" | "vendor";
 }
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -70,7 +71,9 @@ export function ImageUpload({
   aspectHint,
   maxImages = 6,
   single = false,
+  authRole,
 }: ImageUploadProps) {
+  const api = authRole === "admin" ? adminApi : vendorApi;
   const { setValue, watch } = useFormContext();
   const fieldValue = watch(name);
   const uploadedUrls: string[] = Array.isArray(fieldValue)

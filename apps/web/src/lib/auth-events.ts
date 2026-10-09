@@ -8,7 +8,8 @@
 export type AuthEvent =
   | { type: 'LOGOUT'; role?: string }
   | { type: 'SESSION_EXPIRED'; role?: string }
-  | { type: 'LOGIN'; role: string };
+  | { type: 'LOGIN'; role: string }
+  | { type: 'SESSION_REFRESHED'; role: string; user?: unknown };
 
 type AuthEventListener = (event: AuthEvent) => void;
 
@@ -39,6 +40,11 @@ class AuthBroadcastManager {
         // Fallback or ignore
       }
     }
+  }
+
+  public publish(event: AuthEvent): void {
+    this.broadcast(event);
+    this.notifyListeners(event);
   }
 
   public subscribe(listener: AuthEventListener): () => void {

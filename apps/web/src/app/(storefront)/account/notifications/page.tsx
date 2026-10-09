@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 export default function AccountNotificationsPage() {
   return (
     <NotificationsManager
-      portalTitle="Account Notifications"
-      portalSubtitle="Stay updated on order status, deliveries, promotions, and account security."
+      title="Account Notifications"
+      subtitle="Stay updated on order status, deliveries, promotions, and account security."
       backHref="/account"
       backLabel="Account"
     />

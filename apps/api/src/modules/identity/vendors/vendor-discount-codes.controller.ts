@@ -11,7 +11,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -25,6 +24,8 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 
 import { DiscountCodeService } from '@api/modules/promotions/discount-code.service';
 import {
@@ -32,16 +33,13 @@ import {
   DiscountCodeResponseDto,
   UpdateVendorDiscountCodeDto,
 } from '@api/modules/promotions/dto';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - DISCOUNT CODES')
 @Controller(['vendors/discounts', 'dashboard/discounts'])
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 @ApiBearerAuth('JWT-auth')
 export class VendorDiscountCodesController {
   constructor(private readonly discountCodeService: DiscountCodeService) {}

@@ -6,18 +6,15 @@ import {
   Param,
   Patch,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NotificationType, ROLE } from '@prisma/client';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { NotificationsService } from './notifications.service';
 
 @ApiTags('NOTIFICATIONS')
-@UseGuards(JwtAuthGuard)
 @Controller('notifications')
 @Roles(ROLE.USER, ROLE.ADMIN, ROLE.VENDOR)
 export class NotificationsController {

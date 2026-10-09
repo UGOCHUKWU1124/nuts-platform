@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import Redis from 'ioredis';
 
@@ -11,6 +11,8 @@ import Redis from 'ioredis';
  */
 @Injectable()
 export class RedisThrottlerStorage implements ThrottlerStorage {
+  private readonly logger = new Logger(RedisThrottlerStorage.name);
+
   private static readonly RATE_LIMIT_SCRIPT = `
     local current = redis.call('INCR', KEYS[1])
     if current == 1 then
@@ -40,24 +42,41 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
     const redisKey = `ratelimit:${throttlerName}:${key}`;
     const blockSeconds = Math.ceil(blockDuration / 1000);
 
-    const [totalHitsRaw, timeToExpireRaw] = (await this.redis.eval(
-      RedisThrottlerStorage.RATE_LIMIT_SCRIPT,
-      1,
-      redisKey,
-      String(ttl),
-      String(blockSeconds),
-      String(limit),
-    )) as [number, number];
+    try {
+      const [totalHitsRaw, timeToExpireRaw] = (await this.redis.eval(
+        RedisThrottlerStorage.RATE_LIMIT_SCRIPT,
+        1,
+        redisKey,
+        String(ttl),
+        String(blockSeconds),
+        String(limit),
+      )) as [number, number];
 
-    const totalHits = Number(totalHitsRaw ?? 1);
-    const timeToExpire = Math.max(0, Number(timeToExpireRaw ?? 0));
-    const isBlocked = totalHits > limit;
+      const totalHits = Number(totalHitsRaw ?? 1);
+      const timeToExpire = Math.max(0, Number(timeToExpireRaw ?? 0));
+      const isBlocked = totalHits > limit;
 
-    return {
-      totalHits,
-      timeToExpire,
-      isBlocked,
-      timeToBlockExpire: isBlocked ? blockSeconds : 0,
-    };
+      return {
+        totalHits,
+        timeToExpire,
+        isBlocked,
+        timeToBlockExpire: isBlocked ? blockSeconds : 0,
+      };
+    } catch (error) {
+      // Production Resiliency: Fail OPEN if Redis rate limit check fails or times out.
+      // An infrastructure hiccup should never crash user HTTP requests with 500s.
+      this.logger.warn(
+        `Rate limit check failed for "${redisKey}": ${
+          error instanceof Error ? error.message : String(error)
+        }. Failing open.`,
+      );
+
+      return {
+        totalHits: 1,
+        timeToExpire: 0,
+        isBlocked: false,
+        timeToBlockExpire: 0,
+      };
+    }
   }
 }

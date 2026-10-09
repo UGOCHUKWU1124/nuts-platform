@@ -1,12 +1,21 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ROLE } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import type { StringValue } from 'ms';
+import type Redis from 'ioredis';
 
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { REDIS_CLIENT } from '@api/modules/infrastructure/redis/redis.constants';
+import { AuthSessionService } from './auth-session.service';
 
 import {
   ADMIN_REFRESH_SELECT,
@@ -29,6 +38,9 @@ type RotateRefreshSession = (
 
 @Injectable()
 export class RefreshSessionService {
+  private readonly logger = new Logger(RefreshSessionService.name);
+  private static readonly GRACE_PERIOD_SECONDS = 15; // 15-second network race window (RFC 6819 standard)
+
   private readonly jwtIssuer: string;
   private readonly accessAudience: string;
   private readonly refreshAudience: string;
@@ -41,6 +53,8 @@ export class RefreshSessionService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     configService: ConfigService,
+    @Optional() private readonly authSessionService?: AuthSessionService,
+    @Optional() @Inject(REDIS_CLIENT) private readonly redis?: Redis,
   ) {
     this.jwtIssuer = configService.getOrThrow<string>('JWT_ISSUER');
     this.accessAudience = configService.getOrThrow<string>(
@@ -145,6 +159,7 @@ export class RefreshSessionService {
         where: activeOnly ? { id: userId, isActive: true } : { id: userId },
         data,
       });
+      await this.authSessionService?.invalidateAccountStamp(userId, role);
       return;
     }
 
@@ -153,6 +168,7 @@ export class RefreshSessionService {
         where: activeOnly ? { id: userId, isActive: true } : { id: userId },
         data,
       });
+      await this.authSessionService?.invalidateAccountStamp(userId, role);
       return;
     }
 
@@ -160,6 +176,7 @@ export class RefreshSessionService {
       where: activeOnly ? { id: userId, isActive: true } : { id: userId },
       data,
     });
+    await this.authSessionService?.invalidateAccountStamp(userId, role);
   }
 
   async revokeUserSession(userId: string, sessionId: string): Promise<void> {
@@ -193,6 +210,9 @@ export class RefreshSessionService {
         data: { refreshToken: null, refreshTokenId: null },
       });
     });
+
+    await this.authSessionService?.invalidateAccountStamp(userId, ROLE.USER);
+    await this.authSessionService?.invalidateSession(sessionId);
   }
 
   async revokeUserSessionByRefreshToken(
@@ -343,9 +363,31 @@ export class RefreshSessionService {
       throw new UnauthorizedException('Invalid refresh session');
     }
 
+    const graceKey = `auth:grace:user:${payload.sub}:${payload.refreshId}`;
+
     if (session.refreshTokenId !== payload.refreshId || !session.refreshToken) {
+      // 1. Concurrency-Safe Grace Period Check (Tier-1 RFC 6819)
+      if (this.redis) {
+        try {
+          const cached = await this.redis.get(graceKey);
+          if (cached) {
+            this.logger.log(
+              `Grace period refresh replay accepted for user ${payload.sub}`,
+            );
+            return JSON.parse(cached) as AuthSession;
+          }
+        } catch (err) {
+          this.logger.warn(`Grace cache read error: ${(err as Error).message}`);
+        }
+      }
+
+      // 2. Token reuse detected outside grace window -> Revoke session family!
+      this.logger.warn(
+        `Token reuse detected for user ${payload.sub} on session ${session.id}. Revoking session.`,
+      );
+      await this.revokeUserSession(user.id, session.id);
       throw new UnauthorizedException(
-        'Refresh session has already been rotated',
+        'Security violation: refresh token reuse detected',
       );
     }
 
@@ -406,7 +448,26 @@ export class RefreshSessionService {
       );
     }
 
-    return { user: this.toAuthUserDto(user), tokens };
+    const sessionResult: AuthSession = {
+      user: this.toAuthUserDto(user),
+      tokens,
+    };
+
+    // Cache in grace period window so concurrent requests don't fail
+    if (this.redis) {
+      try {
+        await this.redis.set(
+          graceKey,
+          JSON.stringify(sessionResult),
+          'EX',
+          RefreshSessionService.GRACE_PERIOD_SECONDS,
+        );
+      } catch (err) {
+        this.logger.warn(`Grace cache write error: ${(err as Error).message}`);
+      }
+    }
+
+    return sessionResult;
   }
 
   private async rotateRefreshSession(
@@ -424,9 +485,31 @@ export class RefreshSessionService {
       throw new UnauthorizedException('Invalid refresh session');
     }
 
+    const graceKey = `auth:grace:${payload.role}:${payload.sub}:${payload.refreshId}`;
+
     if (account.refreshTokenId !== payload.refreshId) {
+      // 1. Concurrency-Safe Grace Period Check
+      if (this.redis) {
+        try {
+          const cached = await this.redis.get(graceKey);
+          if (cached) {
+            this.logger.log(
+              `Grace period refresh replay accepted for ${payload.role} ${payload.sub}`,
+            );
+            return JSON.parse(cached) as AuthSession;
+          }
+        } catch (err) {
+          this.logger.warn(`Grace cache read error: ${(err as Error).message}`);
+        }
+      }
+
+      // 2. Token reuse detected outside grace window -> Revoke session family!
+      this.logger.warn(
+        `Token reuse detected for ${payload.role} ${payload.sub}. Revoking all sessions.`,
+      );
+      await this.revokeSession(payload.sub, payload.role, true);
       throw new UnauthorizedException(
-        'Refresh session has already been rotated',
+        'Security violation: refresh token reuse detected',
       );
     }
 
@@ -457,7 +540,25 @@ export class RefreshSessionService {
       );
     }
 
-    return { user: this.toAuthUserDto(account), tokens };
+    const sessionResult: AuthSession = {
+      user: this.toAuthUserDto(account),
+      tokens,
+    };
+
+    if (this.redis) {
+      try {
+        await this.redis.set(
+          graceKey,
+          JSON.stringify(sessionResult),
+          'EX',
+          RefreshSessionService.GRACE_PERIOD_SECONDS,
+        );
+      } catch (err) {
+        this.logger.warn(`Grace cache write error: ${(err as Error).message}`);
+      }
+    }
+
+    return sessionResult;
   }
 
   private async generateTokens(
