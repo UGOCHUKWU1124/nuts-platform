@@ -9,7 +9,7 @@ import { Input } from "@/component/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Search,Sparkles,Store,X } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useDeferredValue,useMemo,useState } from "react";
+import { useDeferredValue, useState } from "react";
 
 const EMPTY_VENDORS: VendorResponseDto[] = [];
 
@@ -47,38 +47,29 @@ export function VendorsPageView({
     (c) => !c.parentId
   );
 
-  // If the server's first directory request failed, recover in the browser.
-  // A successful empty directory is also confirmed by this one request.
-  const vendorsQuery = useQuery({
-    queryKey: ["vendors-public-list", "all"],
-    queryFn: async () => (await publicVendorService.list()).data,
-    enabled: vendorsList.length === 0,
-    staleTime: 1000 * 60 * 10,
-  });
-  const vendorDirectory = useMemo(
-    () => vendorsList.length > 0 ? vendorsList : vendorsQuery.data ?? [],
-    [vendorsList, vendorsQuery.data],
-  );
-  const isLoadingVendors = vendorsList.length === 0 && vendorsQuery.isLoading;
+  const isFiltered = selectedCategoryId !== "ALL" || search.length > 0;
 
-  // The server page supplies the complete directory with each vendor's root
-  // category memberships. Filtering that payload locally keeps these controls
-  // immediate and avoids a round trip for every category/search change.
-  const displayedVendors = useMemo(() => {
-    const normalizedSearch = search.toLocaleLowerCase();
-    return vendorDirectory.filter((vendor) => {
-      const matchesCategory =
-        selectedCategoryId === "ALL" ||
-        vendor.categories?.some(
-          (category: { id: string }) => category.id === selectedCategoryId,
-        );
-      const matchesSearch =
-        !normalizedSearch ||
-        vendor.storeName?.toLocaleLowerCase().includes(normalizedSearch) ||
-        vendor.storeDescription?.toLocaleLowerCase().includes(normalizedSearch);
-      return matchesCategory && matchesSearch;
-    });
-  }, [vendorDirectory, search, selectedCategoryId]);
+  // Live database-backed query for vendor directory with debounced search & category filtering
+  const vendorsQuery = useQuery({
+    queryKey: ["vendors-public-list", selectedCategoryId, search],
+    queryFn: async ({ signal }) => {
+      const res = await publicVendorService.list(
+        {
+          categoryId: selectedCategoryId !== "ALL" ? selectedCategoryId : undefined,
+          search: search || undefined,
+          limit: 50,
+        },
+        signal,
+      );
+      return res.data ?? [];
+    },
+    initialData: !isFiltered && vendorsList.length > 0 ? vendorsList : undefined,
+    placeholderData: (previousData) => previousData,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const displayedVendors = vendorsQuery.data ?? (isFiltered ? [] : vendorsList);
+  const isLoadingVendors = vendorsQuery.isLoading;
 
   return (
     <CustomerLayout categories={categories}>

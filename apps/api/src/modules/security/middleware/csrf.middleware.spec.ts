@@ -95,4 +95,108 @@ describe('CsrfMiddleware', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(status).not.toHaveBeenCalled();
   });
+
+  it('allows unauthenticated login from a trusted origin without a pre-existing CSRF cookie', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/auth/login',
+      configurable: true,
+    });
+    req.cookies = {};
+    const cookieMock = jest.fn();
+    const setHeaderMock = jest.fn();
+    res.cookie = cookieMock;
+    res.setHeader = setHeaderMock;
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+    expect(cookieMock).toHaveBeenCalledWith(
+      'csrf_token',
+      expect.any(String),
+      expect.any(Object),
+    );
+    expect(setHeaderMock).toHaveBeenCalledWith(
+      'x-csrf-token',
+      expect.any(String),
+    );
+  });
+
+  it('rejects unauthenticated login from an untrusted origin', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/auth/login',
+      configurable: true,
+    });
+    req.headers = { ...req.headers, origin: 'https://evil.example.com' };
+    middleware.use(req as Request, res as Response, next);
+    expect(status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('sets SameSite=None and Secure when COOKIE_SAME_SITE is set to none', () => {
+    process.env.COOKIE_SAME_SITE = 'none';
+    const noneMiddleware = new CsrfMiddleware([
+      'https://nuts-staging.onrender.com',
+    ]);
+    req.headers = {
+      origin: 'https://nuts-staging.onrender.com',
+      host: 'nuts-api-staging.onrender.com',
+    };
+    req.method = 'GET';
+    const cookieMock = jest.fn();
+    res.cookie = cookieMock;
+    res.setHeader = jest.fn();
+
+    noneMiddleware.use(req as Request, res as Response, next);
+    expect(cookieMock).toHaveBeenCalledWith(
+      'csrf_token',
+      expect.any(String),
+      expect.objectContaining({
+        sameSite: 'none',
+        secure: true,
+      }),
+    );
+    delete process.env.COOKIE_SAME_SITE;
+  });
+
+  it('allows unauthenticated login with trailing slash from a trusted origin', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/auth/login/',
+      configurable: true,
+    });
+    req.cookies = {};
+    res.cookie = jest.fn();
+    res.setHeader = jest.fn();
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  it('allows payment webhooks without CSRF cookies from trusted origin', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/payments/webhook',
+      configurable: true,
+    });
+    req.cookies = {};
+    res.cookie = jest.fn();
+    res.setHeader = jest.fn();
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  it('allows vendor and admin auth actions across versioned paths', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v2/vendors/auth/register',
+      configurable: true,
+    });
+    req.cookies = {};
+    res.cookie = jest.fn();
+    res.setHeader = jest.fn();
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
 });

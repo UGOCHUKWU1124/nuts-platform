@@ -11,8 +11,6 @@ export default async function ProductCatalogPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    category?: string;
-    categoryId?: string;
     search?: string;
     sort?: string;
     minPrice?: string;
@@ -21,13 +19,11 @@ export default async function ProductCatalogPage({
   }>;
 }) {
   const params = await searchParams;
-  const categoryId = params.categoryId || params.category;
 
   const [categories, productsResult] = await Promise.all([
     serverGetCategories(),
     serverGetProducts({
       limit: 24,
-      categoryId,
       search: params.search,
       sort: params.sort || "newest",
       minPrice: params.minPrice,
@@ -42,7 +38,6 @@ export default async function ProductCatalogPage({
       initialProducts={productsResult.data}
       initialMeta={productsResult.meta ?? undefined}
       initialFilters={{
-        categoryId: categoryId || "",
         search: params.search || "",
         sort: params.sort || "newest",
         minPrice: params.minPrice || "",
