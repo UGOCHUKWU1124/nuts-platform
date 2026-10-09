@@ -3,9 +3,9 @@ name: CD — Multi-Environment Deployment
 on:
   push:
     branches:
-      - development
       - staging
       - main
+  workflow_dispatch:
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -27,12 +27,9 @@ jobs:
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
             echo "docker_tag=latest" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "staging" ]; then
+          else
             echo "env_name=staging" >> $GITHUB_OUTPUT
             echo "docker_tag=staging" >> $GITHUB_OUTPUT
-          else
-            echo "env_name=development" >> $GITHUB_OUTPUT
-            echo "docker_tag=dev" >> $GITHUB_OUTPUT
           fi
 
   deploy:
