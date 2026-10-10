@@ -133,9 +133,7 @@ export class CsrfMiddleware implements NestMiddleware {
       sameSiteEnv &&
       ['lax', 'strict', 'none'].includes(sameSiteEnv.toLowerCase())
         ? sameSiteEnv.toLowerCase()
-        : isProduction
-          ? 'strict'
-          : 'lax'
+        : 'lax'
     ) as 'lax' | 'strict' | 'none';
 
     const isSecure =
@@ -249,13 +247,15 @@ export class CsrfMiddleware implements NestMiddleware {
       return true;
     }
 
-    // 2. Unauthenticated authentication actions across any API version prefix (/api/v1, /api/v2, etc.)
-    const isPublicAuthAction =
-      /\/(auth|vendors\/auth|admin\/auth)\/(login|register|forgot-password|reset-password|verify-otp|resend-otp)$/.test(
+    // 2. Authentication lifecycle actions across any API version prefix (/api/v1, /api/v2, etc.)
+    // Origin is already strictly verified above. Requiring a pre-existing CSRF cookie locks out
+    // legitimate users during initial session establishment, token refresh, and logout.
+    const isAuthLifecycleAction =
+      /\/(auth|vendors\/auth|admin\/auth)\/(login|register|refresh|logout|setup|forgot-password|reset-password|verify-otp|resend-otp|otp|request-otp|register\/otp)($|\/.*)/.test(
         cleanPath,
       );
 
-    if (isPublicAuthAction) {
+    if (isAuthLifecycleAction) {
       return true;
     }
 

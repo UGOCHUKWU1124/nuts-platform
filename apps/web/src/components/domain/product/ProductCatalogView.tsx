@@ -13,9 +13,10 @@ import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { Loader2, Search, Store, X } from "lucide-react";
+import { CategoryFilterDrawer } from "@/component/category/CategoryFilterDrawer";
+import { Loader2, Search, SlidersHorizontal, Store, X } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
 
@@ -59,6 +60,8 @@ export function ProductCatalogView({
   const [minPrice, setMinPrice] = useState(initialFilters?.minPrice || "");
   const [maxPrice, setMaxPrice] = useState(initialFilters?.maxPrice || "");
   const [sortBy, setSortBy] = useState(initialFilters?.sort || "newest");
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   const allCategories = initialCategories ?? EMPTY_CATEGORIES;
   const minPriceValue = minPrice.trim() ? Number(minPrice) : undefined;
@@ -112,6 +115,25 @@ export function ProductCatalogView({
 
   const rawProducts = data?.pages ? data.pages.flat() : initialProducts;
 
+  // Auto-load next page when user scrolls near the bottom of the feed
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "350px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   const handleResetFilters = () => {
     setMinPrice("");
     setMaxPrice("");
@@ -144,24 +166,39 @@ export function ProductCatalogView({
             )}
           </div>
 
-          {/* Quick Search Input */}
-          <div className="relative w-full max-w-xs">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search products..."
-              className="h-10 rounded-full border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 pl-10 pr-9 text-sm focus:bg-white dark:focus:bg-black"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black dark:hover:text-white"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+          {/* Quick Search & Filters Controls */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search products..."
+                className="h-10 rounded-full border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 pl-10 pr-9 text-sm focus:bg-white dark:focus:bg-black"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black dark:hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsFilterDrawerOpen(true)}
+              className="h-10 shrink-0 rounded-full border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-4 text-xs sm:text-sm font-semibold text-black dark:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all flex items-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span>Filters</span>
+              {hasActiveFilters && (
+                <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />
+              )}
+            </Button>
           </div>
         </div>
 
@@ -307,28 +344,39 @@ export function ProductCatalogView({
               ))}
             </div>
 
-            {/* Continuous Discovery Load More Action */}
-            {hasNextPage && (
-              <div className="flex justify-center pt-6 pb-12">
-                <button
-                  type="button"
-                  disabled={isFetchingNextPage}
-                  onClick={() => fetchNextPage()}
-                  className="inline-flex items-center gap-2 rounded-full border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-black px-8 py-3 text-sm font-semibold text-black dark:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {isFetchingNextPage ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin text-black dark:text-white" />
-                      <span>Loading more...</span>
-                    </>
-                  ) : (
-                    <span>Load More Products</span>
-                  )}
-                </button>
-              </div>
-            )}
+            {/* Automatic Continuous Scroll Sentinel & Loading Indicator */}
+            <div
+              ref={loadMoreSentinelRef}
+              className="flex justify-center items-center py-8 min-h-[4rem]"
+            >
+              {isFetchingNextPage ? (
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-neutral-500 animate-pulse">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-400" />
+                  <span>Loading products...</span>
+                </div>
+              ) : hasNextPage ? (
+                <div className="h-6" aria-hidden="true" />
+              ) : rawProducts.length > 0 ? (
+                <p className="text-xs text-neutral-400">All products loaded</p>
+              ) : null}
+            </div>
           </div>
         )}
+
+        {/* Slide-over Filter Drawer */}
+        <CategoryFilterDrawer
+          isOpen={isFilterDrawerOpen}
+          onClose={() => setIsFilterDrawerOpen(false)}
+          minPrice={minPrice}
+          maxPrice={maxPrice}
+          onMinPriceChange={(val) => setMinPrice(val)}
+          onMaxPriceChange={(val) => setMaxPrice(val)}
+          inStock={inStock}
+          onInStockChange={(val) => setInStock(val)}
+          sortBy={sortBy}
+          onSortByChange={(val) => setSortBy(val)}
+          onReset={handleResetFilters}
+        />
       </div>
     </CustomerLayout>
   );

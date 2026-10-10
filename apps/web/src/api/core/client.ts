@@ -153,6 +153,16 @@ async function executeTokenRefresh(
       { withCredentials: true, headers },
     );
 
+    const freshCsrf =
+      res.headers?.["x-csrf-token"] ||
+      res.headers?.["X-CSRF-TOKEN"] ||
+      (typeof res.headers?.get === "function"
+        ? res.headers.get("x-csrf-token")
+        : undefined);
+    if (freshCsrf && typeof freshCsrf === "string") {
+      setCsrfToken(freshCsrf);
+    }
+
     const data = res.data?.data || res.data;
     if (!data?.accessToken) {
       return { success: false, reason: "invalid-response" };
@@ -169,7 +179,7 @@ async function executeTokenRefresh(
     };
   } catch (error) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const hadToken = Boolean(getAuthToken(role));
       clearAuthTokens(role);
       markSessionUnauthenticated(role);

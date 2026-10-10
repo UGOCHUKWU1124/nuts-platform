@@ -73,8 +73,8 @@ RUN apk add --no-cache dumb-init curl openssl
 
 ENV NODE_ENV=production
 ENV PORT=3001
-ENV NODE_OPTIONS="--max-old-space-size=512"
-ENV UV_THREADPOOL_SIZE=16
+ENV NODE_OPTIONS="--max-old-space-size=350"
+ENV UV_THREADPOOL_SIZE=4
 
 # Copy required production node_modules and built output from builder
 COPY --from=builder /app/package*.json ./

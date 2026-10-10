@@ -476,20 +476,8 @@ export class OrdersService {
 
     const response = this.toCheckoutResponse(order);
 
-    /**
-     * Email is non-critical to checkout.
-     * Do not make the customer wait for email delivery.
-     */
-    this.sendOrderConfirmationEmail(userId, response).catch((error) => {
-      this.logger.error(
-        `Failed to send order confirmation email for ${order.id}`,
-        error,
-      );
-    });
-
     if (paymentInit) {
       response.authorizationUrl = paymentInit.authorizationUrl;
-      response.authorization_url = paymentInit.authorizationUrl;
       response.paymentId = paymentInit.paymentId;
       response.paystackAccessCode = paymentInit.accessCode ?? null;
       response.paymentReference = paymentInit.reference;
@@ -2370,104 +2358,6 @@ export class OrdersService {
   }
 
   // ---------------------------------------------------------------------------
-  // EMAIL
-  // ---------------------------------------------------------------------------
-
-  private async sendOrderConfirmationEmail(
-    userId: string,
-    order: OrderResponseDto | CheckoutResponseDto,
-  ): Promise<void> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-        select: {
-          email: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
-
-      if (!user) {
-        return;
-      }
-
-      const rawItems: unknown[] = Array.isArray(order.items) ? order.items : [];
-      const items = rawItems.map((value) => {
-        const rawItem = isRecord(value) ? value : {};
-        let productName = 'Unknown Product';
-        let variantName: string | undefined = undefined;
-
-        if (typeof rawItem.productName === 'string') {
-          productName = rawItem.productName;
-          variantName =
-            typeof rawItem.variantName === 'string'
-              ? rawItem.variantName
-              : undefined;
-        } else if (
-          isRecord(rawItem.productSnapshot) &&
-          typeof rawItem.productSnapshot.name === 'string'
-        ) {
-          productName = rawItem.productSnapshot.name;
-          if (
-            isRecord(rawItem.variantSnapshot) &&
-            Array.isArray(rawItem.variantSnapshot.options)
-          ) {
-            variantName = rawItem.variantSnapshot.options
-              .filter(
-                (option): option is { name: string; value: string } =>
-                  isRecord(option) &&
-                  typeof option.name === 'string' &&
-                  typeof option.value === 'string',
-              )
-              .map((option) => `${option.name}: ${option.value}`)
-              .join(', ');
-          }
-        }
-
-        return {
-          productName,
-          quantity: typeof rawItem.quantity === 'number' ? rawItem.quantity : 0,
-          price: typeof rawItem.unitPrice === 'number' ? rawItem.unitPrice : 0,
-          variantName,
-        };
-      });
-
-      await this.emailService.sendOrderConfirmation(user.email, {
-        orderNumber: order.orderNumber,
-
-        customerName:
-          `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
-          'Valued Customer',
-
-        customerEmail: user.email,
-
-        shippingAddress: order.shippingAddress ?? '',
-
-        totalAmount: order.totalAmount,
-
-        discountAmount: order.discountAmount,
-
-        discountCode: order.discountCode,
-
-        finalAmount: order.finalAmount,
-
-        currency: this.defaultCurrency,
-
-        createdAt: order.createdAt,
-
-        items,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to send order confirmation email for ${order.id}`,
-        error,
-      );
-    }
-  }
-
-  // ---------------------------------------------------------------------------
   // DOMAIN EVENTS
   // ---------------------------------------------------------------------------
 
@@ -2604,6 +2494,73 @@ export class OrdersService {
     } catch (error) {
       this.logger.error(
         `Failed to emit status event for order ${orderId}`,
+        error,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ORDER CONFIRMATION EMAIL
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Dispatches the official order confirmation email with generated PDF invoice.
+   *
+   * Crucial: This must only be invoked when payment has been successfully confirmed
+   * (e.g., transition to PROCESSING / payment SUCCESS), never during initial unpaid checkout.
+   */
+  async sendOrderConfirmationEmail(orderId: string): Promise<void> {
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          user: {
+            select: {
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          orderItems: {
+            include: {
+              product: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!order || !order.user) {
+        return;
+      }
+
+      const items = order.orderItems.map((item) => ({
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: Number(item.unitPrice),
+      }));
+
+      await this.emailService.sendOrderConfirmation(order.user.email, {
+        orderNumber: order.orderNumber,
+        customerName:
+          `${order.user.firstName ?? ''} ${order.user.lastName ?? ''}`.trim() ||
+          'Valued Customer',
+        customerEmail: order.user.email,
+        shippingAddress: order.shippingAddress ?? '',
+        totalAmount: Number(order.totalAmount),
+        discountAmount: Number(order.discountAmount),
+        discountCode: order.discountCode,
+        finalAmount: Number(order.finalAmount),
+        currency: this.defaultCurrency,
+        createdAt: order.createdAt,
+        items,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send order confirmation email for order ${orderId}`,
         error,
       );
     }
