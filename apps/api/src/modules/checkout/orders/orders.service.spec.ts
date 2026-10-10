@@ -22,6 +22,7 @@ describe('OrdersService', () => {
   let mockUsersService: any;
   let mockDiscountService: any;
   let mockPaymentsService: any;
+  let mockEmailService: any;
   let mockWalletService: any;
   let mockEventEmitter: any;
   let mockConfigService: any;
@@ -112,16 +113,18 @@ describe('OrdersService', () => {
       get: jest.fn(),
     };
 
+    mockEmailService = {
+      sendOrderConfirmation: jest.fn(),
+      sendOrderDelivered: jest.fn(),
+    };
+
     service = new OrdersService(
       mockPrisma,
       mockUsersService,
       mockDiscountService,
       {} as unknown as ReferralService,
       mockPaymentsService,
-      {
-        sendOrderConfirmation: jest.fn(),
-        sendOrderDelivered: jest.fn(),
-      } as unknown as EmailService,
+      mockEmailService,
       { log: jest.fn() } as unknown as AuditLogService,
       mockWalletService,
       mockEventEmitter,
@@ -278,6 +281,44 @@ describe('OrdersService', () => {
         expect.objectContaining({
           where: { id: 'pay-1' },
           data: { status: PaymentStatus.FAILED },
+        }),
+      );
+    });
+  });
+
+  describe('sendOrderConfirmationEmail', () => {
+    it('sends order confirmation with invoice when invoked for an order', async () => {
+      mockPrisma.order.findUnique.mockResolvedValue({
+        id: 'ord-1',
+        orderNumber: 'ORD-12345',
+        shippingAddress: '123 Test St',
+        totalAmount: new Prisma.Decimal(1000),
+        discountAmount: new Prisma.Decimal(0),
+        discountCode: null,
+        finalAmount: new Prisma.Decimal(1000),
+        createdAt: new Date(),
+        user: {
+          email: 'customer@test.com',
+          firstName: 'John',
+          lastName: 'Doe',
+        },
+        orderItems: [
+          {
+            quantity: 1,
+            unitPrice: new Prisma.Decimal(1000),
+            product: { name: 'Test Product' },
+          },
+        ],
+      });
+
+      await service.sendOrderConfirmationEmail('ord-1');
+
+      expect(mockEmailService.sendOrderConfirmation).toHaveBeenCalledWith(
+        'customer@test.com',
+        expect.objectContaining({
+          orderNumber: 'ORD-12345',
+          customerEmail: 'customer@test.com',
+          totalAmount: 1000,
         }),
       );
     });

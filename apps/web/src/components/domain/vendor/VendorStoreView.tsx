@@ -640,7 +640,6 @@ export function VendorStoreView({
           sortBy={sortBy}
           onSortByChange={setSortBy}
           onReset={handleResetFilters}
-          totalResults={totalFilteredCount}
         />
       </div>
     </CustomerLayout>

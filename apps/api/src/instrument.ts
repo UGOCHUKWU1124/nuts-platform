@@ -8,8 +8,6 @@ const dsn = process.env.SENTRY_DSN;
 const environment =
   process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development';
 
-const isProduction = environment === 'production';
-
 function parseSampleRate(value: string | undefined, fallback: number): number {
   if (value !== undefined && value !== '') {
     const parsed = Number(value);
@@ -20,17 +18,21 @@ function parseSampleRate(value: string | undefined, fallback: number): number {
   return fallback;
 }
 
-// In production, default to 10% sampling to protect performance and avoid quota starvation.
-// In non-production (development, staging, test), default to 100% for full visibility.
+const isProductionOrStaging =
+  environment === 'production' || environment === 'staging';
+
+// In production/staging, default to 10% trace sampling to avoid memory starvation.
 // Always overrideable via SENTRY_TRACES_SAMPLE_RATE / SENTRY_PROFILES_SAMPLE_RATE.
 const tracesSampleRate = parseSampleRate(
   process.env.SENTRY_TRACES_SAMPLE_RATE,
-  isProduction ? 0.1 : 1.0,
+  isProductionOrStaging ? 0.1 : 1.0,
 );
 
+// CPU profiling creates native sampler threads and heap buffers.
+// In production/staging, default to 0 to prevent 512MB container OOM.
 const profileSessionSampleRate = parseSampleRate(
   process.env.SENTRY_PROFILES_SAMPLE_RATE,
-  isProduction ? 0.1 : 1.0,
+  0.0,
 );
 
 if (dsn) {
@@ -72,7 +74,8 @@ if (dsn) {
       delete event.user;
       return event;
     },
-    integrations: [nodeProfilingIntegration()],
+    integrations:
+      profileSessionSampleRate > 0 ? [nodeProfilingIntegration()] : [],
     tracesSampleRate,
     profileSessionSampleRate,
     profileLifecycle: 'trace',

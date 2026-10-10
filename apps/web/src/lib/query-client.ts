@@ -34,5 +34,11 @@ export function getQueryClient(): QueryClient {
 }
 
 export function clearBrowserQueryClient(): void {
-  browserQueryClient?.clear();
+  if (!browserQueryClient) return;
+  browserQueryClient.removeQueries({
+    predicate: (query) => {
+      const firstKey = String(query.queryKey[0]);
+      return firstKey !== "category" && firstKey !== "categories";
+    },
+  });
 }

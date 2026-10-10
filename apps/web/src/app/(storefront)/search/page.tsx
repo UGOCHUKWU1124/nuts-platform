@@ -15,13 +15,14 @@ export const metadata: Metadata = {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; query?: string }>;
 }) {
-  const [{ q }, categories] = await Promise.all([
+  const [params, categories] = await Promise.all([
     searchParams,
     serverGetCategories(),
   ]);
-  const search = q?.trim().slice(0, 100) ?? "";
+  const rawQuery = params.query || params.q || "";
+  const search = rawQuery.trim().slice(0, 100);
 
   if (!search) {
     const popularCategories = categories.slice(0, 8);

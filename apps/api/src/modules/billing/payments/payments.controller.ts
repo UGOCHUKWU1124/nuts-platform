@@ -175,6 +175,7 @@ export class PaymentsController {
   // PAYSTACK CALLBACK
   // ---------------------------------------------------------------------------
 
+  @Public()
   @Get('callback')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

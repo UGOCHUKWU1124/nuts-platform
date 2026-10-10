@@ -285,7 +285,6 @@ function CategoryCatalogContent({
               <option value="newest">Newest Arrivals</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
-              <option value="popular">Popularity</option>
             </select>
           </div>
         </div>

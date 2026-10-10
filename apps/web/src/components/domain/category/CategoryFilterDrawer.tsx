@@ -17,7 +17,6 @@ export interface CategoryFilterDrawerProps {
   sortBy: string;
   onSortByChange: (val: string) => void;
   onReset: () => void;
-  totalResults?: number;
 }
 
 export function CategoryFilterDrawer({
@@ -32,7 +31,6 @@ export function CategoryFilterDrawer({
   sortBy,
   onSortByChange,
   onReset,
-  totalResults,
 }: CategoryFilterDrawerProps) {
   // Local draft state so user can configure filters and apply them atomically
   const [draftMinPrice, setDraftMinPrice] = useState(minPrice);
@@ -93,11 +91,6 @@ export function CategoryFilterDrawer({
             <h2 className="text-base font-bold tracking-tight text-foreground">
               Filter Catalog
             </h2>
-            {totalResults !== undefined && (
-              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                {totalResults} pieces
-              </span>
-            )}
           </div>
           <button
             type="button"

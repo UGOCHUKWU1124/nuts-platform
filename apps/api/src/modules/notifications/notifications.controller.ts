@@ -84,15 +84,15 @@ export class NotificationsController {
     return this.notificationsService.markAllAsRead(user.id, user.role);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a single notification' })
-  async delete(@Param('id') id: string, @GetUser() user: AuthenticatedUser) {
-    return this.notificationsService.delete(id, user.id, user.role);
-  }
-
   @Delete('clear-all')
   @ApiOperation({ summary: 'Clear all read notifications' })
   async clearAll(@GetUser() user: AuthenticatedUser) {
     return this.notificationsService.clearAll(user.id, user.role);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a single notification' })
+  async delete(@Param('id') id: string, @GetUser() user: AuthenticatedUser) {
+    return this.notificationsService.delete(id, user.id, user.role);
   }
 }

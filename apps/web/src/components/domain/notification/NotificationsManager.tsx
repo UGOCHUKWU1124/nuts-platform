@@ -77,6 +77,62 @@ const categoryNotificationTypes = {
   ]),
 };
 
+export function getNotificationCategory(
+  notif: AppNotification,
+): "orders" | "payments" | "general" {
+  if (
+    categoryNotificationTypes.payments.has(notif.type) ||
+    notif.type === "PAYMENT_RECEIVED" ||
+    notif.type === "PAYMENT_FAILED" ||
+    notif.type === "PAYOUT_PROCESSED"
+  ) {
+    return "payments";
+  }
+
+  if (
+    categoryNotificationTypes.orders.has(notif.type) ||
+    notif.type === "ORDER_PLACED" ||
+    notif.type === "ORDER_CONFIRMED" ||
+    notif.type === "ORDER_SHIPPED" ||
+    notif.type === "ORDER_DELIVERED" ||
+    notif.type === "ORDER_CANCELLED"
+  ) {
+    const title = (notif.title || "").toLowerCase();
+    const msg = (notif.message || "").toLowerCase();
+    if (
+      title.includes("payment successful") ||
+      title.includes("payment received") ||
+      title.includes("payment failed") ||
+      msg.includes("payment of")
+    ) {
+      return "payments";
+    }
+    return "orders";
+  }
+
+  const title = (notif.title || "").toLowerCase();
+  const msg = (notif.message || "").toLowerCase();
+  if (
+    title.includes("payment") ||
+    title.includes("payout") ||
+    title.includes("refund") ||
+    msg.includes("payment") ||
+    notif.metadata?.paymentId
+  ) {
+    return "payments";
+  }
+  if (
+    title.includes("order") ||
+    title.includes("shipped") ||
+    title.includes("delivered") ||
+    notif.metadata?.orderId
+  ) {
+    return "orders";
+  }
+
+  return "general";
+}
+
 function formatFullDate(dateString: string): string {
   const d = new Date(dateString);
   return d.toLocaleString("en-US", {
@@ -120,11 +176,21 @@ export function NotificationsManager({
     });
   }, [fetchNotifications, filter]);
 
+  const ordersCount = notifications.filter(
+    (n) => getNotificationCategory(n) === "orders",
+  ).length;
+
+  const paymentsCount = notifications.filter(
+    (n) => getNotificationCategory(n) === "payments",
+  ).length;
+
   const filteredNotifications =
-    filter === "orders" || filter === "payments"
-      ? notifications.filter((notification) =>
-          categoryNotificationTypes[filter].has(notification.type),
-        )
+    filter === "orders"
+      ? notifications.filter((n) => getNotificationCategory(n) === "orders")
+      : filter === "payments"
+      ? notifications.filter((n) => getNotificationCategory(n) === "payments")
+      : filter === "unread"
+      ? notifications.filter((n) => !n.isRead)
       : notifications;
 
   const handleAction = async (notif: AppNotification) => {
@@ -210,7 +276,7 @@ export function NotificationsManager({
                 : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
             }`}
           >
-            Orders
+            Orders ({ordersCount})
           </button>
           <button
             type="button"
@@ -221,7 +287,7 @@ export function NotificationsManager({
                 : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
             }`}
           >
-            Payments
+            Payments ({paymentsCount})
           </button>
         </div>
 
@@ -313,6 +379,15 @@ export function NotificationsManager({
                         NEW
                       </span>
                     )}
+                    {getNotificationCategory(notif) === "payments" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                        <CreditCard className="h-2.5 w-2.5" /> Payment
+                      </span>
+                    ) : getNotificationCategory(notif) === "orders" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                        <Package className="h-2.5 w-2.5" /> Order
+                      </span>
+                    ) : null}
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary text-secondary-foreground">
                       {notificationTypeLabels[notif.type]}
                     </span>

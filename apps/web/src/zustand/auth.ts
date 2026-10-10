@@ -378,7 +378,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         }
 
         const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-        if (status === 401 || status === 403) {
+        if (status === 401) {
           get().clearSession();
           return;
         }
