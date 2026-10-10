@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { NotificationPriority, NotificationType, Prisma, ROLE } from '@prisma/client';
+import {
+  NotificationPriority,
+  NotificationType,
+  Prisma,
+  ROLE,
+} from '@prisma/client';
 import {
   EmailOrderItem,
   EmailTemplatesService,

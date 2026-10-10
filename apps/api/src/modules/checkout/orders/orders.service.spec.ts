@@ -124,7 +124,7 @@ describe('OrdersService', () => {
       mockDiscountService,
       {} as unknown as ReferralService,
       mockPaymentsService,
-      mockEmailService as unknown as EmailService,
+      mockEmailService,
       { log: jest.fn() } as unknown as AuditLogService,
       mockWalletService,
       mockEventEmitter,

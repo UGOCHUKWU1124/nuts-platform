@@ -8,8 +8,6 @@ const dsn = process.env.SENTRY_DSN;
 const environment =
   process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development';
 
-const isProduction = environment === 'production';
-
 function parseSampleRate(value: string | undefined, fallback: number): number {
   if (value !== undefined && value !== '') {
     const parsed = Number(value);

@@ -2546,9 +2546,8 @@ export class OrdersService {
       await this.emailService.sendOrderConfirmation(order.user.email, {
         orderNumber: order.orderNumber,
         customerName:
-          `${order.user.firstName ?? ''} ${
-            order.user.lastName ?? ''
-          }`.trim() || 'Valued Customer',
+          `${order.user.firstName ?? ''} ${order.user.lastName ?? ''}`.trim() ||
+          'Valued Customer',
         customerEmail: order.user.email,
         shippingAddress: order.shippingAddress ?? '',
         totalAmount: Number(order.totalAmount),
@@ -2567,4 +2566,3 @@ export class OrdersService {
     }
   }
 }
-
