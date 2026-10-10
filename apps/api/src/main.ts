@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import './instrument';
 
 // Configure libuv threadpool size for crypto and I/O scalability before any modules load
-process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '16';
+process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '4';
 
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

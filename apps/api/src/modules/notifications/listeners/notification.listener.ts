@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { NotificationPriority, NotificationType, ROLE } from '@prisma/client';
+import { NotificationPriority, NotificationType, Prisma, ROLE } from '@prisma/client';
 import {
   EmailOrderItem,
   EmailTemplatesService,
@@ -28,6 +28,47 @@ export class NotificationListener {
     private readonly emailTemplates: EmailTemplatesService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * Dispatches in-app notification to RabbitMQ, with seamless fallback to direct
+   * PostgreSQL persistence if RabbitMQ is disabled or unavailable.
+   */
+  private async dispatchNotification(data: {
+    userId: string;
+    role: ROLE;
+    type: NotificationType;
+    title: string;
+    message: string;
+    priority: NotificationPriority;
+    link?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    const published = await this.rabbitmq.publish(
+      RABBITMQ_QUEUES.NOTIFICATIONS,
+      data,
+    );
+    if (!published) {
+      try {
+        await this.prisma.notification.create({
+          data: {
+            userId: data.userId,
+            role: data.role,
+            type: data.type,
+            title: data.title,
+            message: data.message,
+            priority: data.priority,
+            actionUrl: data.link ?? null,
+            metadata: (data.metadata as Prisma.InputJsonValue) ?? Prisma.DbNull,
+          },
+        });
+      } catch (error) {
+        this.logger.error(
+          `Failed to persist in-app notification directly for user ${data.userId}`,
+          error,
+        );
+      }
+    }
+  }
 
   private formatVariantOptions(
     options: unknown,
@@ -80,7 +121,7 @@ export class NotificationListener {
     });
 
     // In-app notification to customer
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
       type: NotificationType.ORDER_CONFIRMED,
@@ -145,7 +186,7 @@ export class NotificationListener {
         metadata: { orderId: payload.orderId, vendorId: vendor.id },
       });
 
-      await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+      await this.dispatchNotification({
         userId: vendor.id,
         role: ROLE.VENDOR,
         type: NotificationType.ORDER_CONFIRMED,
@@ -211,7 +252,7 @@ export class NotificationListener {
       metadata: { orderId: payload.orderId },
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
       type: NotificationType.ORDER_SHIPPED,
@@ -274,7 +315,7 @@ export class NotificationListener {
       metadata: { orderId: payload.orderId },
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
       type: NotificationType.ORDER_DELIVERED,
@@ -339,7 +380,7 @@ export class NotificationListener {
       metadata: { orderId: payload.orderId },
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
       type: NotificationType.ORDER_CANCELLED,
@@ -401,7 +442,7 @@ export class NotificationListener {
       metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
       type: NotificationType.PAYMENT_RECEIVED,
@@ -409,7 +450,7 @@ export class NotificationListener {
       message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
       priority: NotificationPriority.HIGH,
       link: `/account/orders`,
-      metadata: { paymentId: payload.paymentId },
+      metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
     });
   }
 
@@ -434,7 +475,7 @@ export class NotificationListener {
       metadata: { paymentId: payload.paymentId },
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
       type: NotificationType.PAYMENT_FAILED,
@@ -442,7 +483,7 @@ export class NotificationListener {
       message: `Payment failed for order #${payload.orderNumber}: ${payload.reason || 'Check details and try again.'}`,
       priority: NotificationPriority.HIGH,
       link: `/checkout`,
-      metadata: { paymentId: payload.paymentId },
+      metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
     });
   }
 
