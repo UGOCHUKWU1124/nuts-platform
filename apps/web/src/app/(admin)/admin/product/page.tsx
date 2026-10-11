@@ -617,7 +617,7 @@ export default function AdminProductPage() {
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
                 hasNextPage: "hasNextPage" in data.meta ? data.meta.hasNextPage : undefined,
                 hasPrevPage: "hasPreviousPage" in data.meta ? data.meta.hasPreviousPage : undefined,

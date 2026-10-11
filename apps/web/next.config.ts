@@ -2,11 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
 
-  // Limit in-memory cache to 25MB to prevent OOM on 512MB RAM cloud instances (Render)
-  cacheMaxMemorySize: 25 * 1024 * 1024,
+  // Production tree-shaking optimizations for memory-constrained environments
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@tanstack/react-query", "sonner"],
+  },
 
-  // Enable standalone output for minimal Docker image
+  // Standalone output produces a lean production build containing only necessary dependencies
   output: "standalone",
 
   images: {

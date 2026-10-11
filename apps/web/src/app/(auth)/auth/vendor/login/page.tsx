@@ -8,8 +8,8 @@ import { useAuthStore } from "@/zustand/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Store } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useRouter,useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -28,17 +28,7 @@ function VendorLoginForm() {
     searchParams.get("redirect"),
     "/vendor/analytic",
   );
-  const { login, isAuthenticated, isInitialized, role, user } = useAuthStore();
-
-  useEffect(() => {
-    if (
-      isInitialized &&
-      isAuthenticated &&
-      (role === "vendor" || user?.role === "vendor")
-    ) {
-      router.replace(redirectUrl);
-    }
-  }, [isInitialized, isAuthenticated, role, user, redirectUrl, router]);
+  const login = useAuthStore((s) => s.login);
 
   const methods = useForm<VendorLoginFormData>({
     resolver: zodResolver(vendorLoginSchema),

@@ -24,10 +24,9 @@ export class AuthCookieService {
       this.config.get<string>('COOKIE_SAME_SITE') ||
       this.config.get<string>('AUTH_COOKIE_SAME_SITE');
 
-    const effectiveSameSite = (configuredSameSite?.toLowerCase() || 'lax') as
-      | 'lax'
-      | 'strict'
-      | 'none';
+    const defaultSameSite = isProduction || isStaging ? 'none' : 'lax';
+    const effectiveSameSite = (configuredSameSite?.toLowerCase() ||
+      defaultSameSite) as 'lax' | 'strict' | 'none';
 
     if (!['lax', 'strict', 'none'].includes(effectiveSameSite)) {
       throw new Error('COOKIE_SAME_SITE must be lax, strict, or none');
@@ -98,6 +97,20 @@ export class AuthCookieService {
       maxAge: this.refreshMaxAge,
       path: '/',
     });
+
+    // 4. Clean up legacy role-prefixed cookies from prior revisions
+    const legacyCookies = [
+      'user_refresh_token',
+      'admin_refresh_token',
+      'vendor_refresh_token',
+      'user_session',
+      'admin_session',
+      'vendor_session',
+    ];
+    for (const name of legacyCookies) {
+      res.clearCookie(name, { ...this.baseOptions, path: '/' });
+      res.clearCookie(name, { ...this.baseOptions, path: AUTH_COOKIE_PATH });
+    }
   }
 
   clearAuthCookies(res: Response): void {
@@ -114,6 +127,20 @@ export class AuthCookieService {
       httpOnly: false,
       path: '/',
     });
+
+    // Evict legacy cookie names
+    const legacyCookies = [
+      'user_refresh_token',
+      'admin_refresh_token',
+      'vendor_refresh_token',
+      'user_session',
+      'admin_session',
+      'vendor_session',
+    ];
+    for (const name of legacyCookies) {
+      res.clearCookie(name, { ...this.baseOptions, path: '/' });
+      res.clearCookie(name, { ...this.baseOptions, path: AUTH_COOKIE_PATH });
+    }
   }
 
   private msFromExpires(value: string): number {

@@ -620,26 +620,44 @@ export class OrdersService {
     }
 
     if (query.search?.trim()) {
-      const term = query.search.trim();
+      const rawTerm = query.search.trim();
+      const cleanTerm = rawTerm.replace(/^#/, '').trim();
 
-      /**
-       * `%term%` searches are not efficiently handled by normal B-tree indexes.
-       *
-       * At scale, add PostgreSQL pg_trgm indexes for orderNumber/email.
-       */
       where.OR = [
         {
           orderNumber: {
-            contains: term,
+            contains: cleanTerm,
             mode: 'insensitive',
           },
         },
         {
           user: {
             email: {
-              contains: term,
+              contains: rawTerm,
               mode: 'insensitive',
             },
+          },
+        },
+        {
+          user: {
+            firstName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            lastName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          shippingAddress: {
+            contains: rawTerm,
+            mode: 'insensitive',
           },
         },
       ];
@@ -744,20 +762,44 @@ export class OrdersService {
     }
 
     if (params.search?.trim()) {
-      const term = params.search.trim();
+      const rawTerm = params.search.trim();
+      const cleanTerm = rawTerm.replace(/^#/, '').trim();
+
       where.OR = [
         {
           orderNumber: {
-            contains: term,
+            contains: cleanTerm,
             mode: 'insensitive',
           },
         },
         {
           user: {
             email: {
-              contains: term,
+              contains: rawTerm,
               mode: 'insensitive',
             },
+          },
+        },
+        {
+          user: {
+            firstName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            lastName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          shippingAddress: {
+            contains: rawTerm,
+            mode: 'insensitive',
           },
         },
       ];
@@ -1489,15 +1531,18 @@ export class OrdersService {
         const stockHistoryRows: Prisma.StockHistoryCreateManyInput[] = [];
 
         /**
-         * Deduct stock one inventory row at a time.
+         * Deduct stock one inventory row at a time in deterministic order.
          *
-         * We use PostgreSQL UPDATE ... RETURNING because Prisma's
-         * updateMany() does not return the old/new stock values.
-         *
-         * This means StockHistory contains the actual committed values,
-         * not values guessed from a stale SELECT.
+         * Deterministic row lock ordering eliminates PostgreSQL deadlocks (SQLSTATE 40P01)
+         * when multiple users concurrently check out overlapping sets of items.
          */
-        for (const item of cart.cartItems) {
+        const itemsToDeduct = [...cart.cartItems].sort((a, b) => {
+          const aKey = a.variantId ?? a.productId;
+          const bKey = b.variantId ?? b.productId;
+          return aKey.localeCompare(bKey);
+        });
+
+        for (const item of itemsToDeduct) {
           const variantLabel = item.variant
             ? this.variantLabel(item.variant.options)
             : null;

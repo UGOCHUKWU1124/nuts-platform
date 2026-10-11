@@ -72,3 +72,4 @@ desktop.ini
 gitfix.ps1
 git-diagnose.ps1
 git-diagnose-output.txt
+**/.image-cache.json

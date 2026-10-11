@@ -7,7 +7,7 @@ import { useAuthStore } from "@/zustand/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -21,17 +21,7 @@ type AdminLoginFormData = z.infer<typeof adminLoginSchema>;
 
 function AdminLoginForm() {
   const router = useRouter();
-  const { login, isAuthenticated, isInitialized, role, user } = useAuthStore();
-
-  useEffect(() => {
-    if (
-      isInitialized &&
-      isAuthenticated &&
-      (role === "admin" || user?.role === "admin")
-    ) {
-      router.replace("/admin");
-    }
-  }, [isInitialized, isAuthenticated, role, user, router]);
+  const login = useAuthStore((s) => s.login);
 
   const methods = useForm<AdminLoginFormData>({
     resolver: zodResolver(adminLoginSchema),

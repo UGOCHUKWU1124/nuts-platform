@@ -809,10 +809,16 @@ export class VendorsService {
           : {}),
       };
 
-      const [rootCategories, vendors] = await Promise.all([
+      const [allCategories, vendors] = await Promise.all([
         this.prisma.category.findMany({
-          where: { parentId: null, isActive: true },
-          select: { id: true, name: true, slug: true },
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            parentId: true,
+            path: true,
+          },
         }),
         this.prisma.vendor.findMany({
           where,
@@ -839,8 +845,33 @@ export class VendorsService {
         }),
       ]);
 
-      const rootBySlug = new Map(rootCategories.map((c) => [c.slug, c]));
-      const rootById = new Map(rootCategories.map((c) => [c.id, c]));
+      const catById = new Map(allCategories.map((c) => [c.id, c]));
+      const rootBySlug = new Map(
+        allCategories.filter((c) => !c.parentId).map((c) => [c.slug, c]),
+      );
+
+      const findRootCategory = (
+        catId?: string | null,
+        catSlug?: string | null,
+        catPath?: string | null,
+      ) => {
+        if (catId) {
+          let current = catById.get(catId);
+          while (current && current.parentId) {
+            const parent = catById.get(current.parentId);
+            if (!parent) break;
+            current = parent;
+          }
+          if (current && !current.parentId) return current;
+        }
+        const cleanPath = (catPath || catSlug || '').replace(/^\/+/, '');
+        const rootSlug = cleanPath.split('/')[0];
+        if (rootSlug) {
+          const root = rootBySlug.get(rootSlug);
+          if (root) return root;
+        }
+        return null;
+      };
 
       return vendors.map((vendor) => {
         const catMap = new Map<
@@ -849,9 +880,11 @@ export class VendorsService {
         >();
         for (const p of vendor.products || []) {
           if (p.category) {
-            const rootSlug = (p.category.path || p.category.slug).split('/')[0];
-            const root =
-              rootBySlug.get(rootSlug) || rootById.get(p.category.id);
+            const root = findRootCategory(
+              p.category.id,
+              p.category.slug,
+              p.category.path,
+            );
             if (root && !catMap.has(root.id)) {
               catMap.set(root.id, {
                 id: root.id,
@@ -871,10 +904,16 @@ export class VendorsService {
       VENDOR_STORE(storeSlug),
       VENDOR_STORE_TTL,
       async () => {
-        const [rootCategories, vendor] = await Promise.all([
+        const [allCategories, vendor] = await Promise.all([
           this.prisma.category.findMany({
-            where: { parentId: null, isActive: true },
-            select: { id: true, name: true, slug: true },
+            where: { isActive: true },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              parentId: true,
+              path: true,
+            },
           }),
           this.prisma.vendor.findUnique({
             where: {
@@ -907,8 +946,33 @@ export class VendorsService {
           throw new NotFoundException('Store not found');
         }
 
-        const rootBySlug = new Map(rootCategories.map((c) => [c.slug, c]));
-        const rootById = new Map(rootCategories.map((c) => [c.id, c]));
+        const catById = new Map(allCategories.map((c) => [c.id, c]));
+        const rootBySlug = new Map(
+          allCategories.filter((c) => !c.parentId).map((c) => [c.slug, c]),
+        );
+
+        const findRootCategory = (
+          catId?: string | null,
+          catSlug?: string | null,
+          catPath?: string | null,
+        ) => {
+          if (catId) {
+            let current = catById.get(catId);
+            while (current && current.parentId) {
+              const parent = catById.get(current.parentId);
+              if (!parent) break;
+              current = parent;
+            }
+            if (current && !current.parentId) return current;
+          }
+          const cleanPath = (catPath || catSlug || '').replace(/^\/+/, '');
+          const rootSlug = cleanPath.split('/')[0];
+          if (rootSlug) {
+            const root = rootBySlug.get(rootSlug);
+            if (root) return root;
+          }
+          return null;
+        };
 
         const catMap = new Map<
           string,
@@ -916,9 +980,11 @@ export class VendorsService {
         >();
         for (const p of vendor.products || []) {
           if (p.category) {
-            const rootSlug = (p.category.path || p.category.slug).split('/')[0];
-            const root =
-              rootBySlug.get(rootSlug) || rootById.get(p.category.id);
+            const root = findRootCategory(
+              p.category.id,
+              p.category.slug,
+              p.category.path,
+            );
             if (root && !catMap.has(root.id)) {
               catMap.set(root.id, {
                 id: root.id,

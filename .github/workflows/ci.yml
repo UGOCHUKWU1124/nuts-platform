@@ -1,4 +1,4 @@
-name: CI — Monorepo Quality Gates
+name: NUTS - CI 
 
 on:
   push:

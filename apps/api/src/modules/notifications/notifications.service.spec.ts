@@ -144,9 +144,26 @@ describe('NotificationsService', () => {
       .subscribe((event) => events.push(event));
 
     try {
-      jest.advanceTimersByTime(25_000);
+      expect(events).toEqual([
+        {
+          data: {
+            type: 'connected',
+            timestamp: expect.any(String),
+          },
+        },
+      ]);
 
-      expect(events).toEqual([{ data: { type: 'ping' } }]);
+      jest.advanceTimersByTime(15_000);
+
+      expect(events).toEqual([
+        {
+          data: {
+            type: 'connected',
+            timestamp: expect.any(String),
+          },
+        },
+        { data: { type: 'ping' } },
+      ]);
     } finally {
       subscription.unsubscribe();
       jest.useRealTimers();

@@ -26,10 +26,20 @@ let inMemoryCsrfToken: string | null = null;
 
 export const getCsrfToken = (): string | null => {
   if (inMemoryCsrfToken) return inMemoryCsrfToken;
+  if (typeof sessionStorage !== "undefined") {
+    const stored = sessionStorage.getItem("nuts_csrf_token");
+    if (stored) {
+      inMemoryCsrfToken = stored;
+      return inMemoryCsrfToken;
+    }
+  }
+  // Fallback: check legacy document.cookie and clean it up
   if (typeof document !== "undefined") {
     const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
     if (match?.[1]) {
       inMemoryCsrfToken = decodeURIComponent(match[1]);
+      // Clean up legacy web-domain cookie to eliminate duplicate CSRF cookies
+      document.cookie = "csrf_token=; Max-Age=0; path=/;";
       return inMemoryCsrfToken;
     }
   }
@@ -38,12 +48,16 @@ export const getCsrfToken = (): string | null => {
 
 export const setCsrfToken = (token: string | null | undefined) => {
   inMemoryCsrfToken = token || null;
-  if (typeof document !== "undefined") {
+  if (typeof sessionStorage !== "undefined") {
     if (token) {
-      document.cookie = `csrf_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+      sessionStorage.setItem("nuts_csrf_token", token);
     } else {
-      document.cookie = `csrf_token=; Max-Age=0; path=/;`;
+      sessionStorage.removeItem("nuts_csrf_token");
     }
+  }
+  if (typeof document !== "undefined") {
+    // Ensure no redundant web-domain cookie remains
+    document.cookie = "csrf_token=; Max-Age=0; path=/;";
   }
 };
 

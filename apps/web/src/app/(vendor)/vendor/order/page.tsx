@@ -197,8 +197,10 @@ export default function DashboardOrderPage() {
             ? {
                 page: meta.page ?? page,
                 limit: meta.limit ?? 25,
-                total: meta.total,
+                total: meta.totalItems ?? meta.total ?? 0,
                 totalPages: meta.totalPages,
+                hasNextPage: meta.hasNextPage,
+                hasPrevPage: meta.hasPreviousPage,
                 onPageChange: (newPage) => setPage(newPage),
               }
             : undefined

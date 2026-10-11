@@ -1,15 +1,16 @@
 "use client";
 
+import { userService } from "@/api";
 import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
 import { Button } from "@/component/ui/button";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 import { useAuthStore } from "@/zustand/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LogIn } from "lucide-react";
+import { CheckCircle2, LogIn } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useRouter,useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -25,17 +26,10 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = safeInternalPath(searchParams.get("redirect"), "/");
-  const { login, isAuthenticated, isInitialized, role, user } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
 
-  useEffect(() => {
-    if (
-      isInitialized &&
-      isAuthenticated &&
-      (role === "user" || user?.role === "user")
-    ) {
-      router.replace(redirectUrl);
-    }
-  }, [isInitialized, isAuthenticated, role, user, redirectUrl, router]);
+  const [deactivatedCredentials, setDeactivatedCredentials] = useState<LoginFormData | null>(null);
+  const [isReactivating, setIsReactivating] = useState(false);
 
   const methods = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -56,7 +50,35 @@ function LoginForm() {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? "Invalid email or password. Please try again.";
+
+      if (msg === "ACCOUNT_DEACTIVATED") {
+        setDeactivatedCredentials(data);
+        return;
+      }
+
       toast.error(msg);
+    }
+  }
+
+  async function handleReactivate() {
+    if (!deactivatedCredentials) return;
+    setIsReactivating(true);
+    try {
+      await userService.reactivate(deactivatedCredentials);
+      toast.success("Account successfully reactivated!");
+      await login({
+        email: deactivatedCredentials.email,
+        password: deactivatedCredentials.password,
+        role: "user",
+      });
+      router.push(redirectUrl);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Unable to reactivate account. Please try again or contact support.";
+      toast.error(msg);
+    } finally {
+      setIsReactivating(false);
     }
   }
 
@@ -71,32 +93,74 @@ function LoginForm() {
         <p className="text-xs sm:text-sm text-muted-foreground">Sign in to your customer account</p>
       </div>
 
-      <FormProvider {...methods}>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <FormInput
-            name="email"
-            label="Email Address"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-          />
-          <FormInput
-            name="password"
-            label="Password"
-            type="password"
-            placeholder="Enter your password"
-            autoComplete="current-password"
-          />
+      {deactivatedCredentials ? (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-4 animate-in fade-in-0 duration-300">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-foreground">
+                Account Previously Deactivated
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                Your credentials are valid, but your account (<strong className="text-foreground">{deactivatedCredentials.email}</strong>) is currently deactivated.
+              </p>
+            </div>
+          </div>
 
-          <Button
-            type="submit"
-            className="w-full rounded-xl font-semibold shadow-xs"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Signing in..." : "Sign In"}
-          </Button>
-        </form>
-      </FormProvider>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Clicking reactivate will restore your full account history, saved orders, and wishlist immediately.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            <Button
+              type="button"
+              onClick={handleReactivate}
+              disabled={isReactivating}
+              className="w-full sm:flex-1 rounded-xl font-semibold shadow-xs"
+            >
+              {isReactivating ? "Reactivating..." : "Reactivate & Sign In"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isReactivating}
+              onClick={() => setDeactivatedCredentials(null)}
+              className="rounded-xl text-xs font-semibold"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <FormProvider {...methods}>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <FormInput
+              name="email"
+              label="Email Address"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+            <FormInput
+              name="password"
+              label="Password"
+              type="password"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+            />
+
+            <Button
+              type="submit"
+              className="w-full rounded-xl font-semibold shadow-xs"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
+        </FormProvider>
+      )}
 
       <div className="flex items-center justify-between text-xs sm:text-sm pt-2">
         <Link href="/auth/forgot-password" className="font-semibold text-primary hover:underline">
@@ -106,13 +170,6 @@ function LoginForm() {
           Create account
         </Link>
       </div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        Deactivated your account?{" "}
-        <Link href="/auth/reactivate" className="font-semibold text-primary hover:underline">
-          Reactivate it
-        </Link>
-      </p>
 
       {/* Switch to Vendor Login */}
       <div className="border-t border-border/50 pt-4 text-center">

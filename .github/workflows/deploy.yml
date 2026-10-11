@@ -1,4 +1,4 @@
-name: CD — Multi-Environment Deployment
+name: NUTS - CD 
 
 on:
   workflow_run:
