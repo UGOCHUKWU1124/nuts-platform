@@ -21,17 +21,27 @@ export const adminSystemService = {
       data: { connected: true, totalKeys: 0, memoryUsed: "Redis in-memory store" } as CacheStatsResponse,
     }));
   },
-  flushAllCache() {
-    return adminApi.get<{ message: string }>("/admin/cache/flush");
+  invalidateCategoryCache() {
+    return adminApi.post<{ message: string }>("/admin/cache/invalidate/categories");
   },
+  invalidateProductCache() {
+    return adminApi.post<{ message: string }>("/admin/cache/invalidate/products");
+  },
+  invalidateAllCache() {
+    return adminApi.post<{ message: string }>("/admin/cache/invalidate/all");
+  },
+  // Backward compatibility aliases
   clearCategoryCache() {
-    return adminApi.get<{ message: string }>("/admin/cache/flush");
+    return this.invalidateCategoryCache();
   },
   clearProductCache() {
-    return adminApi.get<{ message: string }>("/admin/cache/flush");
+    return this.invalidateProductCache();
   },
   clearAllCache() {
-    return adminApi.get<{ message: string }>("/admin/cache/flush");
+    return this.invalidateAllCache();
+  },
+  flushAllCache() {
+    return this.invalidateAllCache();
   },
   globalSearch(q: string) {
     return adminApi.get<AdminSearchResponse>("/admin/search", { params: { q } });

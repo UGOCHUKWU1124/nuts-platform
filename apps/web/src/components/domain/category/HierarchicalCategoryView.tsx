@@ -308,12 +308,13 @@ function CategoryCatalogContent({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-x-6 sm:gap-y-10">
-            {products.map((product) => (
+            {products.map((product, index) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 categoryPath={`/category/${slugs.join("/")}`}
                 addedFrom="CATEGORY_PAGE"
+                priority={index < 4}
               />
             ))}
           </div>

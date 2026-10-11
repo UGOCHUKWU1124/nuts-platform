@@ -369,7 +369,11 @@ export default function AdminDiscountPage() {
       />
 
       {(() => {
-        const rawList: AdminDiscount[] = Array.isArray(data) ? data : [];
+        const rawList: AdminDiscount[] = Array.isArray(data)
+          ? data
+          : data && typeof data === "object" && "data" in data && Array.isArray((data as { data: unknown }).data)
+          ? ((data as { data: AdminDiscount[] }).data)
+          : [];
         const term = search.trim().toLowerCase();
         const filtered = rawList.filter((discount: AdminDiscount) => {
           const matchesSearch = !term || `${discount.code} ${discount.description ?? ""}`.toLowerCase().includes(term);

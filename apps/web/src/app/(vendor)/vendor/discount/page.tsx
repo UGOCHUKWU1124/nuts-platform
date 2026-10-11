@@ -363,7 +363,11 @@ export default function DashboardDiscountPage() {
       />
 
       {(() => {
-        const rawList: VendorDiscount[] = Array.isArray(data) ? data : [];
+        const rawList: VendorDiscount[] = Array.isArray(data)
+          ? data
+          : data && typeof data === "object" && "data" in data && Array.isArray((data as { data: unknown }).data)
+          ? ((data as { data: VendorDiscount[] }).data)
+          : [];
         const filtered = rawList.filter((discount: VendorDiscount) => {
           const matchesSearch = `${discount.code} ${discount.description ?? ""}`
             .toLowerCase()

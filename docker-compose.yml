@@ -18,6 +18,7 @@ x-api-env: &api-env
 x-client-env: &client-env
   NODE_ENV: ${NODE_ENV:-development}
   INTERNAL_API_URL: http://api:3001
+  JWT_SECRET: ${JWT_SECRET:-9d8a7f6e5d4c3b2a10fe9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8e}
 
 services:
 
@@ -62,13 +63,13 @@ services:
     image: nuts-api:latest
     container_name: nuts_api_migrate
     restart: "no"
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     entrypoint: ["dumb-init", "./docker-migrate.sh"]
     env_file:
       - ./apps/api/.env.production
     environment:
       <<: *api-env
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
     networks:
       - nuts_net
 
@@ -81,14 +82,14 @@ services:
     image: nuts-api:latest
     container_name: nuts_api
     restart: unless-stopped
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     expose:
       - "3001"
     env_file:
       - ./apps/api/.env.production
     environment:
       <<: *api-env
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       SWAGGER_ENABLED: "${SWAGGER_ENABLED:-false}"
     depends_on:
       api-migrate:
@@ -158,14 +159,14 @@ services:
     image: nuts-client:latest
     container_name: nuts_client
     restart: unless-stopped
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     expose:
       - "3000"
     env_file:
       - ./apps/web/.env.production
     environment:
       <<: *client-env
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
     deploy:
       resources:
         limits:
@@ -191,7 +192,7 @@ services:
     image: nginx:1.27-alpine
     container_name: nuts_nginx
     restart: unless-stopped
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     ports:
       - "80:80"
       - "443:443"
@@ -221,7 +222,7 @@ services:
     networks:
       - nuts_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -kfsS https://localhost/api/v1/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost/healthz || curl -kfsS https://localhost/api/v1/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -515,8 +515,10 @@ export default function DashboardProductPage() {
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
+                hasNextPage: data.meta.hasNextPage,
+                hasPrevPage: data.meta.hasPreviousPage,
                 onPageChange: (newPage) => setPage(newPage),
               }
             : undefined

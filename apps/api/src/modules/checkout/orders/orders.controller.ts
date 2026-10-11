@@ -146,6 +146,7 @@ export class OrdersController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
+  @Message('Orders retrieved successfully')
   @ApiOperation({
     summary: 'Get my orders',
   })
@@ -162,6 +163,7 @@ export class OrdersController {
 
   @Get(':id')
   @HttpCode(HttpStatus.OK)
+  @Message('Order retrieved successfully')
   @ApiOperation({
     summary: 'Get one of my orders',
   })

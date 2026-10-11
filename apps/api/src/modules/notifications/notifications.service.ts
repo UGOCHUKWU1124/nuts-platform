@@ -243,7 +243,7 @@ export class NotificationsService {
   }
 
   /**
-   * SSE Stream: Emits live notifications for the given userId
+   * SSE Stream: Emits live notifications for the given userId with immediate handshake & heartbeats
    */
   subscribeToUserStream(userId: string): Observable<MessageEvent> {
     const notifications = this.sseSubject.asObservable().pipe(
@@ -251,10 +251,19 @@ export class NotificationsService {
       map((event) => ({ data: event.notification }) as MessageEvent),
     );
 
-    const heartbeat = interval(25_000).pipe(
+    // Initial handshake emission so client stream confirms connection immediately
+    const handshake = new Observable<MessageEvent>((subscriber) => {
+      subscriber.next({
+        data: { type: 'connected', timestamp: new Date().toISOString() },
+      } as MessageEvent);
+      subscriber.complete();
+    });
+
+    // 15-second heartbeat ping to prevent proxy/cloud socket timeouts
+    const heartbeat = interval(15_000).pipe(
       map(() => ({ data: { type: 'ping' } }) as MessageEvent),
     );
 
-    return merge(notifications, heartbeat);
+    return merge(handshake, notifications, heartbeat);
   }
 }

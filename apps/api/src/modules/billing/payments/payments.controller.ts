@@ -41,6 +41,7 @@ import { ROLE } from '@prisma/client';
 import { OtpService } from '@api/modules/auth/otp/otp.service';
 import { OtpThrottle } from '@api/modules/shared/decorators/custom-throttler.decorator';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 
@@ -59,6 +60,7 @@ export class PaymentsController {
 
   @Post('otp/request')
   @HttpCode(HttpStatus.OK)
+  @Message('Payment verification code sent to your email')
   @OtpThrottle()
   @Roles(ROLE.USER)
   @ApiBearerAuth()
@@ -111,6 +113,7 @@ export class PaymentsController {
 
   @Post('initialize')
   @HttpCode(HttpStatus.OK)
+  @Message('Payment initialized successfully')
   @Roles(ROLE.USER)
   @OtpRequired('payment')
   @ApiBearerAuth()
@@ -145,6 +148,7 @@ export class PaymentsController {
 
   @Get('order/:orderId')
   @HttpCode(HttpStatus.OK)
+  @Message('Order payment details retrieved successfully')
   @Roles(ROLE.USER)
   @ApiBearerAuth()
   @ApiOperation({
@@ -178,6 +182,7 @@ export class PaymentsController {
   @Public()
   @Get('callback')
   @HttpCode(HttpStatus.OK)
+  @Message('Payment verified successfully')
   @ApiOperation({
     summary: 'Paystack payment callback',
   })
@@ -217,6 +222,7 @@ export class PaymentsController {
   @Public()
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
+  @Message('Payment webhook processed successfully')
   @ApiOperation({
     summary: 'Paystack webhook',
   })
@@ -264,6 +270,7 @@ export class PaymentsController {
 
   @Post('refund')
   @HttpCode(HttpStatus.OK)
+  @Message('Payment refund processed successfully')
   @ApiBearerAuth()
   @Roles(ROLE.ADMIN)
   @ApiOperation({

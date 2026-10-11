@@ -704,6 +704,19 @@ export class CacheService {
   }
 
   /**
+   * Retrieves human-readable Redis memory usage string (e.g. "14.2M").
+   */
+  async getMemoryUsage(): Promise<string> {
+    try {
+      const memInfo = await this.redis.info('memory');
+      const match = memInfo.match(/used_memory_human:([^\r\n]+)/);
+      return match?.[1]?.trim() || (this.isAvailable() ? 'Active' : 'Offline');
+    } catch {
+      return this.isAvailable() ? 'Active' : 'Offline';
+    }
+  }
+
+  /**
    * Builds consistent namespaced cache keys.
    */
   buildKey(prefix: string, ...parts: string[]): string {

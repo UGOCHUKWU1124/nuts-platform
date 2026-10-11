@@ -198,7 +198,7 @@ export class AuthService {
       user?.password ?? UNKNOWN_ACCOUNT_PASSWORD_HASH,
     );
 
-    if (!user || !passwordMatches || !user.isActive) {
+    if (!user || !passwordMatches) {
       this.fireAndForget(
         this.accountLockService.recordFailedAttempt(identifier),
         'failed login attempt',
@@ -217,6 +217,15 @@ export class AuthService {
       );
 
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.isActive) {
+      if (user.deactivatedBy) {
+        throw new UnauthorizedException(
+          'Your account was suspended by an administrator. Please contact support.',
+        );
+      }
+      throw new UnauthorizedException('ACCOUNT_DEACTIVATED');
     }
 
     this.fireAndForget(
@@ -439,9 +448,7 @@ export class AuthService {
         ...vendor,
         role: 'vendor' as const,
         capabilities: {
-          canPurchase: false,
           canSell: Boolean(vendor.isApproved && vendor.isActive),
-          canAdminister: false,
         },
       };
     }
@@ -462,8 +469,6 @@ export class AuthService {
         ...admin,
         role: 'admin' as const,
         capabilities: {
-          canPurchase: false,
-          canSell: false,
           canAdminister: Boolean(admin.isActive),
         },
       };
@@ -486,8 +491,6 @@ export class AuthService {
       role: 'user' as const,
       capabilities: {
         canPurchase: Boolean(customer.isActive),
-        canSell: false,
-        canAdminister: false,
       },
     };
   }

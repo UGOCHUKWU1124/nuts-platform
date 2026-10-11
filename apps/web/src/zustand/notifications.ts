@@ -47,7 +47,7 @@ let listRequestController: AbortController | null = null;
 const unreadCountCache = new Map<string, number>();
 const unreadCountRequests = new Map<string, Promise<void>>();
 const receivedNotificationIds = new Set<string>();
-const SSE_CONNECT_TIMEOUT_MS = 20_000;
+const SSE_CONNECT_TIMEOUT_MS = 30_000;
 
 function startNotificationStream(
   role: AuthRole,

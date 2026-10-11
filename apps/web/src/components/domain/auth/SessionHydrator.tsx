@@ -12,6 +12,15 @@ export function SessionHydrator({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void hydrateFromCookies();
+
+    const handleOnline = () => {
+      void hydrateFromCookies();
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
   }, [hydrateFromCookies]);
 
   return <>{children}</>;

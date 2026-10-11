@@ -220,7 +220,9 @@ export function ProductCard({
               src={img}
               alt={product.name}
               fill
+              unoptimized
               priority={priority}
+              loading={priority ? "eager" : "lazy"}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
             />

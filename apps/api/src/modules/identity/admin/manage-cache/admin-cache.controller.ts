@@ -1,4 +1,11 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -12,6 +19,13 @@ import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 
+export interface CacheStatsResult {
+  connected: boolean;
+  totalKeys: number;
+  memoryUsed: string;
+  uptimeInSeconds?: number;
+}
+
 @ApiTags('ADMIN - CACHE')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/cache')
@@ -19,26 +33,98 @@ import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 export class AdminCacheController {
   constructor(private readonly cacheService: CacheService) {}
 
-  @Get('flush')
+  @Get('stats')
   @HttpCode(HttpStatus.OK)
-  @Message('Cache flushed successfully')
+  @Message('Cache statistics retrieved successfully')
   @ApiOperation({
-    summary: 'Flush entire Redis cache',
+    summary: 'Get Redis cache cluster operational metrics',
     description:
-      '**Warning:** This endpoint permanently deletes ALL cached data (category tree, product listings, store profiles, etc.). ' +
-      'Subsequent requests will hit the database directly until the cache is repopulated. ' +
-      'Use sparingly — prefer letting TTLs expire naturally in most cases.',
+      'Returns active connection status, total key references, and estimated memory utilization.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: ApiResponseDto<CacheStatsResult>,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized — admin session required',
+  })
+  async getStats(): Promise<CacheStatsResult> {
+    const [stats, memoryUsed] = await Promise.all([
+      this.cacheService.getStats(),
+      this.cacheService.getMemoryUsage(),
+    ]);
+
+    return {
+      connected: stats.available,
+      totalKeys: stats.keys,
+      memoryUsed,
+    };
+  }
+
+  @Post('invalidate/categories')
+  @Delete('categories')
+  @HttpCode(HttpStatus.OK)
+  @Message('Category hierarchy cache invalidated successfully')
+  @ApiOperation({
+    summary: 'Invalidate category taxonomy cache',
+    description:
+      'Clears the category tree and taxonomy ancestor path caches across all instances.',
   })
   @ApiResponse({
     status: 200,
     type: ApiResponseDto<{ message: string }>,
-    description: 'All cached data has been flushed.',
   })
-  @ApiUnauthorizedResponse({
-    description: 'Unauthorized — admin access required',
+  async invalidateCategories(): Promise<{ message: string }> {
+    await this.cacheService.invalidateCategoryCache();
+    await this.cacheService.delByPattern('categories:*');
+    await this.cacheService.delByPattern('category:*');
+    return { message: 'Category cache invalidated successfully' };
+  }
+
+  @Post('invalidate/products')
+  @Delete('products')
+  @HttpCode(HttpStatus.OK)
+  @Message('Product catalog cache invalidated successfully')
+  @ApiOperation({
+    summary: 'Invalidate product catalog cache',
+    description:
+      'Clears storefront catalog lists, facet filters, and product card caches.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: ApiResponseDto<{ message: string }>,
+  })
+  async invalidateProducts(): Promise<{ message: string }> {
+    await this.cacheService.delByPattern('product:*');
+    await this.cacheService.delByPattern('products:*');
+    return { message: 'Product catalog cache invalidated successfully' };
+  }
+
+  @Post('invalidate/all')
+  @Delete('all')
+  @HttpCode(HttpStatus.OK)
+  @Message('Platform cache invalidated successfully')
+  @ApiOperation({
+    summary: 'Invalidate all Redis caches',
+    description: 'Purges all application keys across the marketplace cache.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: ApiResponseDto<{ message: string }>,
+  })
+  async invalidateAll(): Promise<{ message: string }> {
+    await this.cacheService.clear();
+    return { message: 'All platform caches invalidated successfully' };
+  }
+
+  @Get('flush')
+  @HttpCode(HttpStatus.OK)
+  @Message('Cache invalidated successfully')
+  @ApiOperation({
+    summary: 'Legacy flush endpoint (retained for backward compatibility)',
   })
   async flush(): Promise<{ message: string }> {
     await this.cacheService.clear();
-    return { message: 'Cache flushed successfully' };
+    return { message: 'Cache invalidated successfully' };
   }
 }

@@ -17,6 +17,7 @@ export interface DataTablePagination {
   page?: number;
   limit?: number;
   total?: number;
+  totalItems?: number;
   totalPages?: number;
   onPageChange?: (newPage: number) => void;
   cursor?: string | null;
@@ -24,6 +25,7 @@ export interface DataTablePagination {
   prevCursor?: string | null;
   hasNextPage?: boolean;
   hasPrevPage?: boolean;
+  hasPreviousPage?: boolean;
   onNextPage?: () => void;
   onPrevPage?: () => void;
 }
@@ -136,72 +138,84 @@ export function DataTable<T extends object>({
       </div>
 
       {/* Pagination Footer */}
-      {pagination && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/70 px-4 py-3 bg-muted/15 text-xs text-muted-foreground">
-          <div>
-            <span>
-              {pagination.page !== undefined ? (
-                <>
-                  Showing Page <strong className="text-foreground font-bold">{pagination.page}</strong>
-                  {pagination.totalPages ? (
-                    <> of <strong className="text-foreground font-bold">{pagination.totalPages}</strong></>
-                  ) : null}
-                </>
-              ) : (
-                <>Showing <strong className="text-foreground font-bold">{safeData.length}</strong> items</>
-              )}
-              {pagination.total !== undefined ? (
-                <> ({pagination.total} total items)</>
-              ) : null}
-            </span>
-          </div>
+      {pagination && (() => {
+        const totalCount = pagination.total ?? pagination.totalItems;
+        const computedTotalPages =
+          pagination.totalPages ??
+          (totalCount !== undefined && pagination.limit && pagination.limit > 0
+            ? Math.ceil(totalCount / pagination.limit)
+            : undefined);
+        const currentPage = pagination.page ?? 1;
 
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
-              disabled={
-                pagination.hasPrevPage !== undefined
-                  ? !pagination.hasPrevPage
-                  : (pagination.page ?? 1) <= 1
-              }
-              onClick={() => {
-                if (pagination.onPrevPage) {
-                  pagination.onPrevPage();
-                } else if (pagination.onPageChange && pagination.page !== undefined) {
-                  pagination.onPageChange(pagination.page - 1);
+        return (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/70 px-4 py-3 bg-muted/15 text-xs text-muted-foreground">
+            <div>
+              <span>
+                {pagination.page !== undefined ? (
+                  <>
+                    Showing Page <strong className="text-foreground font-bold">{currentPage}</strong>
+                    {computedTotalPages ? (
+                      <> of <strong className="text-foreground font-bold">{computedTotalPages}</strong></>
+                    ) : null}
+                  </>
+                ) : (
+                  <>Showing <strong className="text-foreground font-bold">{safeData.length}</strong> items</>
+                )}
+                {totalCount !== undefined ? (
+                  <> ({totalCount} total {totalCount === 1 ? "item" : "items"})</>
+                ) : null}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
+                disabled={
+                  pagination.hasPreviousPage !== undefined
+                    ? !pagination.hasPreviousPage
+                    : pagination.hasPrevPage !== undefined
+                    ? !pagination.hasPrevPage
+                    : currentPage <= 1
                 }
-              }}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
-              disabled={
-                pagination.hasNextPage !== undefined
-                  ? !pagination.hasNextPage
-                  : pagination.totalPages !== undefined
-                  ? (pagination.page ?? 1) >= pagination.totalPages
-                  : false
-              }
-              onClick={() => {
-                if (pagination.onNextPage) {
-                  pagination.onNextPage();
-                } else if (pagination.onPageChange && pagination.page !== undefined) {
-                  pagination.onPageChange(pagination.page + 1);
+                onClick={() => {
+                  if (pagination.onPrevPage) {
+                    pagination.onPrevPage();
+                  } else if (pagination.onPageChange) {
+                    pagination.onPageChange(currentPage - 1);
+                  }
+                }}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
+                disabled={
+                  pagination.hasNextPage !== undefined
+                    ? !pagination.hasNextPage
+                    : computedTotalPages !== undefined
+                    ? currentPage >= computedTotalPages
+                    : false
                 }
-              }}
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+                onClick={() => {
+                  if (pagination.onNextPage) {
+                    pagination.onNextPage();
+                  } else if (pagination.onPageChange) {
+                    pagination.onPageChange(currentPage + 1);
+                  }
+                }}
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

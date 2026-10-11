@@ -1,16 +1,22 @@
 server {
   listen 80;
-  server_name ${PUBLIC_DOMAIN};
+  server_name ${PUBLIC_DOMAIN} localhost 127.0.0.1;
 
-  return 308 https://${PUBLIC_DOMAIN}$request_uri;
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "healthy\n";
+  }
+
+  location / {
+    return 308 https://$host$request_uri;
+  }
 }
 
 server {
   listen 443 ssl;
   http2 on;
-  server_name ${PUBLIC_DOMAIN};
-
-  if ($host != ${PUBLIC_DOMAIN}) { return 444; }
+  server_name ${PUBLIC_DOMAIN} localhost 127.0.0.1;
 
   ssl_certificate /etc/nginx/tls/origin.pem;
   ssl_certificate_key /etc/nginx/tls/origin-key.pem;
