@@ -20,18 +20,6 @@ import { useEffect, useRef, useState } from "react";
 
 const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
 
-// Lightweight pseudo-random shuffle to provide a dynamic assortment on session load
-function shuffleProducts(items: ProductCardDto[]): ProductCardDto[] {
-  const array = [...items];
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = array[i]!;
-    array[i] = array[j]!;
-    array[j] = temp;
-  }
-  return array;
-}
-
 export interface ProductCatalogViewProps {
   initialCategories: CategoryResponseDto[];
   initialProducts: ProductCardDto[];
@@ -66,6 +54,23 @@ export function ProductCatalogView({
   const allCategories = initialCategories ?? EMPTY_CATEGORIES;
   const minPriceValue = minPrice.trim() ? Number(minPrice) : undefined;
   const maxPriceValue = maxPrice.trim() ? Number(maxPrice) : undefined;
+
+  // Keep browser URL cleanly reflecting search?query=... without reloading
+  useEffect(() => {
+    if (!searchPage || typeof window === "undefined") return;
+    const currentParams = new URLSearchParams(window.location.search);
+    const currentQuery = (currentParams.get("query") || currentParams.get("q") || "").trim().toLowerCase();
+    if (search !== currentQuery) {
+      const url = new URL(window.location.href);
+      if (search) {
+        url.searchParams.set("query", searchInput.trim());
+      } else {
+        url.searchParams.delete("query");
+      }
+      url.searchParams.delete("q");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, [search, searchInput, searchPage]);
 
   const {
     data,
@@ -107,7 +112,7 @@ export function ProductCatalogView({
     initialData:
       !search && !inStock && !minPrice && !maxPrice && sortBy === "newest"
         ? {
-            pages: [searchPage ? initialProducts : shuffleProducts(initialProducts)],
+            pages: [initialProducts],
             pageParams: [1],
           }
         : undefined,
@@ -142,9 +147,20 @@ export function ProductCatalogView({
     setSearchInput("");
   };
 
-  const hasActiveFilters = Boolean(
-    search || inStock || minPrice || maxPrice || sortBy !== "newest"
-  );
+  const SORT_LABELS: Record<string, string> = {
+    price_asc: "Price: Low to High",
+    price_desc: "Price: High to Low",
+    popular: "Most Popular",
+    newest: "Newest Arrivals",
+  };
+
+  const activeFiltersCount =
+    (search ? 1 : 0) +
+    (inStock ? 1 : 0) +
+    (minPrice || maxPrice ? 1 : 0) +
+    (sortBy !== "newest" ? 1 : 0);
+
+  const hasActiveFilters = activeFiltersCount > 0;
 
   return (
     <CustomerLayout categories={allCategories}>
@@ -180,7 +196,7 @@ export function ProductCatalogView({
                 <button
                   type="button"
                   onClick={() => setSearchInput("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black dark:hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black dark:hover:text-white cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -195,8 +211,10 @@ export function ProductCatalogView({
             >
               <SlidersHorizontal className="h-4 w-4" />
               <span>Filters</span>
-              {hasActiveFilters && (
-                <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />
+              {activeFiltersCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-black dark:bg-white text-[10px] font-bold text-white dark:text-black px-1.5 shadow-xs">
+                  {activeFiltersCount}
+                </span>
               )}
             </Button>
           </div>
@@ -246,41 +264,62 @@ export function ProductCatalogView({
         {/* Active Filter Chips */}
         {hasActiveFilters && (
           <div className="mb-6 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-neutral-400 mr-1">Active filters:</span>
+            <span className="text-xs font-semibold text-neutral-500 mr-1 uppercase tracking-wider text-[11px]">Active filters:</span>
             {search && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 px-3 py-1 text-xs font-semibold text-black dark:text-white">
-                &ldquo;{searchInput}&rdquo;
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800/90 px-3 py-1 text-xs font-medium text-black dark:text-white shadow-2xs">
+                <span className="text-neutral-500 font-normal">Search:</span> &ldquo;{searchInput}&rdquo;
                 <button
                   type="button"
                   onClick={() => setSearchInput("")}
-                  className="hover:opacity-75"
+                  className="hover:opacity-75 cursor-pointer ml-0.5"
+                  aria-label="Remove search filter"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {inStock && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 px-3 py-1 text-xs font-semibold text-black dark:text-white">
-                In Stock Only
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800/90 px-3 py-1 text-xs font-medium text-black dark:text-white shadow-2xs">
+                <span className="text-neutral-500 font-normal">Availability:</span> In Stock Only
                 <button
                   type="button"
                   onClick={() => setInStock(false)}
-                  className="hover:opacity-75"
+                  className="hover:opacity-75 cursor-pointer ml-0.5"
+                  aria-label="Remove in-stock filter"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {(minPrice || maxPrice) && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 px-3 py-1 text-xs font-semibold text-black dark:text-white">
-                ₦{minPrice || "0"} – ₦{maxPrice || "Any"}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800/90 px-3 py-1 text-xs font-medium text-black dark:text-white shadow-2xs">
+                <span className="text-neutral-500 font-normal">Price:</span>{" "}
+                {minPrice && maxPrice
+                  ? `₦${Number(minPrice).toLocaleString()} – ₦${Number(maxPrice).toLocaleString()}`
+                  : minPrice
+                    ? `From ₦${Number(minPrice).toLocaleString()}`
+                    : `Up to ₦${Number(maxPrice).toLocaleString()}`}
                 <button
                   type="button"
                   onClick={() => {
                     setMinPrice("");
                     setMaxPrice("");
                   }}
-                  className="hover:opacity-75"
+                  className="hover:opacity-75 cursor-pointer ml-0.5"
+                  aria-label="Remove price filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {sortBy !== "newest" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800/90 px-3 py-1 text-xs font-medium text-black dark:text-white shadow-2xs">
+                <span className="text-neutral-500 font-normal">Sort:</span> {SORT_LABELS[sortBy] || sortBy}
+                <button
+                  type="button"
+                  onClick={() => setSortBy("newest")}
+                  className="hover:opacity-75 cursor-pointer ml-0.5"
+                  aria-label="Reset sort order"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -289,9 +328,9 @@ export function ProductCatalogView({
             <button
               type="button"
               onClick={handleResetFilters}
-              className="text-xs font-semibold text-black dark:text-white underline ml-2 cursor-pointer"
+              className="text-xs font-semibold text-black dark:text-white underline ml-2 cursor-pointer hover:opacity-80 transition-opacity"
             >
-              Reset all
+              Reset all ({activeFiltersCount})
             </button>
           </div>
         )}
@@ -339,8 +378,12 @@ export function ProductCatalogView({
           <div className="space-y-12">
             {/* Unified Randomized Products Grid */}
             <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-x-6 sm:gap-y-10">
-              {rawProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {rawProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  priority={index < 4}
+                />
               ))}
             </div>
 

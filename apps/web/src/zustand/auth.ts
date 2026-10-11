@@ -149,12 +149,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   setStatus: (status) => {
-    set({
+    set((state) => ({
       status,
       isLoading: status === "unknown" || status === "hydrating",
       isInitialized: status !== "unknown" && status !== "hydrating",
-      isAuthenticated: status === "authenticated",
-    });
+      isAuthenticated:
+        status === "authenticated" ||
+        (status === "unavailable" && Boolean(state.user)),
+    }));
   },
 
   setSession: (rawUser, role) => {
@@ -165,6 +167,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
 
     markSessionAuthenticated(userRole);
+
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem("nuts_session_active", "1");
+      } catch {
+        // Ignore quota/private mode errors
+      }
+    }
 
     const capabilities =
       rawUser.capabilities ??
@@ -194,6 +204,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   clearSession: () => {
     clearAuthTokens();
     markSessionUnauthenticated();
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.removeItem("nuts_session_active");
+      } catch {
+        // Ignore
+      }
+    }
     set({
       user: null,
       role: null,

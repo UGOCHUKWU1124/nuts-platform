@@ -149,19 +149,36 @@ export function VendorStoreView({
     const groupMap = new Map<string, RootCategoryGroup>();
 
     for (const product of rawProducts) {
-      const cat = product.category;
+      // Trace category hierarchy: category, subcategory, parentSubcategory
+      const categoryRefs = [
+        product.category,
+        product.subcategory,
+        product.parentSubcategory,
+      ].filter(Boolean);
+
       let rootInfo: { id: string; name: string; slug: string } | null = null;
 
-      if (cat?.id && rootCategoryMap.has(cat.id)) {
-        rootInfo = rootCategoryMap.get(cat.id)!;
-      } else if (cat?.slug && rootCategoryMap.has(cat.slug)) {
-        rootInfo = rootCategoryMap.get(cat.slug)!;
-      } else if (cat?.name) {
-        rootInfo = {
-          id: cat.id || cat.slug || cat.name,
-          name: cat.name,
-          slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-"),
-        };
+      for (const cat of categoryRefs) {
+        if (!cat) continue;
+        if (cat.id && rootCategoryMap.has(cat.id)) {
+          rootInfo = rootCategoryMap.get(cat.id)!;
+          break;
+        }
+        if (cat.slug && rootCategoryMap.has(cat.slug)) {
+          rootInfo = rootCategoryMap.get(cat.slug)!;
+          break;
+        }
+      }
+
+      if (!rootInfo) {
+        const cat = product.category || product.subcategory || product.parentSubcategory;
+        if (cat?.name) {
+          rootInfo = {
+            id: cat.id || cat.slug || cat.name,
+            name: cat.name,
+            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-"),
+          };
+        }
       }
 
       const groupKey = rootInfo?.id || "uncategorized";
@@ -181,6 +198,17 @@ export function VendorStoreView({
 
     return Array.from(groupMap.values());
   }, [rawProducts, rootCategoryMap]);
+
+  // Main root categories where this vendor actually has active products
+  const vendorMainCategories = useMemo(() => {
+    return rootCategoryGroups
+      .filter((g) => g.products.length > 0 && g.id !== "uncategorized")
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        slug: g.slug,
+      }));
+  }, [rootCategoryGroups]);
 
   // Filter & sort products within each root category group
   const filteredGroups = useMemo(() => {
@@ -231,10 +259,6 @@ export function VendorStoreView({
       .filter((g) => g.products.length > 0);
   }, [rootCategoryGroups, searchInput, inStock, minPrice, maxPrice, sortBy]);
 
-  const totalFilteredCount = useMemo(
-    () => filteredGroups.reduce((acc, g) => acc + g.products.length, 0),
-    [filteredGroups]
-  );
 
   const activeFilterCount = useMemo(() => {
     let c = 0;
@@ -372,18 +396,14 @@ export function VendorStoreView({
               </div>
 
               {/* Badges / Stats */}
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-                  <ShoppingBag className="h-3.5 w-3.5" />
-                  {rawProducts.length} {rawProducts.length === 1 ? "Product" : "Products"}
-                </span>
-                {store.isVerified && (
+              {store.isVerified && (
+                <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Verified Vendor
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Store Name & Description */}
@@ -400,6 +420,20 @@ export function VendorStoreView({
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   {store.storeDescription}
                 </p>
+              )}
+              {vendorMainCategories.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {vendorMainCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => scrollToCategory(cat.slug)}
+                      className="inline-flex items-center rounded-full bg-secondary/80 px-2.5 py-0.5 text-xs font-medium text-foreground border border-border/50 hover:bg-secondary hover:border-primary/40 transition-colors cursor-pointer"
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -463,7 +497,7 @@ export function VendorStoreView({
                     : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200"
                 }`}
               >
-                All Departments ({totalFilteredCount})
+                All Departments
               </button>
               {filteredGroups.map((group) => {
                 const isSelected = activeTab === group.slug;
@@ -478,7 +512,7 @@ export function VendorStoreView({
                         : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200"
                     }`}
                   >
-                    {group.name} ({group.products.length})
+                    {group.name}
                   </button>
                 );
               })}
@@ -583,7 +617,7 @@ export function VendorStoreView({
           </div>
         ) : (
           <div className="space-y-12 sm:space-y-16">
-            {filteredGroups.map((group) => (
+            {filteredGroups.map((group, groupIndex) => (
               <section
                 key={group.id}
                 id={`cat-${group.slug}`}
@@ -594,14 +628,11 @@ export function VendorStoreView({
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                     {group.name}
                   </h2>
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">
-                    {group.products.length} {group.products.length === 1 ? "product" : "products"}
-                  </span>
                 </div>
 
                 {/* Product Grid */}
                 <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-x-6 sm:gap-y-10">
-                  {group.products.map((product) => (
+                  {group.products.map((product, pIdx) => (
                     <ProductCard
                       key={product.id}
                       product={{
@@ -618,6 +649,7 @@ export function VendorStoreView({
                         subcategory: product.subcategory,
                       }}
                       addedFrom="PRODUCT_PAGE"
+                      priority={groupIndex === 0 && pIdx < 4}
                     />
                   ))}
                 </div>

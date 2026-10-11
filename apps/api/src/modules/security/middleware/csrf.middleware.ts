@@ -129,11 +129,12 @@ export class CsrfMiddleware implements NestMiddleware {
     const sameSiteEnv =
       process.env.COOKIE_SAME_SITE || process.env.AUTH_COOKIE_SAME_SITE;
 
+    const defaultSameSite = isProduction || isStaging ? 'none' : 'lax';
     const sameSite: 'lax' | 'strict' | 'none' = (
       sameSiteEnv &&
       ['lax', 'strict', 'none'].includes(sameSiteEnv.toLowerCase())
         ? sameSiteEnv.toLowerCase()
-        : 'lax'
+        : defaultSameSite
     ) as 'lax' | 'strict' | 'none';
 
     const isSecure =

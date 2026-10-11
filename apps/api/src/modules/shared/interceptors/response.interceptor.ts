@@ -85,6 +85,23 @@ export class ResponseInterceptor<T> implements NestInterceptor<
       return next.handle() as Observable<ApiResponseDto<T>>;
     }
 
+    const httpContext = context.switchToHttp();
+    const req = httpContext.getRequest<import('express').Request>();
+    const acceptHeader = req?.headers?.accept;
+    const res = httpContext.getResponse<import('express').Response>();
+    const contentType =
+      typeof res?.getHeader === 'function'
+        ? (res.getHeader('content-type') as string | undefined)
+        : undefined;
+
+    // Protocol-level bypass: do not wrap streaming event protocols
+    if (
+      acceptHeader?.includes('text/event-stream') ||
+      contentType?.includes('text/event-stream')
+    ) {
+      return next.handle() as Observable<ApiResponseDto<T>>;
+    }
+
     const message =
       this.reflector.getAllAndOverride<string>(MESSAGE_KEY, [
         context.getHandler(),

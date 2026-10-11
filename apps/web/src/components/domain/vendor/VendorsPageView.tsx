@@ -9,7 +9,7 @@ import { Input } from "@/component/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Search,Sparkles,Store,X } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 
 const EMPTY_VENDORS: VendorResponseDto[] = [];
 
@@ -25,16 +25,16 @@ function getStoreInitials(name: string): string {
   return ((first[0] ?? "") + (second[0] ?? "")).toUpperCase() || "CR";
 }
 
+const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
+
 export interface VendorsPageViewProps {
   initialCategories: CategoryResponseDto[];
   initialVendors?: VendorResponseDto[];
-  
 }
 
 export function VendorsPageView({
   initialCategories,
   initialVendors,
-  
 }: VendorsPageViewProps) {
   const vendorsList = initialVendors ?? EMPTY_VENDORS;
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("ALL");
@@ -42,10 +42,45 @@ export function VendorsPageView({
   const search = useDeferredValue(searchInput.trim());
 
   // Categories delivered directly via RSC props
-  const categories = initialCategories ?? [];
-  const rootCategories: CategoryResponseDto[] = categories.filter(
-    (c) => !c.parentId
+  const categories = initialCategories ?? EMPTY_CATEGORIES;
+  const rootCategories = useMemo(
+    () => categories.filter((c) => !c.parentId),
+    [categories],
   );
+
+  // Pre-build hierarchy map from categories so any subcategory strictly resolves to its root main category
+  const categoryToRootMap = useMemo(() => {
+    const catById = new Map<string, CategoryResponseDto>();
+    for (const cat of categories) {
+      catById.set(cat.id, cat);
+      if (cat.slug) catById.set(cat.slug, cat);
+    }
+
+    const mapping = new Map<string, { id: string; name: string }>();
+
+    for (const cat of categories) {
+      let current: CategoryResponseDto | undefined = cat;
+      while (current && current.parentId) {
+        current = catById.get(current.parentId);
+      }
+      if (current && !current.parentId) {
+        const rootInfo = { id: current.id, name: current.name };
+        mapping.set(cat.id, rootInfo);
+        if (cat.slug) mapping.set(cat.slug, rootInfo);
+        if (cat.name) mapping.set(cat.name.toLowerCase(), rootInfo);
+      }
+    }
+
+    // Also register root categories directly
+    for (const root of rootCategories) {
+      const rootInfo = { id: root.id, name: root.name };
+      mapping.set(root.id, rootInfo);
+      if (root.slug) mapping.set(root.slug, rootInfo);
+      if (root.name) mapping.set(root.name.toLowerCase(), rootInfo);
+    }
+
+    return mapping;
+  }, [categories, rootCategories]);
 
   const isFiltered = selectedCategoryId !== "ALL" || search.length > 0;
 
@@ -193,7 +228,31 @@ export function VendorsPageView({
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {displayedVendors.map((vendor) => {
                   const initials = getStoreInitials(vendor.storeName);
-                  const vendorCategories = vendor.categories ?? [];
+                  const rawCategories = vendor.categories ?? [];
+
+                  // Strictly resolve every category tag to its root main category and deduplicate
+                  const mainCategoriesMap = new Map<string, { id: string; name: string }>();
+                  for (const c of rawCategories) {
+                    const root =
+                      categoryToRootMap.get(c.id) ||
+                      (c.slug ? categoryToRootMap.get(c.slug) : undefined) ||
+                      (c.name ? categoryToRootMap.get(c.name.toLowerCase()) : undefined);
+
+                    if (root) {
+                      mainCategoriesMap.set(root.id, root);
+                    } else {
+                      const isRoot = rootCategories.find(
+                        (rc) =>
+                          rc.id === c.id ||
+                          rc.slug === c.slug ||
+                          rc.name.toLowerCase() === c.name.toLowerCase()
+                      );
+                      if (isRoot) {
+                        mainCategoriesMap.set(isRoot.id, { id: isRoot.id, name: isRoot.name });
+                      }
+                    }
+                  }
+                  const vendorMainCategories = Array.from(mainCategoriesMap.values());
 
                   return (
                     <Link
@@ -236,10 +295,10 @@ export function VendorsPageView({
                             {vendor.storeName}
                           </h2>
 
-                          {/* Category Tags at Bottom */}
+                          {/* Category Tags at Bottom - ONLY Main Categories */}
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            {vendorCategories.length > 0 ? (
-                              vendorCategories.slice(0, 3).map((c, i) => (
+                            {vendorMainCategories.length > 0 ? (
+                              vendorMainCategories.slice(0, 3).map((c, i) => (
                                 <span key={c.id} className="inline-flex items-center">
                                   {i > 0 && <span className="mx-1 text-muted-foreground/40">•</span>}
                                   <span>{c.name}</span>

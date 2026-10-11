@@ -1,11 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import {
-  NotificationPriority,
-  NotificationType,
-  Prisma,
-  ROLE,
-} from '@prisma/client';
+import { NotificationPriority, NotificationType, ROLE } from '@prisma/client';
 import {
   EmailOrderItem,
   EmailTemplatesService,
@@ -13,6 +8,7 @@ import {
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
 import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
+import { NotificationsService } from '../notifications.service';
 import { DomainEvents } from '@api/modules/shared/events/domain-events';
 import type {
   OrderCancelledPayload,
@@ -32,11 +28,12 @@ export class NotificationListener {
     private readonly rabbitmq: RabbitMQService,
     private readonly emailTemplates: EmailTemplatesService,
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
    * Dispatches in-app notification to RabbitMQ, with seamless fallback to direct
-   * PostgreSQL persistence if RabbitMQ is disabled or unavailable.
+   * notification service persistence & real-time SSE broadcast if RabbitMQ is unavailable.
    */
   private async dispatchNotification(data: {
     userId: string;
@@ -54,17 +51,15 @@ export class NotificationListener {
     );
     if (!published) {
       try {
-        await this.prisma.notification.create({
-          data: {
-            userId: data.userId,
-            role: data.role,
-            type: data.type,
-            title: data.title,
-            message: data.message,
-            priority: data.priority,
-            actionUrl: data.link ?? null,
-            metadata: (data.metadata as Prisma.InputJsonValue) ?? Prisma.DbNull,
-          },
+        await this.notificationsService.create({
+          userId: data.userId,
+          role: data.role,
+          type: data.type,
+          title: data.title,
+          message: data.message,
+          priority: data.priority,
+          link: data.link,
+          metadata: data.metadata,
         });
       } catch (error) {
         this.logger.error(
@@ -201,6 +196,28 @@ export class NotificationListener {
         link: `/vendor/orders`,
         metadata: { orderId: payload.orderId },
       });
+    }
+
+    // 3. Notify all active platform Admins
+    try {
+      const admins = await this.prisma.admin.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      for (const admin of admins) {
+        await this.dispatchNotification({
+          userId: admin.id,
+          role: ROLE.ADMIN,
+          type: NotificationType.ORDER_PLACED,
+          title: 'New Order Received',
+          message: `Order #${payload.orderNumber} placed for ${payload.currency} ${payload.finalAmount || payload.totalAmount}.`,
+          priority: NotificationPriority.HIGH,
+          link: `/admin/order`,
+          metadata: { orderId: payload.orderId },
+        });
+      }
+    } catch (err) {
+      this.logger.error('Failed to notify admins of new order', err);
     }
   }
 
@@ -457,6 +474,28 @@ export class NotificationListener {
       link: `/account/orders`,
       metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
     });
+
+    // Notify all active Admins of confirmed payment
+    try {
+      const admins = await this.prisma.admin.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      for (const admin of admins) {
+        await this.dispatchNotification({
+          userId: admin.id,
+          role: ROLE.ADMIN,
+          type: NotificationType.PAYMENT_RECEIVED,
+          title: 'Payment Confirmed',
+          message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
+          priority: NotificationPriority.MEDIUM,
+          link: `/admin/order`,
+          metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
+        });
+      }
+    } catch (err) {
+      this.logger.error('Failed to notify admins of confirmed payment', err);
+    }
   }
 
   @OnEvent(DomainEvents.PAYMENT_FAILED)

@@ -3,12 +3,14 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { Observable } from 'rxjs';
 import { GetUser } from '../../../common/decorators/get-user.decorator';
+import { BypassResponseInterceptor } from '@api/modules/shared/decorators/bypass-response-interceptor.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { NotificationsService } from '../notifications.service';
 
 @ApiTags('NOTIFICATIONS - SSE')
 @Roles(ROLE.USER, ROLE.ADMIN, ROLE.VENDOR)
+@BypassResponseInterceptor()
 @Controller([
   'notifications/sse/stream',
   'admin/notifications/sse/stream',

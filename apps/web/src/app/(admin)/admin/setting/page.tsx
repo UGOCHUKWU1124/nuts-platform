@@ -6,27 +6,26 @@ import { ConfirmDialog } from "@/component/modal/ConfirmDialog";
 import { ThemeSelector } from "@/component/theme/ThemeSelector";
 import { Badge } from "@/component/ui/badge";
 import { Button } from "@/component/ui/button";
-import { useMutation,useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-Activity,
-CreditCard,
-Database,
-RefreshCw,
-Search
+  CreditCard,
+  Database,
+  RefreshCw,
+  Search,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 export default function AdminSettingPage() {
-  const [confirmFlushAll, setConfirmFlushAll] = useState(false);
+  const [confirmInvalidateAll, setConfirmInvalidateAll] = useState(false);
   const [confirmReindex, setConfirmReindex] = useState(false);
-  const { data: cacheStats, refetch: refetchCache } = useQuery({
+
+  const { data: cacheStats, refetch: refetchCache, isFetching } = useQuery({
     queryKey: ["admin", "cache", "stats"],
     queryFn: async () => {
       const res = await adminSystemService.getCacheStats();
       return res.data;
     },
-    refetchInterval: 30000,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
   });
@@ -41,33 +40,33 @@ export default function AdminSettingPage() {
     gcTime: 1000 * 60 * 10,
   });
 
-  // Mutations
-  const purgeCategoryCacheMutation = useMutation({
-    mutationFn: () => adminSystemService.clearCategoryCache(),
+  // Targeted Invalidation Mutations
+  const invalidateCategoryCacheMutation = useMutation({
+    mutationFn: () => adminSystemService.invalidateCategoryCache(),
     onSuccess: (res) => {
-      toast.success(res?.data?.message || "Category cache purged successfully");
+      toast.success(res?.data?.message || "Category cache invalidated successfully");
       refetchCache();
     },
-    onError: () => toast.error("Failed to clear category cache"),
+    onError: () => toast.error("Failed to invalidate category cache"),
   });
 
-  const purgeProductCacheMutation = useMutation({
-    mutationFn: () => adminSystemService.clearProductCache(),
+  const invalidateProductCacheMutation = useMutation({
+    mutationFn: () => adminSystemService.invalidateProductCache(),
     onSuccess: (res) => {
-      toast.success(res?.data?.message || "Product cache purged successfully");
+      toast.success(res?.data?.message || "Product catalog cache invalidated successfully");
       refetchCache();
     },
-    onError: () => toast.error("Failed to clear product cache"),
+    onError: () => toast.error("Failed to invalidate product cache"),
   });
 
-  const purgeAllCacheMutation = useMutation({
-    mutationFn: () => adminSystemService.clearAllCache(),
+  const invalidateAllCacheMutation = useMutation({
+    mutationFn: () => adminSystemService.invalidateAllCache(),
     onSuccess: (res) => {
-      toast.success(res?.data?.message || "All Redis caches flushed successfully");
+      toast.success(res?.data?.message || "All platform caches invalidated successfully");
       refetchCache();
-      setConfirmFlushAll(false);
+      setConfirmInvalidateAll(false);
     },
-    onError: () => toast.error("Failed to flush all caches"),
+    onError: () => toast.error("Failed to invalidate platform cache"),
   });
 
   const reindexSearchMutation = useMutation({
@@ -85,84 +84,65 @@ export default function AdminSettingPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="System Operations & Cache"
-        description="Monitor system telemetry, purge Redis cache clusters, and rebuild search indexes."
-      />
-
-      {/* Engine Status Banner */}
-      <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 text-emerald-500 border border-emerald-500/20">
-              <Activity className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-neutral-900 dark:text-white">
-                  Production Engine Online
-                </h2>
-                <Badge variant="success" className="text-xs font-semibold">
-                  Healthy
-                </Badge>
-              </div>
-              <p className="text-xs text-neutral-400 mt-0.5">
-                NestJS • Prisma ORM • PostgreSQL 16 • Redis 7 • Elasticsearch Indexer
-              </p>
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              refetchCache();
-              refetchSearch();
-              toast.success("System telemetry refreshed");
-            }}
-            className="rounded-xl text-xs font-semibold h-9 gap-1.5 self-start sm:self-auto"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh Telemetry
-          </Button>
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <PageHeader
+          title="System & Cache Management"
+          description="Manage operational Redis cache invalidation, search index synchronization, and payment parameters."
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            refetchCache();
+            refetchSearch();
+            toast.success("Metrics refreshed");
+          }}
+          disabled={isFetching}
+          className="rounded-xl text-xs font-semibold h-9 gap-1.5 self-start sm:self-auto"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          Refresh Metrics
+        </Button>
       </div>
 
       {/* Appearance & Theme Card */}
-      <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 sm:p-7 shadow-sm">
+      <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 sm:p-7 shadow-xs">
         <ThemeSelector />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Cache Management Card */}
-        <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-sm flex flex-col justify-between">
+        {/* Cache Invalidation Card */}
+        <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <Database className="h-5 w-5 text-indigo-500" />
                 <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-                  Redis Cache Clusters
+                  Redis Cache Invalidation
                 </h3>
               </div>
-              <Badge variant="outline" className="text-xs font-mono text-emerald-500 border-emerald-500/30">
-                Connected
+              <Badge
+                variant={cacheStats?.connected ? "success" : "destructive"}
+                className="text-xs font-mono"
+              >
+                {cacheStats?.connected ? "Connected" : "Disconnected"}
               </Badge>
             </div>
 
-            <p className="text-xs text-neutral-400 mb-6">
-              NUTS utilizes Redis for sub-millisecond category taxonomy lookups, materialized
-              paths, and public storefront catalog caching.
+            <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
+              Targeted cache invalidation purges stale memory keys across instances so the storefront
+              reflects catalog and category updates immediately without requiring database flushes.
             </p>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 p-4">
                 <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                  Total Cached Keys
+                  Cached Key References
                 </span>
                 <p className="text-xl font-bold text-neutral-900 dark:text-white mt-1">
-                  {cacheStats?.totalKeys ?? "Online"}
+                  {cacheStats?.totalKeys ?? 0}
                 </p>
-                <span className="text-xs text-neutral-400">Active key references</span>
+                <span className="text-[11px] text-neutral-400">Active keys in Redis</span>
               </div>
 
               <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 p-4">
@@ -170,72 +150,72 @@ export default function AdminSettingPage() {
                   Memory Utilization
                 </span>
                 <p className="text-xl font-bold text-indigo-500 mt-1">
-                  {cacheStats?.memoryUsed ?? "Optimized"}
+                  {cacheStats?.memoryUsed ?? "Optimal"}
                 </p>
-                <span className="text-xs text-neutral-400">Volatile LRU eviction</span>
+                <span className="text-[11px] text-neutral-400">In-memory footprint</span>
               </div>
             </div>
           </div>
 
-          {/* Granular Purge Actions */}
-          <div className="space-y-2.5 pt-4 border-t border-neutral-100 dark:border-neutral-800">
-            <div className="flex items-center justify-between">
+          {/* Granular Invalidation Actions */}
+          <div className="space-y-3 pt-4 border-t border-neutral-100 dark:border-neutral-800">
+            <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold text-neutral-900 dark:text-white">
                   Category Hierarchy Cache
                 </p>
-                <p className="text-xs text-neutral-400">
-                  Flushes the tree and resets category slug paths
+                <p className="text-[11px] text-neutral-400">
+                  Invalidates taxonomy tree and breadcrumb paths
                 </p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={purgeCategoryCacheMutation.isPending}
-                onClick={() => purgeCategoryCacheMutation.mutate()}
-                className="h-8 rounded-xl text-xs font-medium"
+                disabled={invalidateCategoryCacheMutation.isPending}
+                onClick={() => invalidateCategoryCacheMutation.mutate()}
+                className="h-8 rounded-xl text-xs font-medium shrink-0"
               >
-                {purgeCategoryCacheMutation.isPending ? "Purging..." : "Purge Category"}
+                {invalidateCategoryCacheMutation.isPending ? "Invalidating..." : "Invalidate Categories"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold text-neutral-900 dark:text-white">
-                  Product Feed Cache
+                  Product Catalog Cache
                 </p>
-                <p className="text-xs text-neutral-400">
-                  Invalidates storefront catalog lists and filter facets
+                <p className="text-[11px] text-neutral-400">
+                  Invalidates catalog feeds, facet filters, and card lists
                 </p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={purgeProductCacheMutation.isPending}
-                onClick={() => purgeProductCacheMutation.mutate()}
-                className="h-8 rounded-xl text-xs font-medium"
+                disabled={invalidateProductCacheMutation.isPending}
+                onClick={() => invalidateProductCacheMutation.mutate()}
+                className="h-8 rounded-xl text-xs font-medium shrink-0"
               >
-                {purgeProductCacheMutation.isPending ? "Purging..." : "Purge Products"}
+                {invalidateProductCacheMutation.isPending ? "Invalidating..." : "Invalidate Products"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between gap-4 pt-2">
               <div>
                 <p className="text-xs font-semibold text-rose-500">
-                  Flush Entire Platform Cache
+                  Invalidate Entire Platform Cache
                 </p>
-                <p className="text-xs text-neutral-400">
-                  Invalidates all Redis keys across the marketplace
+                <p className="text-[11px] text-neutral-400">
+                  Clears all application cache keys across the marketplace
                 </p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={purgeAllCacheMutation.isPending}
-                onClick={() => setConfirmFlushAll(true)}
-                className="h-8 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 border-rose-500/30"
+                disabled={invalidateAllCacheMutation.isPending}
+                onClick={() => setConfirmInvalidateAll(true)}
+                className="h-8 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 border-rose-500/30 shrink-0"
               >
-                Flush All
+                Invalidate All
               </Button>
             </div>
           </div>
@@ -244,7 +224,7 @@ export default function AdminSettingPage() {
         {/* Search Engine & Marketplace Settings */}
         <div className="space-y-6">
           {/* Search Indexer */}
-          <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-sm">
+          <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <Search className="h-5 w-5 text-indigo-500" />
@@ -253,22 +233,22 @@ export default function AdminSettingPage() {
                 </h3>
               </div>
               <Badge variant="outline" className="text-xs font-mono text-emerald-500 border-emerald-500/30">
-                Ready
+                Active
               </Badge>
             </div>
 
-            <p className="text-xs text-neutral-400 mb-4">
-              Syncs product attributes, vendor tags, and nested category keywords to the
-              high-speed search index.
+            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
+              Maintains inverted PostgreSQL full-text and trigram indexes across published products,
+              categories, and vendor profiles.
             </p>
 
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 mb-4">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 mb-2">
               <div>
                 <p className="text-xs font-semibold text-neutral-900 dark:text-white">
                   Search Index Sync
                 </p>
-                <p className="text-xs text-neutral-400">
-                  Full re-index of active products and categories
+                <p className="text-[11px] text-neutral-400">
+                  Re-synchronizes catalog documents with search indexes
                 </p>
               </div>
               <Button
@@ -283,7 +263,7 @@ export default function AdminSettingPage() {
           </div>
 
           {/* Payment & Currency Configuration */}
-          <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-sm">
+          <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-[#121214] p-6 shadow-xs">
             <div className="flex items-center gap-2.5 mb-4">
               <CreditCard className="h-5 w-5 text-emerald-500" />
               <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
@@ -293,7 +273,7 @@ export default function AdminSettingPage() {
 
             <div className="space-y-3 text-xs">
               <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60">
-                <span className="text-neutral-500 dark:text-neutral-400">Payment Processor</span>
+                <span className="text-neutral-500 dark:text-neutral-400">Payment Gateway</span>
                 <span className="font-bold text-neutral-900 dark:text-white">Paystack API (Live Webhooks)</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60">
@@ -302,32 +282,32 @@ export default function AdminSettingPage() {
               </div>
               <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60">
                 <span className="text-neutral-500 dark:text-neutral-400">Marketplace Commission</span>
-                <span className="font-bold text-indigo-500">10.0% Standard Take-Rate</span>
+                <span className="font-bold text-indigo-500">15.0% Platform Fee (85.0% to Vendor)</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* CONFIRM FLUSH ALL CACHE DIALOG */}
+      {/* CONFIRM INVALIDATE ALL CACHE DIALOG */}
       <ConfirmDialog
-        open={confirmFlushAll}
-        onOpenChange={setConfirmFlushAll}
-        title="Flush Entire Platform Cache"
-        description="Are you sure you want to flush all Redis cache keys? Storefront pages will experience a temporary cold-start latency until cache warm-up completes."
-        confirmText="Flush All Caches"
+        open={confirmInvalidateAll}
+        onOpenChange={setConfirmInvalidateAll}
+        title="Invalidate Entire Platform Cache"
+        description="Are you sure you want to invalidate all Redis cache keys? Storefront catalog and categories will repopulate on subsequent hits without losing any database records."
+        confirmText="Invalidate All Caches"
         variant="destructive"
-        isLoading={purgeAllCacheMutation.isPending}
-        onConfirm={() => purgeAllCacheMutation.mutate()}
+        isLoading={invalidateAllCacheMutation.isPending}
+        onConfirm={() => invalidateAllCacheMutation.mutate()}
       />
 
       {/* CONFIRM REINDEX SEARCH DIALOG */}
       <ConfirmDialog
         open={confirmReindex}
         onOpenChange={setConfirmReindex}
-        title="Trigger Full Search Re-index"
-        description="This will scan all published product records, category associations, and vendor documents and rebuild the search inverted index."
-        confirmText="Start Re-indexing"
+        title="Trigger Search Index Sync"
+        description="This will scan active product listings, categories, and vendors to rebuild the search index ranking."
+        confirmText="Start Index Sync"
         isLoading={reindexSearchMutation.isPending}
         onConfirm={() => reindexSearchMutation.mutate()}
       />

@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 
 import { buildPaginationMeta } from '@api/modules/shared/utils/pagination-meta.util';
+import { VENDOR_COMMISSION_RATE } from '@api/modules/shared/constants/commission.constants';
 
 @Injectable()
 export class WalletService {
@@ -461,7 +462,9 @@ export class WalletService {
 
       if (orderSales.length > 0) {
         for (const item of orderSales) {
-          const itemTotal = Number(item.totalPrice);
+          const itemTotal =
+            Math.round(Number(item.totalPrice) * VENDOR_COMMISSION_RATE * 100) /
+            100;
           if (item.order?.status === 'DELIVERED') {
             balanceNum += itemTotal;
           } else if (
