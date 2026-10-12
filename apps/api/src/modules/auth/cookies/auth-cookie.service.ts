@@ -9,6 +9,7 @@ import {
   AUTH_COOKIE_PATH,
 } from '../constants/auth-cookies.constants';
 import type { AuthTokens } from '../types/auth.types';
+import type { AuthCookieRole } from '../constants/auth-cookies.constants';
 
 @Injectable()
 export class AuthCookieService {
@@ -75,7 +76,7 @@ export class AuthCookieService {
     );
   }
 
-  setAuthCookies(res: Response, tokens: AuthTokens): void {
+  setAuthCookies(res: Response, tokens: AuthTokens, role: AuthCookieRole = 'user'): void {
     // 1. Standard HttpOnly access_token cookie
     res.cookie(AUTH_ACCESS_COOKIE, tokens.accessToken, {
       ...this.baseOptions,
@@ -90,8 +91,8 @@ export class AuthCookieService {
       path: AUTH_COOKIE_PATH,
     });
 
-    // 3. Standard frontend session marker (non-HttpOnly)
-    res.cookie(AUTH_SESSION_COOKIE, '1', {
+    // 3. Frontend session marker (non-HttpOnly) — carries the role
+    res.cookie(AUTH_SESSION_COOKIE, role, {
       ...this.baseOptions,
       httpOnly: false,
       maxAge: this.refreshMaxAge,

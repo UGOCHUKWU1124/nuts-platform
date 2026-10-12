@@ -878,10 +878,11 @@ model Notification {
   metadata  Json?
   isRead    Boolean              @default(false)
   readAt    DateTime?
+  dedupeKey String?              @unique
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
-  @@index([userId, isRead, createdAt])
+  @@index([userId, role, isRead, createdAt])
   @@index([userId, role, createdAt])
   @@index([createdAt])
   @@map("notifications")

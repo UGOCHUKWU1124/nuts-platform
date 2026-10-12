@@ -1,18 +1,18 @@
-import type { AuthRole } from "@/zustand/auth";
-
-export function notificationListPath(role: AuthRole): string {
+export function notificationListPath(role?: string | null): string {
+  const normalized = (role ?? "").toLowerCase();
   return (
-    role === "admin"
+    normalized === "admin"
       ? "/admin/notifications"
-      : role === "vendor"
+      : normalized === "vendor"
         ? "/vendor/notifications"
         : "/account/notifications"
   );
 }
 
 export function notificationDetailPath(
-  role: AuthRole,
+  role: string | null | undefined,
   notificationId: string,
 ): string {
   return `${notificationListPath(role)}/${encodeURIComponent(notificationId)}`;
 }
+

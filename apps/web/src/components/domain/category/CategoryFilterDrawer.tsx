@@ -180,9 +180,9 @@ export function CategoryFilterDrawer({
           {/* Sort By Section */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Sort Order
-              </label>
+              </span>
               <span className="text-[11px] text-muted-foreground">
                 {SORT_OPTIONS.find((s) => s.id === draftSortBy)?.label}
               </span>
@@ -220,9 +220,9 @@ export function CategoryFilterDrawer({
 
           {/* Price Range Section */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+            <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
               Price Range (₦)
-            </label>
+            </span>
 
             {/* Quick Presets Pills */}
             <div className="flex flex-wrap gap-1.5 mb-4">
@@ -248,14 +248,19 @@ export function CategoryFilterDrawer({
             {/* Custom Inputs */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="text-[11px] font-semibold text-muted-foreground mb-1.5 block">
+                <label
+                  htmlFor="filter-min-price"
+                  className="text-[11px] font-semibold text-muted-foreground mb-1.5 block"
+                >
                   Minimum (₦)
-                </span>
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
                     ₦
                   </span>
                   <Input
+                    id="filter-min-price"
+                    name="minPrice"
                     type="number"
                     min="0"
                     placeholder="0"
@@ -266,14 +271,19 @@ export function CategoryFilterDrawer({
                 </div>
               </div>
               <div>
-                <span className="text-[11px] font-semibold text-muted-foreground mb-1.5 block">
+                <label
+                  htmlFor="filter-max-price"
+                  className="text-[11px] font-semibold text-muted-foreground mb-1.5 block"
+                >
                   Maximum (₦)
-                </span>
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
                     ₦
                   </span>
                   <Input
+                    id="filter-max-price"
+                    name="maxPrice"
                     type="number"
                     min="0"
                     placeholder="Any"
@@ -288,10 +298,13 @@ export function CategoryFilterDrawer({
 
           {/* Availability Toggle */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+            <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
               Availability
-            </label>
-            <label className="flex items-center justify-between rounded-xl bg-secondary/40 border border-border/60 p-4 cursor-pointer hover:bg-secondary/70 transition-colors">
+            </span>
+            <label
+              htmlFor="filter-in-stock-only"
+              className="flex items-center justify-between rounded-xl bg-secondary/40 border border-border/60 p-4 cursor-pointer hover:bg-secondary/70 transition-colors"
+            >
               <div>
                 <span className="text-xs sm:text-sm font-semibold text-foreground block">
                   In Stock Only
@@ -301,6 +314,8 @@ export function CategoryFilterDrawer({
                 </span>
               </div>
               <input
+                id="filter-in-stock-only"
+                name="inStockOnly"
                 type="checkbox"
                 checked={draftInStock}
                 onChange={(e) => setDraftInStock(e.target.checked)}

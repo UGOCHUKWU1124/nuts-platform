@@ -13,10 +13,11 @@ interface NotificationMessage {
   type: NotificationType;
   priority: NotificationPriority;
   role: ROLE;
-  title?: string;
-  message?: string;
+  title: string;
+  message: string;
   link?: string;
   metadata?: Record<string, unknown>;
+  dedupeKey?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -24,29 +25,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseNotificationMessage(value: unknown): NotificationMessage | null {
-  if (!isRecord(value) || typeof value.userId !== 'string' || !value.userId) {
+  if (!isRecord(value) || typeof value.userId !== 'string' || !value.userId.trim()) {
     return null;
   }
 
-  return {
-    userId: value.userId,
-    type: Object.values(NotificationType).includes(
-      value.type as NotificationType,
-    )
-      ? (value.type as NotificationType)
-      : NotificationType.SYSTEM_ANNOUNCEMENT,
-    priority: Object.values(NotificationPriority).includes(
+  // Type validation: must be a recognized NotificationType
+  if (
+    typeof value.type !== 'string' ||
+    !Object.values(NotificationType).includes(value.type as NotificationType)
+  ) {
+    return null;
+  }
+
+  const role =
+    typeof value.role === 'string' &&
+    Object.values(ROLE).includes(value.role as ROLE)
+      ? (value.role as ROLE)
+      : ROLE.USER;
+
+  const priority =
+    typeof value.priority === 'string' &&
+    Object.values(NotificationPriority).includes(
       value.priority as NotificationPriority,
     )
       ? (value.priority as NotificationPriority)
-      : NotificationPriority.MEDIUM,
-    role: Object.values(ROLE).includes(value.role as ROLE)
-      ? (value.role as ROLE)
-      : ROLE.USER,
-    title: typeof value.title === 'string' ? value.title : undefined,
-    message: typeof value.message === 'string' ? value.message : undefined,
-    link: typeof value.link === 'string' ? value.link : undefined,
-    metadata: isRecord(value.metadata) ? value.metadata : undefined,
+      : NotificationPriority.MEDIUM;
+
+  const title = typeof value.title === 'string' && value.title.trim()
+    ? value.title.trim()
+    : 'New Notification';
+
+  const message = typeof value.message === 'string'
+    ? value.message
+    : '';
+
+  const link = typeof value.link === 'string' ? value.link : undefined;
+  const dedupeKey = typeof value.dedupeKey === 'string' ? value.dedupeKey : undefined;
+  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+
+  return {
+    userId: value.userId,
+    type: value.type as NotificationType,
+    priority,
+    role,
+    title,
+    message,
+    link,
+    metadata,
+    dedupeKey,
   };
 }
 
@@ -65,23 +91,31 @@ export class NotificationsConsumer implements OnModuleInit {
       async (rawPayload: unknown) => {
         try {
           const payload = parseNotificationMessage(rawPayload);
-          if (!payload) return;
+          if (!payload) {
+            this.logger.error(
+              { rawPayload },
+              'Rejecting invalid notification message payload to DLQ for operational review',
+            );
+            throw new Error('Malformed or incomplete notification message');
+          }
 
           await this.notificationsService.create({
             userId: payload.userId,
             role: payload.role,
             type: payload.type,
-            title: payload.title || 'New Notification',
-            message: payload.message || '',
+            title: payload.title,
+            message: payload.message,
             priority: payload.priority,
             link: payload.link,
             metadata: payload.metadata,
+            dedupeKey: payload.dedupeKey,
           });
         } catch (err: unknown) {
           this.logger.error(
             `Failed to handle notification message: ${getErrorMessage(err)}`,
             getErrorStack(err),
           );
+          // Re-throw so RabbitMQService triggers nack(false, false) routing to DLX / DLQ
           throw err;
         }
       },

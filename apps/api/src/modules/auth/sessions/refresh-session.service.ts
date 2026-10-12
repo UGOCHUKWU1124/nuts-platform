@@ -21,7 +21,9 @@ import {
   ADMIN_REFRESH_SELECT,
   USER_REFRESH_SELECT,
   VENDOR_REFRESH_SELECT,
+  type AdminAuthRecord,
   type UserAuthRecord,
+  type VendorAuthRecord,
 } from '../auth.selects';
 import type {
   AuthSession,
@@ -116,6 +118,62 @@ export class RefreshSessionService {
     });
 
     return { user: this.toAuthUserDto(user), tokens };
+  }
+
+  /**
+   * Issues a new admin session.
+   *
+   * Admin accounts do not use the UserAuthSession table — the refresh
+   * token is stored directly on the Admin row (single-session model).
+   */
+  async issueAdminSession(admin: AdminAuthRecord): Promise<AuthSession> {
+    if (!admin.isActive) {
+      throw new UnauthorizedException('Admin account is deactivated');
+    }
+
+    const tokens = await this.generateTokens(
+      admin.id,
+      ROLE.ADMIN,
+      admin.tokenVersion,
+    );
+
+    await this.prisma.admin.update({
+      where: { id: admin.id },
+      data: {
+        refreshToken: this.hashRefreshToken(tokens.refreshId),
+        refreshTokenId: tokens.refreshId,
+      },
+    });
+
+    return { user: this.toAuthUserDto(admin), tokens };
+  }
+
+  /**
+   * Issues a new vendor session.
+   *
+   * Like admin, vendors use a single-session model with the token stored
+   * directly on the Vendor row.
+   */
+  async issueVendorSession(vendor: VendorAuthRecord): Promise<AuthSession> {
+    if (!vendor.isActive) {
+      throw new UnauthorizedException('Vendor account is deactivated');
+    }
+
+    const tokens = await this.generateTokens(
+      vendor.id,
+      ROLE.VENDOR,
+      vendor.tokenVersion,
+    );
+
+    await this.prisma.vendor.update({
+      where: { id: vendor.id },
+      data: {
+        refreshToken: this.hashRefreshToken(tokens.refreshId),
+        refreshTokenId: tokens.refreshId,
+      },
+    });
+
+    return { user: this.toAuthUserDto(vendor), tokens };
   }
 
   async refresh(payload: RefreshJwtPayload): Promise<AuthSession> {
@@ -213,6 +271,39 @@ export class RefreshSessionService {
 
     await this.authSessionService?.invalidateAccountStamp(userId, ROLE.USER);
     await this.authSessionService?.invalidateSession(sessionId);
+  }
+
+  /**
+   * Revokes ALL active sessions for a user.
+   *
+   * Used during password reset, password change, and account deactivation
+   * to ensure no stale sessions survive the security-critical operation.
+   */
+  async revokeAllUserSessions(userId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userAuthSession.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+          refreshToken: null,
+          refreshTokenId: null,
+        },
+      });
+
+      await tx.user.updateMany({
+        where: { id: userId },
+        data: {
+          refreshToken: null,
+          refreshTokenId: null,
+          tokenVersion: { increment: 1 },
+        },
+      });
+    });
+
+    await this.authSessionService?.invalidateAccountStamp(userId, ROLE.USER);
   }
 
   async revokeUserSessionByRefreshToken(

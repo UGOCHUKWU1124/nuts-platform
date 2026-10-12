@@ -4,7 +4,7 @@ import type { AppNotification,NotificationType } from "@/api/notifications";
 import { Button } from "@/component/ui/button";
 import { useNotifications } from "@/hook/use-notifications";
 import { notificationDetailPath } from "@/lib/notification-path";
-import { useAuthStore } from "@/zustand/auth";
+import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import {
 AlertTriangle,
 Bell,
@@ -152,7 +152,8 @@ export function NotificationsManager({
   backLabel,
 }: NotificationsManagerProps) {
   const router = useRouter();
-  const role = useAuthStore((state) => state.role ?? state.user?.role ?? "user");
+  const rawRole = useAuthStore((state) => state.role ?? state.user?.role);
+  const role = normalizeRole(rawRole) ?? "user";
   const [filter, setFilter] = useState<"all" | "unread" | "orders" | "payments">("all");
   const {
     notifications,

@@ -1,4 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server.js";
+import {
+  verifyJwtHs256,
+  type Role,
+  type VerifiedJwtPayload,
+} from "./lib/edge-jwt";
+
+export { verifyJwtHs256, type Role, type VerifiedJwtPayload };
 
 // ── Environment Detection ───────────────────────────────────────────────────
 const nodeEnv = process.env.NODE_ENV as string | undefined;
@@ -8,141 +15,6 @@ const isStaging =
   process.env.NEXT_PUBLIC_APP_ENV === "staging" ||
   process.env.APP_ENV === "staging";
 const isSecureContext = isProduction || isStaging;
-
-// ── Types ───────────────────────────────────────────────────────────────────
-export type Role = "admin" | "vendor" | "user";
-
-export interface VerifiedJwtPayload {
-  sub: string;
-  role: Role;
-  tokenVersion?: number;
-  exp?: number;
-  iat?: number;
-  iss?: string;
-  aud?: string;
-}
-
-// ── Cryptographic Edge JWT Verification (Web Crypto API) ────────────────────
-const keyCache = new Map<string, CryptoKey>();
-
-function base64UrlToUint8Array(base64Url: string): Uint8Array {
-  const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = base64.length % 4;
-  const padded = pad ? base64 + "=".repeat(4 - pad) : base64;
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function normalizeRole(rawRole?: string | null): Role {
-  const normalized = String(rawRole || "").toLowerCase();
-  if (normalized === "admin") return "admin";
-  if (normalized === "vendor") return "vendor";
-  return "user";
-}
-
-/**
- * Cryptographically verifies an HS256-signed JWT token using Web Crypto API.
- * Rejects unsigned, forged, algorithm-mismatched, or expired tokens.
- */
-export async function verifyJwtHs256(
-  token: string | null | undefined,
-  secret: string | null | undefined,
-): Promise<VerifiedJwtPayload | null> {
-  if (!token || !secret) {
-    return null;
-  }
-
-  const parts = token.split(".");
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  const [headerB64, payloadB64, signatureB64] = parts;
-  if (!headerB64 || !payloadB64 || !signatureB64) {
-    return null;
-  }
-
-  try {
-    // 1. Validate Header and Algorithm
-    const headerBytes = base64UrlToUint8Array(headerB64);
-    const headerJson = new TextDecoder().decode(headerBytes);
-    const header = JSON.parse(headerJson) as { alg?: string; typ?: string };
-
-    if (header.alg !== "HS256") {
-      return null;
-    }
-
-    // 2. Retrieve or Cache CryptoKey
-    let key = keyCache.get(secret);
-    if (!key) {
-      const enc = new TextEncoder();
-      key = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"],
-      );
-      keyCache.set(secret, key);
-    }
-
-    // 3. Verify Cryptographic Signature
-    const sigBytes = base64UrlToUint8Array(signatureB64);
-    const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-    const isValid = await crypto.subtle.verify(
-      "HMAC",
-      key,
-      sigBytes as unknown as BufferSource,
-      signedData as unknown as BufferSource,
-    );
-
-    if (!isValid) {
-      return null;
-    }
-
-    // 4. Parse Verified Claims
-    const payloadBytes = base64UrlToUint8Array(payloadB64);
-    const payloadJson = new TextDecoder().decode(payloadBytes);
-    const rawPayload = JSON.parse(payloadJson) as {
-      sub?: string;
-      role?: string;
-      tokenVersion?: number;
-      exp?: number;
-      iat?: number;
-      iss?: string;
-      aud?: string;
-    };
-
-    if (!rawPayload || typeof rawPayload !== "object") {
-      return null;
-    }
-
-    // 5. Expiration Validation
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    if (typeof rawPayload.exp === "number" && rawPayload.exp <= nowSeconds) {
-      return null;
-    }
-
-    return {
-      sub: String(rawPayload.sub || ""),
-      role: normalizeRole(rawPayload.role),
-      tokenVersion:
-        typeof rawPayload.tokenVersion === "number"
-          ? rawPayload.tokenVersion
-          : undefined,
-      exp: rawPayload.exp,
-      iat: rawPayload.iat,
-      iss: rawPayload.iss,
-      aud: rawPayload.aud,
-    };
-  } catch {
-    return null;
-  }
-}
 
 // ── Safe Open Redirect Sanitizer ────────────────────────────────────────────
 const INTERNAL_ORIGIN = "https://nuts-internal.invalid";
@@ -178,6 +50,23 @@ interface PortalPolicy {
   readonly loginPath: string;
 }
 
+const VENDOR_PORTAL_SECTIONS = new Set([
+  "analytic",
+  "product",
+  "order",
+  "discount",
+  "setting",
+  "settings",
+  "wallet",
+  "manage-wallet",
+]);
+
+const isVendorPortalPath = (pathname: string): boolean => {
+  if (!pathname.startsWith("/vendor/")) return false;
+  const segment = pathname.split("/").filter(Boolean)[1];
+  return Boolean(segment && VENDOR_PORTAL_SECTIONS.has(segment));
+};
+
 const PORTAL_POLICIES: readonly PortalPolicy[] = [
   {
     name: "admin",
@@ -187,14 +76,7 @@ const PORTAL_POLICIES: readonly PortalPolicy[] = [
   },
   {
     name: "vendor_portal",
-    matcher: (p) =>
-      p.startsWith("/vendor/analytic") ||
-      p.startsWith("/vendor/product") ||
-      p.startsWith("/vendor/order") ||
-      p.startsWith("/vendor/discount") ||
-      p.startsWith("/vendor/setting") ||
-      p.startsWith("/vendor/wallet") ||
-      p.startsWith("/vendor/notifications"),
+    matcher: isVendorPortalPath,
     requiredRole: "vendor",
     loginPath: "/auth/vendor/login",
   },
@@ -205,8 +87,12 @@ const isCustomerProtectedRoute = (pathname: string): boolean =>
   pathname.startsWith("/checkout/") ||
   pathname === "/account" ||
   pathname.startsWith("/account/") ||
+  pathname === "/order" ||
+  pathname.startsWith("/order/") ||
   pathname === "/orders" ||
-  pathname.startsWith("/orders/");
+  pathname.startsWith("/orders/") ||
+  pathname === "/wallet" ||
+  pathname.startsWith("/wallet/");
 
 interface GuestAuthRoute {
   readonly path: string;
@@ -319,15 +205,12 @@ interface SessionState {
 }
 
 async function resolveSessionState(request: NextRequest): Promise<SessionState> {
-  const sessionActive = request.cookies.get("session_active")?.value === "1";
   const accessToken = request.cookies.get("access_token")?.value;
   const refreshToken = request.cookies.get("refresh_token")?.value;
-
-  const jwtSecret =
-    process.env.JWT_SECRET ||
-    process.env.JWT_ACCESS_SECRET;
+  const jwtSecret = process.env.JWT_SECRET;
 
   if (accessToken && jwtSecret) {
+    // 1. Strict Cryptographic Verification
     const verified = await verifyJwtHs256(accessToken, jwtSecret);
     if (verified) {
       return {
@@ -337,12 +220,27 @@ async function resolveSessionState(request: NextRequest): Promise<SessionState> 
         userId: verified.sub,
       };
     }
-  }
 
-  // Fallback when token is pending silent refresh or secret is not present at edge
-  if (sessionActive || refreshToken || accessToken) {
+    // 2. Silent Rotation Grace Window:
+    // If access token has expired but authentic refresh_token cookie is present,
+    // verify signature without expiration so the page shell mounts and Axios can refresh.
+    if (refreshToken) {
+      const signatureValid = await verifyJwtHs256(accessToken, jwtSecret, {
+        ignoreExpiration: true,
+      });
+      if (signatureValid) {
+        return {
+          isAuthenticated: true,
+          isVerified: true,
+          role: signatureValid.role,
+          userId: signatureValid.sub,
+        };
+      }
+    }
+
+    // Tampered signature or invalid structure -> Reject
     return {
-      isAuthenticated: Boolean(sessionActive || accessToken || refreshToken),
+      isAuthenticated: false,
       isVerified: false,
       role: null,
       userId: null,
@@ -374,7 +272,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Enforce Customer Protected Routes (/checkout, /account, /orders)
+  // 2. Enforce Customer Protected Routes (/checkout, /account, /order, /wallet)
   if (isCustomerProtectedRoute(pathname)) {
     if (!session.isAuthenticated) {
       const loginUrl = new URL("/auth/login", request.url);
@@ -382,7 +280,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Role segregation: prevent platform admins or merchants from customer checkout
+    // Role segregation: platform admins or merchants do not use customer account portal
     if (session.role === "admin") {
       return NextResponse.redirect(new URL("/admin", request.url));
     }
@@ -394,7 +292,6 @@ export async function middleware(request: NextRequest) {
   // 3. Guest-Only Auth Route Redirection
   for (const guestRoute of GUEST_AUTH_ROUTES) {
     if (pathname === guestRoute.path) {
-      // Only redirect if authenticated with the specific matching role
       if (session.isAuthenticated && session.role === guestRoute.role) {
         const redirectParam = request.nextUrl.searchParams.get("redirect");
         const destination = safeInternalPath(redirectParam, guestRoute.defaultRedirect);

@@ -355,17 +355,15 @@ export class AuthService {
         where: { email },
         data: {
           password,
-          refreshToken: null,
-          refreshTokenId: null,
-          tokenVersion: {
-            increment: 1,
-          },
         },
         select: {
           id: true,
           firstName: true,
         },
       });
+
+      // Revoke ALL sessions atomically (UserAuthSession + account-level tokens + Redis stamp)
+      await this.refreshSessionService.revokeAllUserSessions(user.id);
 
       this.fireAndForget(
         this.auditLog.log({

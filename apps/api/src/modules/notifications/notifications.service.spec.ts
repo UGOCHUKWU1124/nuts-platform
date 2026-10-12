@@ -8,6 +8,10 @@ describe('NotificationsService', () => {
     notification: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+      deleteMany: jest.Mock;
     };
   };
 
@@ -16,6 +20,10 @@ describe('NotificationsService', () => {
       notification: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
     service = new NotificationsService(prisma as never);
@@ -168,5 +176,102 @@ describe('NotificationsService', () => {
       subscription.unsubscribe();
       jest.useRealTimers();
     }
+  });
+
+  it('returns existing notification without re-inserting when dedupeKey collides (P2002)', async () => {
+    const existingNotification = {
+      id: 'existing-id',
+      userId: 'user-1',
+      role: ROLE.USER,
+      type: NotificationType.ORDER_CONFIRMED,
+      title: 'Order Confirmed',
+      message: 'Processing',
+      dedupeKey: 'ORDER_CONFIRMED:order-123:USER:user-1',
+    };
+
+    prisma.notification.create.mockRejectedValue({ code: 'P2002' });
+    prisma.notification.findUnique.mockResolvedValue(existingNotification);
+
+    const result = await service.create({
+      userId: 'user-1',
+      type: NotificationType.ORDER_CONFIRMED,
+      title: 'Order Confirmed',
+      message: 'Processing',
+      dedupeKey: 'ORDER_CONFIRMED:order-123:USER:user-1',
+    });
+
+    expect(result).toEqual(existingNotification);
+    expect(prisma.notification.findUnique).toHaveBeenCalledWith({
+      where: { dedupeKey: 'ORDER_CONFIRMED:order-123:USER:user-1' },
+    });
+  });
+
+  it('filters live notification streams by both userId and role, and attaches event id', () => {
+    const events: unknown[] = [];
+    const subscription = service
+      .subscribeToUserStream('user-1', ROLE.USER)
+      .subscribe((event) => events.push(event));
+
+    try {
+      // 1. Emit notification for user-1 with ROLE.USER -> received with event id
+      (service as unknown as { broadcastNotification: (u: string, r: ROLE, n: unknown) => void })
+        .broadcastNotification('user-1', ROLE.USER, { id: 'notif-1', title: 'Hello User' });
+
+      // 2. Emit notification for user-1 with ROLE.ADMIN -> filtered out
+      (service as unknown as { broadcastNotification: (u: string, r: ROLE, n: unknown) => void })
+        .broadcastNotification('user-1', ROLE.ADMIN, { id: 'notif-admin', title: 'Hello Admin' });
+
+      // 3. Emit notification for user-2 -> filtered out
+      (service as unknown as { broadcastNotification: (u: string, r: ROLE, n: unknown) => void })
+        .broadcastNotification('user-2', ROLE.USER, { id: 'notif-2', title: 'Other' });
+
+      expect(events).toEqual([
+        {
+          data: {
+            type: 'connected',
+            timestamp: expect.any(String),
+          },
+        },
+        {
+          id: 'notif-1',
+          data: { id: 'notif-1', title: 'Hello User' },
+        },
+      ]);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('preserves existing readAt when markAsRead is called on an already-read notification', async () => {
+    const existingDate = new Date('2026-10-01T12:00:00Z');
+    prisma.notification.findFirst.mockResolvedValue({
+      id: 'notif-1',
+      userId: 'user-1',
+      role: ROLE.USER,
+      isRead: true,
+      readAt: existingDate,
+      link: '/account/orders',
+    });
+
+    const result = await service.markAsRead('notif-1', 'user-1', ROLE.USER);
+
+    expect(result.readAt).toEqual(existingDate);
+    expect(prisma.notification.update).not.toHaveBeenCalled();
+  });
+
+  it('deletes notification with scoped ownership or throws NotFoundException', async () => {
+    prisma.notification.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.delete('notif-1', 'user-1', ROLE.USER),
+    ).resolves.toEqual({ success: true });
+    expect(prisma.notification.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'notif-1', userId: 'user-1', role: ROLE.USER },
+    });
+
+    prisma.notification.deleteMany.mockResolvedValue({ count: 0 });
+    await expect(
+      service.delete('notif-2', 'user-1', ROLE.USER),
+    ).rejects.toThrow(NotFoundException);
   });
 });

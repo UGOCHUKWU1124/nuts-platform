@@ -114,15 +114,26 @@ describe('VendorsService', () => {
       resetAttempts: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockRefreshSession = {
+      issueVendorSession: jest.fn().mockResolvedValue({
+        user: { id: 'v1', email: 'shop@nuts.dev' },
+        tokens: { accessToken: 'at', refreshToken: 'rt', refreshId: 'rid' },
+      }),
+      refresh: jest.fn().mockResolvedValue({
+        user: { id: 'v1', email: 'shop@nuts.dev' },
+        tokens: { accessToken: 'at', refreshToken: 'rt', refreshId: 'rid' },
+      }),
+      revokeSession: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new VendorsService(
       mockPrisma,
-      mockJwt,
-      mockConfig,
       mockOtp,
       mockEmail,
       mockAudit,
       mockCache,
       mockAccountLock,
+      mockRefreshSession as any,
     );
   });
 

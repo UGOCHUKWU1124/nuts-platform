@@ -138,6 +138,32 @@ export class AuthSessionService {
     }
   }
 
+  /**
+   * Lightweight security check for persistent connections (SSE, WebSockets).
+   * Verifies account exists, is active, approved, and session is not revoked.
+   */
+  async isSessionActive(
+    userId: string,
+    role: ROLE,
+    sessionId?: string,
+  ): Promise<boolean> {
+    try {
+      const account = await this.getAccountWithCache(userId, role);
+      if (!account || !account.isActive) return false;
+      if (role === ROLE.VENDOR && !account.isApproved) return false;
+      if (role === ROLE.USER && sessionId) {
+        return await this.validateSessionWithCache(
+          sessionId,
+          userId,
+          account.tokenVersion,
+        );
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async getAccountWithCache(
     userId: string,
     role: ROLE,

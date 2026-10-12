@@ -202,9 +202,9 @@ export function ProductReviews({
 
           {/* Star Rating Picker */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-foreground mb-1.5">
+            <span className="block text-sm font-medium text-foreground mb-1.5">
               Overall Rating
-            </label>
+            </span>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => {

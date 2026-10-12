@@ -218,3 +218,21 @@ test("allows user with admin session to view /auth/login without being hijacked 
   // Status 200 allows viewing customer login page (no 307 hijack to /admin)
   assert.equal(res.status, 200);
 });
+
+test("preserves session for silent rotation when access token is expired but refresh token is present", async () => {
+  const expiredToken = createSignedJwt({
+    role: "vendor",
+    exp: Math.floor(Date.now() / 1000) - 60, // expired 1 min ago
+  });
+  const req = new NextRequest("http://localhost:3000/vendor/analytic", {
+    headers: {
+      cookie: `session_active=1; access_token=${expiredToken}; refresh_token=valid-refresh-token-cookie`,
+    },
+  });
+  const res = await middleware(req);
+
+  // Must NOT redirect to login; returns 200 allowing page to mount and silent refresh to execute
+  assert.equal(res.status, 200);
+});
+
+
