@@ -45,11 +45,10 @@ describe('setupSwagger', () => {
     };
   });
 
-  it('MUST NOT initialize Swagger in production environment (Zero-Trust Security Gate)', () => {
+  it('MUST NOT initialize Swagger in production environment by default (Zero-Trust Security Gate)', () => {
     mockConfig = {
       get: jest.fn((key: string) => {
         if (key === 'NODE_ENV') return 'production';
-        if (key === 'SWAGGER_ENABLED') return true; // Even if accidentally enabled
         return undefined;
       }),
     };
@@ -114,6 +113,84 @@ describe('setupSwagger', () => {
       get: jest.fn((key: string) => {
         if (key === 'NODE_ENV') return 'staging';
         if (key === 'SWAGGER_ENABLED') return false;
+        return undefined;
+      }),
+    };
+
+    setupSwagger(mockApp as INestApplication, mockConfig as ConfigService);
+
+    expect(SwaggerModule.setup).not.toHaveBeenCalled();
+    expect(SwaggerModule.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('initializes Swagger when APP_ENV is staging even if NODE_ENV is production', () => {
+    mockConfig = {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'APP_ENV') return 'staging';
+        if (key === 'PORT') return defaultValue ?? 3001;
+        return undefined;
+      }),
+    };
+
+    setupSwagger(mockApp as INestApplication, mockConfig as ConfigService);
+
+    expect(SwaggerModule.setup).toHaveBeenCalledWith(
+      'api/docs',
+      mockApp,
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
+
+  it('initializes Swagger when Render service or external hostname contains staging even if NODE_ENV is production', () => {
+    mockConfig = {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'RENDER_SERVICE_NAME') return 'nuts-api-staging';
+        if (key === 'RENDER_EXTERNAL_URL')
+          return 'https://nuts-api-staging.onrender.com';
+        if (key === 'PORT') return defaultValue ?? 3001;
+        return undefined;
+      }),
+    };
+
+    setupSwagger(mockApp as INestApplication, mockConfig as ConfigService);
+
+    expect(SwaggerModule.setup).toHaveBeenCalledWith(
+      'api/docs',
+      mockApp,
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
+
+  it('initializes Swagger when SWAGGER_ENABLED=true even if NODE_ENV is production', () => {
+    mockConfig = {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'SWAGGER_ENABLED') return 'true';
+        if (key === 'PORT') return defaultValue ?? 3001;
+        return undefined;
+      }),
+    };
+
+    setupSwagger(mockApp as INestApplication, mockConfig as ConfigService);
+
+    expect(SwaggerModule.setup).toHaveBeenCalledWith(
+      'api/docs',
+      mockApp,
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
+
+  it('MUST NOT initialize Swagger if APP_ENV is explicitly production (Zero-Trust Security Gate override)', () => {
+    mockConfig = {
+      get: jest.fn((key: string) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'APP_ENV') return 'production';
+        if (key === 'SWAGGER_ENABLED') return true;
         return undefined;
       }),
     };
