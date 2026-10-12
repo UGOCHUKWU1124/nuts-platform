@@ -1,11 +1,21 @@
 import { VendorLayout } from "@/component/layout/VendorLayout";
-import { enforceAuth } from "@/lib/server-auth.ts";
+import { getServerSession } from "@/lib/server-auth.ts";
+import { ClientAuthBoundary } from "@/components/domain/auth/ClientAuthBoundary";
 
 export default async function Layout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await enforceAuth("vendor", "/auth/vendor/login");
-  return <VendorLayout>{children}</VendorLayout>;
+  const session = await getServerSession();
+
+  if (session.isAuthenticated && session.role === "vendor") {
+    return <VendorLayout>{children}</VendorLayout>;
+  }
+
+  return (
+    <ClientAuthBoundary requiredRole="vendor" loginPath="/auth/vendor/login">
+      <VendorLayout>{children}</VendorLayout>
+    </ClientAuthBoundary>
+  );
 }

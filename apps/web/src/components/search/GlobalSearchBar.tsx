@@ -84,7 +84,7 @@ export function GlobalSearchBar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
-  const debouncedQuery = useDebouncedValue(query.trim(), 180);
+  const debouncedQuery = useDebouncedValue(query.trim(), 350);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -148,8 +148,13 @@ export function GlobalSearchBar({
           ? ((raw as Record<string, unknown>).results as SearchResultItem[])
           : [];
         return items;
-      } catch {
-        // Graceful client fallback using local categories if backend autocomplete is unavailable
+      } catch (error) {
+        // If query was superseded by a newer keystroke, let TanStack Query cancel cleanly without setting fallback
+        if (signal?.aborted) {
+          throw error;
+        }
+
+        // Graceful client fallback using local categories if backend autocomplete is genuinely unavailable
         const normalized = debouncedQuery.toLowerCase();
         const fallbackCats: SearchResultItem[] = popularCategories
           .filter(
@@ -177,8 +182,8 @@ export function GlobalSearchBar({
       }
     },
     enabled: debouncedQuery.length >= 2,
-    staleTime: 1000 * 60,
     placeholderData: (previousData) => previousData,
+    staleTime: 1000 * 60,
   });
 
   const handleSubmit = (e: React.FormEvent) => {

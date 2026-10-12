@@ -40,7 +40,7 @@ export const authService = {
     return publicApi.post<AuthResponseDto>("/auth/login", payload);
   },
   me() {
-    return publicApi.get<AuthProfileDto>("/auth/me");
+    return userApi.get<AuthProfileDto>("/auth/me");
   },
   refresh() {
     return publicApi.post<AuthResponseDto>("/auth/refresh");
@@ -82,6 +82,14 @@ export const vendorAuthService = {
     return publicApi.post<import("@/api/dto/vendor").VendorAuthSessionDto>(
       "/vendors/auth/login",
       payload
+    );
+  },
+  me() {
+    return vendorApi.get<Record<string, unknown>>("/vendors/account/profile");
+  },
+  refresh() {
+    return publicApi.post<import("@/api/dto/vendor").VendorAuthSessionDto>(
+      "/vendors/auth/refresh"
     );
   },
   logout() {
