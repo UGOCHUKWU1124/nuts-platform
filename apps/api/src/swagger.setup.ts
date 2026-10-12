@@ -138,6 +138,13 @@ The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to
 - \`GET  /api/v1/admin/auth/me\` — Retrieve authenticated administrator profile
 - \`POST /api/v1/admin/auth/create-admin\` — Provision additional administrator accounts (Admin only)
 
+### 4. Real-Time Notifications & Streaming (\`/api/v1/notifications\`)
+- \`GET   /api/v1/notifications\` — List paginated notifications (role-scoped, supports unreadOnly filter)
+- \`GET   /api/v1/notifications/unread-count\` — Retrieve live unread notification count
+- \`PATCH /api/v1/notifications/:id/read\` — Mark a single notification as read
+- \`PATCH /api/v1/notifications/read-all\` — Mark all user notifications as read
+- \`GET   /api/v1/notifications/sse/stream\` — Real-Time Server-Sent Events (SSE) notification stream (cluster Redis Pub/Sub, connection caps, 15s session-revocation heartbeats)
+
 ---
 
 ## Resiliency, Rate Limiting & Security

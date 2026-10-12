@@ -25,7 +25,7 @@
    - [The 15-Second Redis Grace-Period Concurrency Window](#the-15-second-redis-grace-period-concurrency-window)
    - [Cross-Subdomain & Cookie Isolation Architecture](#cross-subdomain--cookie-isolation-architecture)
    - [Client Single-Flight Refresh Lock (Web Locks API)](#client-single-flight-refresh-lock-web-locks-api)
-   - [Next.js Edge Server-Side Router Middleware & Edge-JWT Engine](#nextjs-edge-server-side-router-middleware--edge-jwt-engine)
+   - [Next.js 16 Network Boundary Proxy & Server Component Layout Auth Boundaries](#nextjs-16-network-boundary-proxy--server-component-layout-auth-boundaries)
    - [Single-Source-of-Truth Projections & Password Defense](#single-source-of-truth-projections--password-defense)
    - [Redis Security Stamp & Active Revocation Engine](#redis-security-stamp--active-revocation-engine)
    - [Timing-Safe Cryptographic Defenses](#timing-safe-cryptographic-defenses)
@@ -235,21 +235,22 @@ In [`apps/web/src/api/core/client.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/s
 - If Tab A initiates a refresh, Tab B awaits the lock rather than firing a redundant HTTP request. When Tab A finishes, Tab B reads the freshly persisted token.
 - All failed 401 Axios requests are held in an in-memory execution queue, re-attached with the new Bearer token, and transparently replayed.
 
-### Next.js Edge Server-Side Router Middleware & Edge-JWT Engine
-Located in [`apps/web/src/middleware.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/middleware.ts):
-- **Cryptographic Edge Token Verification (`edge-jwt`):**
-  - **Zero Trust Edge Gating:** Unlike naive implementations that decode raw unverified Base64 payloads (`atob`)—exposing the platform to role-forgery and privilege escalation—the middleware uses the browser-standard **Web Crypto API** (`crypto.subtle`) to verify HMAC-SHA256 signatures against `JWT_SECRET`.
-  - **In-Memory Key Caching:** Imported `CryptoKey` instances are cached across edge worker invocations, keeping signature verification overhead well below 0.2ms.
-  - **Tampered Token Rejection:** Forged tokens, tampered payloads, or tokens with mismatched algorithms (preventing `alg: none` attacks) are immediately rejected with an HTTP 307 redirect before rendering any React layout or executing SSR.
-  - **Silent Token Rotation Grace Window:** In an enterprise dual-token setup, access tokens expire after 15 minutes while refresh tokens live for 7 days. If a user navigates to a protected route with an expired access token, but an authentic HttpOnly `refresh_token` cookie is present, the middleware cryptographically verifies the token's HMAC-SHA256 signature (ignoring expiry). If the signature is genuine, the middleware permits the page shell to mount, empowering the client-side Axios refresh interceptor (coordinated via Web Locks API) to rotate tokens silently in the background without bouncing the user to a login page.
-- **Strict Separation of Concerns (Zero Business Logic in Middleware):**
-  - Edge middleware serves solely as an infrastructure security boundary: RBAC policy enforcement, cryptographic JWT verification, dynamic CSP nonce generation, and defense-in-depth headers.
-  - It contains **zero feature-level business logic, ad-hoc URL slicing, or domain routing hacks** (e.g., notifications, cart, checkout flows). The backend microservices and domain controllers handle all feature-level requests, while middleware enforces only strict perimeter boundaries.
-- **Zero Flash of Content (FOUC):** Eliminates the client-side `useEffect` redirect anti-pattern. Unauthorized requests to `/admin/*`, `/vendor/*`, or `/account/*` are intercepted at the Edge/Server level before React SSR begins, returning an immediate `HTTP 307 Redirect` to the designated portal login (`/auth/admin/login`, `/auth/vendor/login`, or `/auth/login`).
-- **Declarative Route & Policy Matrix:** Gating rules are maintained in a typed declarative policy table (`PORTAL_POLICIES` and `GUEST_AUTH_ROUTES`) cleanly segregating Platform Admin, Vendor Merchant Portal, Customer Protected Areas, and Public Storefront pages (`/vendor/:slug`, `/product/:slug`, `/category/:slug`, `/search`).
-- **Context Header Propagation:** Once cryptographically verified, the edge router attaches trusted downstream context headers (`x-user-id`, `x-user-role`, `x-authenticated`) to the internal request passed to Server Components, eliminating redundant token parsing in React Server Components.
-- **Safe Open Redirect Sanitization:** Redirect parameters (`?redirect=...`) are strictly sanitized via [`safeInternalPath`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/safe-internal-path.ts), rejecting protocol-relative URLs (`//evil.com`), external origins (`https://evil.com`), backslashes, or control characters.
-- **Universal Edge Security Headers:** Generates dynamic 16-byte cryptographically secure CSP nonces (`crypto.getRandomValues`), enforcing strict Content-Security-Policy (CSP), HSTS, X-Frame-Options (`DENY`), and Permissions-Policy.
+### Next.js 16 Network Boundary Proxy & Server Component Layout Auth Boundaries
+Located in [`apps/web/src/proxy.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/proxy.ts) and [`apps/web/src/lib/server-auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/server-auth.ts):
+- **Next.js 16 Network Boundary Proxy (`proxy.ts`):**
+  - **Zero Hardcoded Route Lists:** Eliminates fragile, brittle hardcoded route string arrays in edge routing. The network proxy does not maintain arbitrary sets of route paths or subpaths.
+  - **Perimeter Defense & Dynamic CSP Nonces:** Operates strictly at the network boundary, generating 16-byte cryptographically secure CSP nonces (`crypto.getRandomValues`), enforcing strict Content-Security-Policy (CSP), HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Permissions-Policy`.
+  - **Spoofed Header Stripping:** Unconditionally strips client-supplied identity headers (`x-user-id`, `x-user-role`, `x-authenticated`) before downstream request routing.
+  - **Nonce Propagation:** Injects `x-nonce` into internal request headers, allowing React Server Components to access nonces via `headers().get('x-nonce')` for Paystack and dynamic inline scripts.
+- **Server Component Layout Auth Boundaries (Filesystem as Source of Truth):**
+  - **Decentralized Route Group Isolation:** Rather than centralized, brittle URL pattern matching, route protection is enforced at the layout boundary of each route group:
+    - **Platform Admin:** [`apps/web/src/app/(admin)/admin/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(admin)/admin/layout.tsx) validates active admin sessions via `enforceAuth('admin', '/auth/admin/login')`. Any new page added under `(admin)/admin` is automatically protected.
+    - **Vendor Merchant Portal:** [`apps/web/src/app/(vendor)/vendor/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(vendor)/vendor/layout.tsx) validates active merchant sessions via `enforceAuth('vendor', '/auth/vendor/login')`.
+    - **Customer Protected Areas:** [`apps/web/src/components/domain/auth/ProtectedLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/auth/ProtectedLayout.tsx) automatically gates `/account`, `/checkout`, `/order`, `/wallet`, and `/review`.
+  - **Cryptographic Token Verification (`edge-jwt`):**
+    - The server authentication helper ([`server-auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/server-auth.ts)) reads HTTP-only cookies securely via `cookies()` and verifies HMAC-SHA256 signatures with Web Crypto API (`crypto.subtle`).
+    - **Silent Refresh Grace Window:** If an access token expires while a genuine `refresh_token` cookie is present, layouts allow the page shell to mount so client-side Axios refresh interceptors (coordinated via Web Locks API) can rotate tokens silently in the background.
+  - **Safe Internal Path Sanitization:** Destination redirects are sanitized via [`safeInternalPath`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/safe-internal-path.ts), rejecting open redirect vectors.
 
 ### Single-Source-of-Truth Projections & Password Defense
 - **Compile-Time Safe Selects (`auth.selects.ts`):** To eliminate the risk of accidental password projection into client responses or cache dumps, all user, vendor, and admin authentication queries route through central Prisma select definitions:
