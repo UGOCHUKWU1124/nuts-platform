@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { VendorAnalyticsController } from '@api/modules/analytics/vendors/vendor-analytics.controller';
 import { VendorAnalyticsService } from '@api/modules/analytics/vendors/vendor-analytics.service';
 import { AuthCookiesModule } from '@api/modules/auth/auth-cookies.module';
@@ -27,7 +26,6 @@ import { VendorsService } from './vendors.service';
     AuthCookiesModule,
     AuthModule,
     DiscountCodeModule,
-    JwtModule,
     OrdersModule,
     PrismaModule,
     ProductVariantsModule,

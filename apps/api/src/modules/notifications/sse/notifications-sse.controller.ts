@@ -2,7 +2,7 @@ import { Controller, MessageEvent, Sse } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { Observable } from 'rxjs';
-import { GetUser } from '../../../common/decorators/get-user.decorator';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { BypassResponseInterceptor } from '@api/modules/shared/decorators/bypass-response-interceptor.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
@@ -28,6 +28,10 @@ export class NotificationsSseController {
   streamNotifications(
     @GetUser() user: AuthenticatedUser,
   ): Observable<MessageEvent> {
-    return this.notificationsService.subscribeToUserStream(user.id);
+    return this.notificationsService.subscribeToUserStream(
+      user.id,
+      user.role,
+      user.sessionId,
+    );
   }
 }

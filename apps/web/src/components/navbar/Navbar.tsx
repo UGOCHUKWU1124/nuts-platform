@@ -28,7 +28,8 @@ import { useCart } from "@/hook/use-cart";
 import { useHydrated } from "../../hook/use-hydrated";
 import { useWishlist } from "@/hook/use-wishlist";
 import { usePublicCategories } from "@/hooks/use-public-categories";
-import { useAuthStore } from "@/zustand/auth";
+import { useAuthStore, normalizeRole } from "@/zustand/auth";
+import { notificationListPath } from "@/lib/notification-path";
 import { logoutWithFeedback } from "@/lib/logout";
 
 function MobileSearchControl({
@@ -74,7 +75,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
 
   const hasSessionCookie =
     typeof document !== "undefined" &&
-    document.cookie.includes("session_active=1");
+    document.cookie.includes("session_active=");
 
   const isLoggedIn =
     (isAuthenticated && (!!user || !!role)) ||
@@ -83,6 +84,10 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
   const canPurchase = capabilities ? capabilities.canPurchase : !isLoggedIn;
   const canSell = capabilities?.canSell ?? false;
   const canAdminister = capabilities?.canAdminister ?? false;
+  const normalizedRole = normalizeRole(role ?? user?.role);
+  const activeNotificationHref = notificationListPath(
+    canAdminister ? "admin" : canSell ? "vendor" : (normalizedRole ?? "user"),
+  );
 
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
@@ -413,13 +418,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                     )}
 
                     <Link
-                      href={
-                        canAdminister
-                          ? "/admin/notifications"
-                          : canSell
-                          ? "/vendor/notifications"
-                          : "/account/notifications"
-                      }
+                      href={activeNotificationHref}
                       onClick={() => setAccountOpen(false)}
                       className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
                     >

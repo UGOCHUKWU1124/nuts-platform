@@ -301,7 +301,10 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
 
               {/* Promo Code Input / Applied State */}
               <div className="mt-6">
-                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">
+                <label
+                  htmlFor="cart-promo-code"
+                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2"
+                >
                   Promo / Gift Code
                 </label>
                 {effectiveDiscount ? (
@@ -324,6 +327,9 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
                 ) : (
                   <div className="flex gap-2">
                     <Input
+                      id="cart-promo-code"
+                      name="promoCode"
+                      aria-label="Promo code"
                       placeholder="Enter promo code"
                       value={effectivePromoCode}
                       onChange={(e) => setPromoCode(e.target.value)}

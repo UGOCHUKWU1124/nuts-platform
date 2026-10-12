@@ -95,7 +95,7 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens);
+    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
 
     return {
       user: session.user,
@@ -143,7 +143,7 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens);
+    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
 
     return {
       user: session.user,
@@ -184,7 +184,7 @@ export class AdminAuthController {
       payload.refreshId,
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens);
+    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
 
     return {
       user: session.user,

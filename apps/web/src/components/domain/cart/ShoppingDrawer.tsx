@@ -198,7 +198,135 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
   });
   if (isLoading) return <div className="p-5"><div className="h-28 animate-pulse rounded-xl bg-muted" /></div>;
   const setField = (field: keyof Address, value: string) => setAlternative((current) => ({ ...current, [field]: value }));
-  return <div className="flex min-h-0 flex-1 flex-col"><div className="flex-1 space-y-4 overflow-y-auto p-5">{defaultAddress && <button type="button" onClick={() => setUseAlternative(false)} className={`w-full rounded-2xl border p-4 text-left ${!useAlternative ? "border-primary bg-primary/5" : "border-border"}`}><p className="text-sm font-bold">Use default delivery address</p><p className="mt-3 text-sm font-medium">{defaultAddress.fullName}</p><p className="text-sm text-muted-foreground">{defaultAddress.street}, {defaultAddress.city}, {defaultAddress.state}</p><p className="text-sm text-muted-foreground">{defaultAddress.phone}</p></button>}<div className={`rounded-2xl border p-4 ${useAlternative ? "border-primary bg-primary/5" : "border-border"}`}><label className="flex cursor-pointer items-center gap-3 text-sm font-bold"><input type="radio" checked={useAlternative} onChange={() => setUseAlternative(true)} className="accent-primary" />Deliver to a different address</label>{useAlternative && <div className="mt-4 grid gap-3"><Input placeholder="Full name" value={alternative.fullName} onChange={(e) => setField("fullName", e.target.value)} /><Input placeholder="Phone number" value={alternative.phone} onChange={(e) => setField("phone", e.target.value)} /><Input placeholder="Street address" value={alternative.street} onChange={(e) => setField("street", e.target.value)} /><div className="grid grid-cols-2 gap-3"><Input placeholder="City" value={alternative.city} onChange={(e) => setField("city", e.target.value)} /><Input placeholder="State" value={alternative.state} onChange={(e) => setField("state", e.target.value)} /></div><Input placeholder="Country" value={alternative.country} onChange={(e) => setField("country", e.target.value)} /></div>}</div><div className="space-y-2 border-t pt-4 text-sm"><div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatPrice(discountPreview?.subtotal ?? total)}</span></div>{discountPreview && discountPreview.discountAmount > 0 && <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-{formatPrice(discountPreview.discountAmount)}</span></div>}<div className="flex justify-between"><span className="text-muted-foreground">Delivery</span><span>{formatPrice(discountPreview?.deliveryCharge ?? 0)}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Service</span><span>{formatPrice(discountPreview?.serviceCharge ?? 0)}</span></div><div className="flex justify-between border-t pt-2 text-base font-bold"><span>Total</span><span>{formatPrice(payable)}</span></div></div></div><div className="border-t p-5"><Button className="w-full" disabled={checkout.isPending || !alternativeComplete} onClick={() => checkout.mutate()}>{checkout.isPending ? "Processing..." : "Pay Now"}</Button></div></div>;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">
+        {defaultAddress && (
+          <button
+            type="button"
+            onClick={() => setUseAlternative(false)}
+            className={`w-full rounded-2xl border p-4 text-left ${
+              !useAlternative ? "border-primary bg-primary/5" : "border-border"
+            }`}
+          >
+            <p className="text-sm font-bold">Use default delivery address</p>
+            <p className="mt-3 text-sm font-medium">{defaultAddress.fullName}</p>
+            <p className="text-sm text-muted-foreground">
+              {defaultAddress.street}, {defaultAddress.city}, {defaultAddress.state}
+            </p>
+            <p className="text-sm text-muted-foreground">{defaultAddress.phone}</p>
+          </button>
+        )}
+        <div
+          className={`rounded-2xl border p-4 ${
+            useAlternative ? "border-primary bg-primary/5" : "border-border"
+          }`}
+        >
+          <label
+            htmlFor="shipping-alternative-radio"
+            className="flex cursor-pointer items-center gap-3 text-sm font-bold"
+          >
+            <input
+              id="shipping-alternative-radio"
+              name="shippingMethod"
+              type="radio"
+              checked={useAlternative}
+              onChange={() => setUseAlternative(true)}
+              className="accent-primary"
+            />
+            Deliver to a different address
+          </label>
+          {useAlternative && (
+            <div className="mt-4 grid gap-3">
+              <Input
+                id="shipping-full-name"
+                name="fullName"
+                aria-label="Full name"
+                placeholder="Full name"
+                value={alternative.fullName}
+                onChange={(e) => setField("fullName", e.target.value)}
+              />
+              <Input
+                id="shipping-phone"
+                name="phone"
+                aria-label="Phone number"
+                placeholder="Phone number"
+                value={alternative.phone}
+                onChange={(e) => setField("phone", e.target.value)}
+              />
+              <Input
+                id="shipping-street"
+                name="street"
+                aria-label="Street address"
+                placeholder="Street address"
+                value={alternative.street}
+                onChange={(e) => setField("street", e.target.value)}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  id="shipping-city"
+                  name="city"
+                  aria-label="City"
+                  placeholder="City"
+                  value={alternative.city}
+                  onChange={(e) => setField("city", e.target.value)}
+                />
+                <Input
+                  id="shipping-state"
+                  name="state"
+                  aria-label="State"
+                  placeholder="State"
+                  value={alternative.state}
+                  onChange={(e) => setField("state", e.target.value)}
+                />
+              </div>
+              <Input
+                id="shipping-country"
+                name="country"
+                aria-label="Country"
+                placeholder="Country"
+                value={alternative.country}
+                onChange={(e) => setField("country", e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+        <div className="space-y-2 border-t pt-4 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span>{formatPrice(discountPreview?.subtotal ?? total)}</span>
+          </div>
+          {discountPreview && discountPreview.discountAmount > 0 && (
+            <div className="flex justify-between text-emerald-600">
+              <span>Discount</span>
+              <span>-{formatPrice(discountPreview.discountAmount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Delivery</span>
+            <span>{formatPrice(discountPreview?.deliveryCharge ?? 0)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Service</span>
+            <span>{formatPrice(discountPreview?.serviceCharge ?? 0)}</span>
+          </div>
+          <div className="flex justify-between border-t pt-2 text-base font-bold">
+            <span>Total</span>
+            <span>{formatPrice(payable)}</span>
+          </div>
+        </div>
+      </div>
+      <div className="border-t p-5">
+        <Button
+          className="w-full"
+          disabled={checkout.isPending || !alternativeComplete}
+          onClick={() => checkout.mutate()}
+        >
+          {checkout.isPending ? "Processing..." : "Pay Now"}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function ShoppingDrawer() {
@@ -363,6 +491,9 @@ export function ShoppingDrawer() {
               <div className="border-t bg-card p-5">
                 <div className="mb-2 flex items-center gap-2">
                   <Input
+                    id="drawer-discount-code"
+                    name="discountCode"
+                    aria-label="Discount code"
                     value={effectiveDiscountCode}
                     onChange={(e) => setDiscountCode(e.target.value)}
                     onKeyDown={(e) => {

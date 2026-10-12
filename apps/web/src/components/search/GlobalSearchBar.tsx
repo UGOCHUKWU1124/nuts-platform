@@ -253,6 +253,8 @@ export function GlobalSearchBar({
         </div>
 
         <input
+          id="global-search-input"
+          name="search"
           type="text"
           value={query}
           maxLength={100}

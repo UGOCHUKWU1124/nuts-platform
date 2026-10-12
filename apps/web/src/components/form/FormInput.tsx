@@ -16,6 +16,8 @@ interface FormInputProps {
   disabled?: boolean;
   autoComplete?: string;
   required?: boolean;
+  maxLength?: number;
+  autoFocus?: boolean;
 }
 
 // Helper to resolve nested errors like 'shippingAddress.street'
@@ -41,6 +43,8 @@ export function FormInput({
   disabled,
   autoComplete,
   required,
+  maxLength,
+  autoFocus,
 }: FormInputProps) {
   const {
     register,
@@ -66,6 +70,8 @@ export function FormInput({
           placeholder={placeholder}
           disabled={disabled}
           autoComplete={autoComplete}
+          maxLength={maxLength}
+          autoFocus={autoFocus}
           aria-invalid={error ? "true" : "false"}
           className={cn(
             "rounded-xl transition-all duration-200 focus-visible:ring-primary/20",

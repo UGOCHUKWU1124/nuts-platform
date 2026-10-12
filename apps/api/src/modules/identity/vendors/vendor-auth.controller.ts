@@ -76,7 +76,7 @@ export class VendorAuthController {
     type: ApiResponseDto<null>,
   })
   async requestOtp(@Body() dto: RequestOtpDto): Promise<null> {
-    await this.otpService.createOtp(dto.email, 'registration');
+    await this.otpService.createOtp(dto.email, 'vendor:registration');
     return null;
   }
 
@@ -116,11 +116,14 @@ export class VendorAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens);
+    // Unapproved vendors do not receive session tokens
+    if (session.tokens) {
+      this.authCookies.setAuthCookies(res, session.tokens, 'vendor');
+    }
 
     return {
       vendor: session.profile,
-      accessToken: session.tokens.accessToken,
+      accessToken: session.tokens?.accessToken,
     };
   }
 
@@ -157,11 +160,12 @@ export class VendorAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens);
+    // Login always produces tokens (only register can return null)
+    this.authCookies.setAuthCookies(res, session.tokens!, 'vendor');
 
     return {
       vendor: session.profile,
-      accessToken: session.tokens.accessToken,
+      accessToken: session.tokens!.accessToken,
     };
   }
 
@@ -199,11 +203,12 @@ export class VendorAuthController {
       payload.refreshId,
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens);
+    // Refresh always produces tokens
+    this.authCookies.setAuthCookies(res, session.tokens!, 'vendor');
 
     return {
       vendor: session.profile,
-      accessToken: session.tokens.accessToken,
+      accessToken: session.tokens!.accessToken,
     };
   }
 

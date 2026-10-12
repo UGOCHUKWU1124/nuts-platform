@@ -14,7 +14,9 @@ export type OtpPurpose =
   | 'registration'
   | 'payment'
   | 'password-reset'
-  | 'email-verification';
+  | 'email-verification'
+  | 'vendor:registration'
+  | 'vendor:password-reset';
 
 type CreateOtpOptions = {
   subject?: string;

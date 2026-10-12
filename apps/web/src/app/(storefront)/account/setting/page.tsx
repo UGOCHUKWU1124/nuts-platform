@@ -418,7 +418,7 @@ export default function AccountSettingPage() {
 
               {/* Code Box */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Your Unique Referral Code</label>
+                <span className="text-sm font-medium text-foreground block">Your Unique Referral Code</span>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-4 py-3 font-mono font-bold tracking-widest text-lg text-foreground select-all">
                     {referralCode}
@@ -446,9 +446,13 @@ export default function AccountSettingPage() {
 
               {/* Shareable Link Box */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Direct Invite Link</label>
+                <label htmlFor="direct-invite-link" className="text-xs font-semibold text-foreground">
+                  Direct Invite Link
+                </label>
                 <div className="flex items-center gap-2">
                   <input
+                    id="direct-invite-link"
+                    name="referralLink"
                     type="text"
                     readOnly
                     value={referralLink}

@@ -47,7 +47,11 @@ function useNotificationStreamLifecycle() {
   useEffect(() => {
     const store = useNotificationsStore.getState();
     if (!isAuthenticated || !sessionKey || !currentUserId) {
-      if (activeSessionKey !== null) {
+      if (
+        activeSessionKey !== null ||
+        store.notifications.length > 0 ||
+        store.unreadCount > 0
+      ) {
         activeSessionKey = null;
         store.reset();
       }

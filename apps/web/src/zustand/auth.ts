@@ -80,7 +80,7 @@ export type SessionUserInput = Partial<User> & {
 export { getAuthToken, getRefreshToken, setAuthTokens };
 export type { AuthRole, ShippingInformation, StoredTokens };
 
-const normalizeRole = (role?: string | null): AuthRole | null => {
+export const normalizeRole = (role?: string | null): AuthRole | null => {
   if (!role) return null;
   const normalized = role.toLowerCase();
   if (

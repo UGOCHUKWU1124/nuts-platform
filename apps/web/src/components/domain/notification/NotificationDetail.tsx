@@ -5,7 +5,7 @@ import { Button } from "@/component/ui/button";
 import { queryKey } from "@/lib/query-key";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 import { notificationListPath } from "@/lib/notification-path";
-import { useAuthStore } from "@/zustand/auth";
+import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import { useNotificationsStore } from "@/zustand/notifications";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Bell, ExternalLink } from "lucide-react";
@@ -14,7 +14,8 @@ import { useEffect, useRef } from "react";
 
 export function NotificationDetail({ id }: { id: string }) {
   const user = useAuthStore((state) => state.user);
-  const role = useAuthStore((state) => state.role ?? state.user?.role ?? "user");
+  const rawRole = useAuthStore((state) => state.role ?? state.user?.role);
+  const role = normalizeRole(rawRole) ?? "user";
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const notification = useQuery({
     queryKey: [...queryKey.notification.detail(`${role}:${user?.id ?? ""}`, id)],

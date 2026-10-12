@@ -17,7 +17,7 @@ export function RatingInput({ name, label }: RatingInputProps) {
 
   return (
     <div className="space-y-1">
-      {label && <label className="text-sm font-medium">{label}</label>}
+      {label && <span className="text-sm font-medium block">{label}</span>}
       <Controller
         name={name}
         control={control}

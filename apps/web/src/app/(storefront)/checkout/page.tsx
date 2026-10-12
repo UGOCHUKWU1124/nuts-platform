@@ -479,8 +479,13 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="pt-2">
-                        <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+                        <label
+                          htmlFor="save-default-address-checkbox"
+                          className="flex cursor-pointer items-center gap-2 text-xs text-foreground"
+                        >
                           <input
+                            id="save-default-address-checkbox"
+                            name="saveAsDefault"
                             type="checkbox"
                             checked={saveAsDefault}
                             onChange={(e) => setSaveAsDefault(e.target.checked)}
@@ -608,7 +613,10 @@ export default function CheckoutPage() {
 
             {/* Promo Code Input / Applied State */}
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">
+              <label
+                htmlFor="checkout-discount-code"
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5"
+              >
                 Discount Code
               </label>
               {appliedDiscount ? (
@@ -632,6 +640,9 @@ export default function CheckoutPage() {
               ) : (
                 <div className="flex gap-2">
                   <Input
+                    id="checkout-discount-code"
+                    name="discountCode"
+                    aria-label="Discount code"
                     placeholder="Enter code"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}

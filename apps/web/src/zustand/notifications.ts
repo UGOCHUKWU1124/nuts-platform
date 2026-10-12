@@ -2,13 +2,14 @@ import { notificationsApiForRole } from "@/api/notifications";
 import { getAuthToken } from "@/api/core/token-storage";
 import { performTokenRefresh } from "@/api/core/client";
 import type { AppNotification, ListNotificationsParams } from "@/api/notifications";
-import { useAuthStore, type AuthRole } from "@/zustand/auth";
+import { useAuthStore, type AuthRole, normalizeRole } from "@/zustand/auth";
 import { notificationDetailPath } from "@/lib/notification-path";
 import {
   shouldRetryNotificationHttpStatus,
   shouldRetryNotificationStream,
 } from "@/lib/notification-stream-policy";
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { toast } from "sonner";
 
 interface NotificationsState {
@@ -81,7 +82,10 @@ function startNotificationStream(
           sseConnected: connected,
           ...(connected ? { sseRetryExhausted: false } : {}),
         });
-        if (connected) void get().fetchUnreadCount();
+        if (connected) {
+          void get().fetchUnreadCount();
+          void get().fetchNotifications();
+        }
       }
     },
     () => {
@@ -92,14 +96,20 @@ function startNotificationStream(
   );
 }
 
+export function getActiveNotificationRole(): AuthRole {
+  const auth = useAuthStore.getState();
+  const rawRole = auth.role ?? auth.user?.role;
+  return normalizeRole(rawRole) ?? "user";
+}
+
 function getNotificationSessionKey(): string {
   const auth = useAuthStore.getState();
-  return `${auth.role ?? auth.user?.role ?? "user"}:${auth.user?.id ?? ""}`;
+  const role = getActiveNotificationRole();
+  return `${role}:${auth.user?.id ?? ""}`;
 }
 
 function showIncomingNotification(notification: AppNotification): void {
-  const auth = useAuthStore.getState();
-  const role = auth.role ?? auth.user?.role ?? "user";
+  const role = getActiveNotificationRole();
 
   toast(notification.title, {
     description: notification.message,
@@ -112,8 +122,7 @@ function showIncomingNotification(notification: AppNotification): void {
 }
 
 function notificationsApiForCurrentRole() {
-  const auth = useAuthStore.getState();
-  return notificationsApiForRole(auth.role ?? auth.user?.role ?? "user");
+  return notificationsApiForRole(getActiveNotificationRole());
 }
 
 function getSseUrl(role: AuthRole): string {
@@ -256,12 +265,11 @@ async function consumeNotificationStream(
           ? error.message
           : "network request failed";
       if (connectTimedOut) {
-        console.error(
-          `Notification stream stopped after a ${SSE_CONNECT_TIMEOUT_MS / 1000}s connection timeout`,
+        console.warn(
+          `Notification stream timed out after a ${SSE_CONNECT_TIMEOUT_MS / 1000}s connection timeout; retrying with backoff...`,
         );
-        onConnectionChange(false);
-        onRetryExhausted();
-        return;
+        if (!(await retryAfterFailure("connection timed out"))) return;
+        continue;
       }
       if (!(await retryAfterFailure(reason))) return;
       continue;
@@ -297,12 +305,11 @@ async function consumeNotificationStream(
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
       if (response.status === 502) {
-        console.error(
-          "Notification stream stopped after HTTP 502; retry manually when the API is available",
+        console.warn(
+          "Notification stream received HTTP 502; retrying with backoff...",
         );
-        onConnectionChange(false);
-        onRetryExhausted();
-        return;
+        if (!(await retryAfterFailure("HTTP 502"))) return;
+        continue;
       }
       if (shouldRetryNotificationHttpStatus(response.status)) {
         if (!(await retryAfterFailure(`HTTP ${response.status}`))) return;
@@ -363,7 +370,9 @@ async function consumeNotificationStream(
   }
 }
 
-export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+export const useNotificationsStore = create<NotificationsState>()(
+  persist(
+    (set, get) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: false,
@@ -377,7 +386,8 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const userId = auth.user?.id;
     if (!auth.isAuthenticated || !userId) return;
 
-    const cacheKey = `${auth.role ?? auth.user?.role ?? "user"}:${userId}`;
+    const activeRole = getActiveNotificationRole();
+    const cacheKey = `${activeRole}:${userId}`;
     if (!append) {
       listRequestController?.abort();
       listRequestController = new AbortController();
@@ -386,9 +396,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const requestSequence = append ? listRequestSequence : ++listRequestSequence;
     set({ isLoading: true });
     try {
-      const res = await notificationsApiForRole(
-        auth.role ?? auth.user?.role ?? "user",
-      ).list(
+      const res = await notificationsApiForRole(activeRole).list(
         { cursor, limit, ...filters },
         requestController?.signal,
       );
@@ -397,7 +405,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const activeAuth = useAuthStore.getState();
       const activeUserId = activeAuth.user?.id;
       const activeCacheKey = activeUserId
-        ? `${activeAuth.role ?? activeAuth.user?.role ?? "user"}:${activeUserId}`
+        ? `${getActiveNotificationRole()}:${activeUserId}`
         : null;
 
       if (activeCacheKey === cacheKey && requestSequence === listRequestSequence) {
@@ -426,7 +434,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const activeAuth = useAuthStore.getState();
       const activeUserId = activeAuth.user?.id;
       const activeCacheKey = activeUserId
-        ? `${activeAuth.role ?? activeAuth.user?.role ?? "user"}:${activeUserId}`
+        ? `${getActiveNotificationRole()}:${activeUserId}`
         : null;
       if (
         activeCacheKey === cacheKey &&
@@ -442,7 +450,8 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const userId = auth.user?.id;
     if (!auth.isAuthenticated || !userId) return;
 
-    const cacheKey = `${auth.role ?? auth.user?.role ?? "user"}:${userId}`;
+    const activeRole = getActiveNotificationRole();
+    const cacheKey = `${activeRole}:${userId}`;
     const fetchedAt = unreadCountCache.get(cacheKey) ?? 0;
     if (Date.now() - fetchedAt < 60_000) return;
 
@@ -451,14 +460,12 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
 
     const request = (async () => {
       try {
-        const res = await notificationsApiForRole(
-          auth.role ?? auth.user?.role ?? "user",
-        ).getUnreadCount();
+        const res = await notificationsApiForRole(activeRole).getUnreadCount();
         if (res.data) {
           const activeAuth = useAuthStore.getState();
           const activeUserId = activeAuth.user?.id;
           const activeCacheKey = activeUserId
-            ? `${activeAuth.role ?? activeAuth.user?.role ?? "user"}:${activeUserId}`
+            ? `${getActiveNotificationRole()}:${activeUserId}`
             : null;
           if (activeCacheKey === cacheKey) {
             set({ unreadCount: res.data.count || 0 });
@@ -632,7 +639,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     streamGeneration++;
     startNotificationStream(globalStreamRole, globalStreamKey, set, get);
   },
-}));
+}),
+{
+  name: "nuts_notifications_cache",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        notifications: state.notifications.slice(0, 20),
+        unreadCount: state.unreadCount,
+      }),
+    },
+  ),
+);
 
 function createStreamCleanup(
   sessionKey: string,
