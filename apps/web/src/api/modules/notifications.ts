@@ -56,8 +56,15 @@ export interface NotificationsListResponse {
 function createNotificationsApi(client: typeof userApi) {
   return {
     list(params?: ListNotificationsParams, signal?: AbortSignal) {
+      const cleanParams: Record<string, unknown> = {};
+      if (params?.cursor) cleanParams.cursor = params.cursor;
+      if (params?.limit !== undefined && params?.limit !== null) cleanParams.limit = params.limit;
+      if (params?.unreadOnly !== undefined && params?.unreadOnly !== null) cleanParams.unreadOnly = params.unreadOnly;
+      if (params?.type) cleanParams.type = params.type;
+      if (params?.category) cleanParams.category = params.category;
+
       return client.get<AppNotification[], CursorPaginationMeta>("/notifications", {
-        params,
+        params: cleanParams,
         signal,
       });
     },

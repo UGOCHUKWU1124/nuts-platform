@@ -21,7 +21,7 @@ export function setupSwagger(
   app: INestApplication,
   config: ConfigService,
 ): void {
-  const nodeEnv = (
+  const rawNodeEnv = (
     config.get<string>('NODE_ENV') ||
     process.env.NODE_ENV ||
     'development'
@@ -29,24 +29,60 @@ export function setupSwagger(
     .toLowerCase()
     .trim();
 
-  const isProduction = nodeEnv === 'production';
-  const isStaging = nodeEnv === 'staging';
-  const isDevelopment =
-    nodeEnv === 'development' || (!isProduction && !isStaging);
+  const rawAppEnv = (config.get<string>('APP_ENV') || process.env.APP_ENV || '')
+    .toLowerCase()
+    .trim();
+
+  const renderServiceName = (
+    config.get<string>('RENDER_SERVICE_NAME') ||
+    process.env.RENDER_SERVICE_NAME ||
+    ''
+  ).toLowerCase();
+
+  const renderExternalUrl = (
+    config.get<string>('RENDER_EXTERNAL_URL') ||
+    config.get<string>('RENDER_EXTERNAL_HOSTNAME') ||
+    config.get<string>('BASE_URL') ||
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.RENDER_EXTERNAL_HOSTNAME ||
+    process.env.BASE_URL ||
+    ''
+  ).toLowerCase();
+
+  const swaggerFlag =
+    config.get<string | boolean>('SWAGGER_ENABLED') ??
+    process.env.SWAGGER_ENABLED;
+
+  const isExplicitlyEnabled =
+    swaggerFlag === true || swaggerFlag === 'true' || swaggerFlag === '1';
+
+  const isExplicitlyDisabled =
+    swaggerFlag === false || swaggerFlag === 'false' || swaggerFlag === '0';
+
+  // Staging detection:
+  // 1. Explicit NODE_ENV=staging or APP_ENV=staging
+  // 2. Render service name or hostname contains 'staging' (e.g. nuts-api-staging.onrender.com)
+  const isStaging =
+    rawNodeEnv === 'staging' ||
+    rawAppEnv === 'staging' ||
+    renderServiceName.includes('staging') ||
+    renderExternalUrl.includes('staging');
+
+  // Strict production: APP_ENV is explicitly production
+  const isStrictProduction = rawAppEnv === 'production';
+
+  // Production check: strict production OR (NODE_ENV=production and not staging and not explicitly enabled)
+  const isProduction =
+    isStrictProduction ||
+    (rawNodeEnv === 'production' && !isStaging && !isExplicitlyEnabled);
 
   // Physical security gate: NEVER register Swagger in production under any circumstance.
   if (isProduction) {
     return;
   }
 
-  // Swagger is only permitted in development and staging
-  if (!isDevelopment && !isStaging) {
-    return;
-  }
-
   // Allow optional explicit opt-out in staging or development
-  const swaggerFlag = config.get<string | boolean>('SWAGGER_ENABLED');
-  if (swaggerFlag === false || swaggerFlag === 'false') {
+  if (isExplicitlyDisabled) {
     return;
   }
 
@@ -372,6 +408,6 @@ The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to
 
   const logger = app.get(Logger);
   logger.log(
-    `🚀 Swagger documentation available at /api/docs [${nodeEnv}] (JSON: /api/docs-json, YAML: /api/docs-yaml)`,
+    `🚀 Swagger documentation available at /api/docs [${rawNodeEnv}] (JSON: /api/docs-json, YAML: /api/docs-yaml)`,
   );
 }

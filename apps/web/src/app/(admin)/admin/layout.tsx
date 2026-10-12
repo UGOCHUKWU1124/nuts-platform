@@ -1,11 +1,21 @@
 import { AdminLayout } from "@/component/layout/AdminLayout";
-import { enforceAuth } from "@/lib/server-auth.ts";
+import { getServerSession } from "@/lib/server-auth.ts";
+import { ClientAuthBoundary } from "@/components/domain/auth/ClientAuthBoundary";
 
 export default async function Layout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await enforceAuth("admin", "/auth/admin/login");
-  return <AdminLayout>{children}</AdminLayout>;
+  const session = await getServerSession();
+
+  if (session.isAuthenticated && session.role === "admin") {
+    return <AdminLayout>{children}</AdminLayout>;
+  }
+
+  return (
+    <ClientAuthBoundary requiredRole="admin" loginPath="/auth/admin/login">
+      <AdminLayout>{children}</AdminLayout>
+    </ClientAuthBoundary>
+  );
 }

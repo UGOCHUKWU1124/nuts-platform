@@ -3,10 +3,14 @@ import {
   authService,
   vendorAuthService,
 } from "@/api";
-import { AuthRefreshUnavailableError } from "@/api/core/client";
+import {
+  AuthRefreshUnavailableError,
+  performTokenRefresh,
+} from "@/api/core/client";
 import {
   type StoredTokens,
   clearAuthTokens,
+  getAuthSessionRole,
   getAuthToken,
   getRefreshToken,
   markSessionAuthenticated,
@@ -171,6 +175,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (typeof localStorage !== "undefined") {
       try {
         localStorage.setItem("nuts_session_active", "1");
+        localStorage.setItem("nuts_session_role", userRole);
       } catch {
         // Ignore quota/private mode errors
       }
@@ -207,6 +212,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (typeof localStorage !== "undefined") {
       try {
         localStorage.removeItem("nuts_session_active");
+        localStorage.removeItem("nuts_session_role");
       } catch {
         // Ignore
       }
@@ -373,21 +379,67 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         get().setStatus("hydrating");
       }
 
+      // 1. Identify active session role from cookie hint or persistent session marker
+      const candidateRole: AuthRole | null =
+        getAuthSessionRole() ||
+        (typeof localStorage !== "undefined"
+          ? normalizeRole(localStorage.getItem("nuts_session_role"))
+          : null) ||
+        (typeof localStorage !== "undefined" &&
+        localStorage.getItem("nuts_session_active") === "1"
+          ? "user"
+          : null);
+
+      if (!candidateRole) {
+        get().setStatus("unauthenticated");
+        return;
+      }
+
+      // 2. Refresh tokens using HttpOnly refresh_token cookie (re-populates in-memory access token)
       try {
-        const res = await authService.me();
-        const profile = res.data;
-        if (!profile?.id || !profile?.email || !profile?.role) {
-          get().setStatus("unavailable");
+        const refreshResult = await performTokenRefresh(candidateRole);
+        if (refreshResult.success && refreshResult.user) {
+          get().setSession(
+            refreshResult.user as SessionUserInput,
+            candidateRole,
+          );
           return;
         }
 
-        const resolvedRole = normalizeRole(profile.role);
-        if (!resolvedRole) {
+        if (refreshResult.reason === "expired") {
           get().clearSession();
           return;
         }
 
-        get().setSession(profile, resolvedRole);
+        if (refreshResult.reason === "unavailable") {
+          get().setStatus("unavailable");
+          return;
+        }
+      } catch (err) {
+        if (err instanceof AuthRefreshUnavailableError) {
+          get().setStatus("unavailable");
+          return;
+        }
+      }
+
+      // 3. Fallback: try fetching profile with active client
+      try {
+        const res =
+          candidateRole === "admin"
+            ? await adminAuthService.me()
+            : candidateRole === "vendor"
+            ? await vendorAuthService.me()
+            : await authService.me();
+
+        const profile = res.data;
+        if (!profile?.id || !profile?.email) {
+          get().setStatus("unavailable");
+          return;
+        }
+
+        const resolvedRole =
+          normalizeRole((profile as { role?: string }).role) || candidateRole;
+        get().setSession(profile as unknown as SessionUserInput, resolvedRole);
       } catch (error) {
         if (error instanceof AuthRefreshUnavailableError) {
           get().setStatus("unavailable");
@@ -395,7 +447,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         }
 
         const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-        if (status === 401) {
+        if (status === 401 || status === 403) {
           get().clearSession();
           return;
         }
