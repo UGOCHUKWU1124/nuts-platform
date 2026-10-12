@@ -25,7 +25,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseNotificationMessage(value: unknown): NotificationMessage | null {
-  if (!isRecord(value) || typeof value.userId !== 'string' || !value.userId.trim()) {
+  if (
+    !isRecord(value) ||
+    typeof value.userId !== 'string' ||
+    !value.userId.trim()
+  ) {
     return null;
   }
 
@@ -51,16 +55,16 @@ function parseNotificationMessage(value: unknown): NotificationMessage | null {
       ? (value.priority as NotificationPriority)
       : NotificationPriority.MEDIUM;
 
-  const title = typeof value.title === 'string' && value.title.trim()
-    ? value.title.trim()
-    : 'New Notification';
+  const title =
+    typeof value.title === 'string' && value.title.trim()
+      ? value.title.trim()
+      : 'New Notification';
 
-  const message = typeof value.message === 'string'
-    ? value.message
-    : '';
+  const message = typeof value.message === 'string' ? value.message : '';
 
   const link = typeof value.link === 'string' ? value.link : undefined;
-  const dedupeKey = typeof value.dedupeKey === 'string' ? value.dedupeKey : undefined;
+  const dedupeKey =
+    typeof value.dedupeKey === 'string' ? value.dedupeKey : undefined;
   const metadata = isRecord(value.metadata) ? value.metadata : undefined;
 
   return {

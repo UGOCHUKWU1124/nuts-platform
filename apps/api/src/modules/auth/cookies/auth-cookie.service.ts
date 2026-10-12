@@ -76,7 +76,11 @@ export class AuthCookieService {
     );
   }
 
-  setAuthCookies(res: Response, tokens: AuthTokens, role: AuthCookieRole = 'user'): void {
+  setAuthCookies(
+    res: Response,
+    tokens: AuthTokens,
+    role: AuthCookieRole = 'user',
+  ): void {
     // 1. Standard HttpOnly access_token cookie
     res.cookie(AUTH_ACCESS_COOKIE, tokens.accessToken, {
       ...this.baseOptions,

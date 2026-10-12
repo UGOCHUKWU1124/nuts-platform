@@ -78,7 +78,10 @@ export class NotificationRetentionCron {
 
         deletedReadInPass += result.count;
         totalDeleted += result.count;
-      } while (deletedReadInPass > 0 && deletedReadInPass % this.BATCH_SIZE === 0);
+      } while (
+        deletedReadInPass > 0 &&
+        deletedReadInPass % this.BATCH_SIZE === 0
+      );
 
       // 2. Delete unread notifications older than 180 days in bounded batches
       let deletedUnreadInPass = 0;
@@ -101,7 +104,10 @@ export class NotificationRetentionCron {
 
         deletedUnreadInPass += result.count;
         totalDeleted += result.count;
-      } while (deletedUnreadInPass > 0 && deletedUnreadInPass % this.BATCH_SIZE === 0);
+      } while (
+        deletedUnreadInPass > 0 &&
+        deletedUnreadInPass % this.BATCH_SIZE === 0
+      );
 
       const durationMs = Date.now() - startTime;
       this.logger.log(

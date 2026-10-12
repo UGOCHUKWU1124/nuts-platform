@@ -14,7 +14,6 @@ import * as bcrypt from 'bcrypt';
 import type { AuthTokens } from '@api/modules/auth/types/auth.types';
 import { OtpService } from '@api/modules/auth/otp/otp.service';
 import { RefreshSessionService } from '@api/modules/auth/sessions/refresh-session.service';
-import { VENDOR_AUTH_SELECT } from '@api/modules/auth/auth.selects';
 import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
@@ -169,7 +168,11 @@ export class VendorsService {
       throw new ConflictException('Email or store slug already in use');
     }
 
-    await this.otpService.verifyOtp(normalizedEmail, dto.otpCode, 'vendor:registration');
+    await this.otpService.verifyOtp(
+      normalizedEmail,
+      dto.otpCode,
+      'vendor:registration',
+    );
 
     const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
 

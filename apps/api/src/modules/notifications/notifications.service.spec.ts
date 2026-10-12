@@ -214,16 +214,34 @@ describe('NotificationsService', () => {
 
     try {
       // 1. Emit notification for user-1 with ROLE.USER -> received with event id
-      (service as unknown as { broadcastNotification: (u: string, r: ROLE, n: unknown) => void })
-        .broadcastNotification('user-1', ROLE.USER, { id: 'notif-1', title: 'Hello User' });
+      (
+        service as unknown as {
+          broadcastNotification: (u: string, r: ROLE, n: unknown) => void;
+        }
+      ).broadcastNotification('user-1', ROLE.USER, {
+        id: 'notif-1',
+        title: 'Hello User',
+      });
 
       // 2. Emit notification for user-1 with ROLE.ADMIN -> filtered out
-      (service as unknown as { broadcastNotification: (u: string, r: ROLE, n: unknown) => void })
-        .broadcastNotification('user-1', ROLE.ADMIN, { id: 'notif-admin', title: 'Hello Admin' });
+      (
+        service as unknown as {
+          broadcastNotification: (u: string, r: ROLE, n: unknown) => void;
+        }
+      ).broadcastNotification('user-1', ROLE.ADMIN, {
+        id: 'notif-admin',
+        title: 'Hello Admin',
+      });
 
       // 3. Emit notification for user-2 -> filtered out
-      (service as unknown as { broadcastNotification: (u: string, r: ROLE, n: unknown) => void })
-        .broadcastNotification('user-2', ROLE.USER, { id: 'notif-2', title: 'Other' });
+      (
+        service as unknown as {
+          broadcastNotification: (u: string, r: ROLE, n: unknown) => void;
+        }
+      ).broadcastNotification('user-2', ROLE.USER, {
+        id: 'notif-2',
+        title: 'Other',
+      });
 
       expect(events).toEqual([
         {

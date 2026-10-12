@@ -162,7 +162,11 @@ describe('VendorsService', () => {
 
       const result = await service.register(dto);
 
-      expect(mockOtp.verifyOtp).toHaveBeenCalledWith('shop@nuts.dev', '123456');
+      expect(mockOtp.verifyOtp).toHaveBeenCalledWith(
+        'shop@nuts.dev',
+        '123456',
+        'vendor:registration',
+      );
       expect(mockPrisma.vendor.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

@@ -46,10 +46,7 @@ export class NotificationListener {
     type?: string;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
-    const published = await this.rabbitmq.publish(
-      RABBITMQ_QUEUES.EMAILS,
-      data,
-    );
+    const published = await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, data);
     if (!published) {
       try {
         await this.emailService.sendEmail({
@@ -196,15 +193,17 @@ export class NotificationListener {
               0,
             );
 
-            const vendorOrderItems: EmailOrderItem[] = vendorItems.map((item) => ({
-              productName: item.product.name,
-              quantity: item.quantity,
-              unitPrice: Number(item.unitPrice),
-              totalPrice: Number(item.totalPrice),
-              variantOptions: item.variant
-                ? this.formatVariantOptions(item.variant.options)
-                : undefined,
-            }));
+            const vendorOrderItems: EmailOrderItem[] = vendorItems.map(
+              (item) => ({
+                productName: item.product.name,
+                quantity: item.quantity,
+                unitPrice: Number(item.unitPrice),
+                totalPrice: Number(item.totalPrice),
+                variantOptions: item.variant
+                  ? this.formatVariantOptions(item.variant.options)
+                  : undefined,
+              }),
+            );
 
             const vendorHtml = this.emailTemplates.newOrderForVendor({
               vendorStoreName: vendor.storeName,
@@ -546,7 +545,10 @@ export class NotificationListener {
             message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
             priority: NotificationPriority.MEDIUM,
             link: `/admin/order`,
-            metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
+            metadata: {
+              paymentId: payload.paymentId,
+              orderId: payload.orderId,
+            },
             dedupeKey: `PAYMENT_RECEIVED:${payload.paymentId}:ADMIN:${admin.id}`,
           }),
         ),

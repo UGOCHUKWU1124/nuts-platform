@@ -78,12 +78,30 @@ describe('AdminAuthService', () => {
 
     const mockRefreshSession = {
       issueAdminSession: jest.fn().mockResolvedValue({
-        user: { id: 'admin-1', email: 'admin@nuts.dev', firstName: 'Admin', lastName: 'User' },
-        tokens: { accessToken: 'signed-jwt', refreshToken: 'refresh-jwt', refreshId: 'rid' },
+        user: {
+          id: 'admin-1',
+          email: 'admin@nuts.dev',
+          firstName: 'Admin',
+          lastName: 'User',
+        },
+        tokens: {
+          accessToken: 'signed-jwt',
+          refreshToken: 'refresh-jwt',
+          refreshId: 'rid',
+        },
       }),
       refresh: jest.fn().mockResolvedValue({
-        user: { id: 'admin-1', email: 'admin@nuts.dev', firstName: 'Admin', lastName: 'User' },
-        tokens: { accessToken: 'signed-jwt', refreshToken: 'refresh-jwt', refreshId: 'rid' },
+        user: {
+          id: 'admin-1',
+          email: 'admin@nuts.dev',
+          firstName: 'Admin',
+          lastName: 'User',
+        },
+        tokens: {
+          accessToken: 'signed-jwt',
+          refreshToken: 'refresh-jwt',
+          refreshId: 'rid',
+        },
       }),
       revokeSession: jest.fn().mockResolvedValue(undefined),
     };

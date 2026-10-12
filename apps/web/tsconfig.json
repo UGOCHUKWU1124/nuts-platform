@@ -6,6 +6,7 @@
     "noImplicitReturns": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "incremental": true,
     "plugins": [{"name": "next"}],
     "paths": {

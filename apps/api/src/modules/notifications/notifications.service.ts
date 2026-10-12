@@ -93,7 +93,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      this.logger.log('Notification Redis Pub/Sub cluster subscriber connected.');
+      this.logger.log(
+        'Notification Redis Pub/Sub cluster subscriber connected.',
+      );
     } catch (err) {
       this.logger.warn(
         `Redis pub/sub initialization failed: ${getErrorMessage(err)}. Falling back to in-memory broadcast.`,
@@ -211,7 +213,13 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     );
 
     return results
-      .filter((r): r is PromiseFulfilledResult<Prisma.NotificationGetPayload<Record<string, never>>> => r.status === 'fulfilled')
+      .filter(
+        (
+          r,
+        ): r is PromiseFulfilledResult<
+          Prisma.NotificationGetPayload<Record<string, never>>
+        > => r.status === 'fulfilled',
+      )
       .map((r) => r.value);
   }
 
@@ -470,20 +478,17 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     // Filter notifications by both userId AND role
     const notifications$ = this.sseSubject.asObservable().pipe(
       filter((event) => event.userId === userId && event.role === role),
-      map(
-        (event) =>
-          ({
-            id: event.notification.id,
-            data: event.notification,
-          }) as MessageEvent,
-      ),
+      map((event) => ({
+        id: event.notification.id,
+        data: event.notification,
+      })),
     );
 
     // Immediate handshake
     const handshake$ = new Observable<MessageEvent>((sub) => {
       sub.next({
         data: { type: 'connected', timestamp: new Date().toISOString() },
-      } as MessageEvent);
+      });
       sub.complete();
     });
 
@@ -491,7 +496,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     const heartbeat$ = interval(15_000).pipe(
       switchMap(() => {
         if (!this.authSessionService) {
-          return [{ data: { type: 'ping' } } as MessageEvent];
+          return [{ data: { type: 'ping' } }];
         }
         return from(
           this.authSessionService
@@ -503,7 +508,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
                   HttpStatus.UNAUTHORIZED,
                 );
               }
-              return { data: { type: 'ping' } } as MessageEvent;
+              return { data: { type: 'ping' } };
             }),
         );
       }),
