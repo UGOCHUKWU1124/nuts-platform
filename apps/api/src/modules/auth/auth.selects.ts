@@ -58,3 +58,30 @@ export type UserLoginRecord = Prisma.UserGetPayload<{
 export type UserRefreshRecord = Prisma.UserGetPayload<{
   select: typeof USER_REFRESH_SELECT;
 }>;
+
+export const ADMIN_AUTH_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  isActive: true,
+  tokenVersion: true,
+} as const satisfies Prisma.AdminSelect;
+
+export const VENDOR_AUTH_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  isActive: true,
+  isApproved: true,
+  tokenVersion: true,
+} as const satisfies Prisma.VendorSelect;
+
+export type AdminAuthRecord = Prisma.AdminGetPayload<{
+  select: typeof ADMIN_AUTH_SELECT;
+}>;
+
+export type VendorAuthRecord = Prisma.VendorGetPayload<{
+  select: typeof VENDOR_AUTH_SELECT;
+}>;

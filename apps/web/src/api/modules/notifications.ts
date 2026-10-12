@@ -77,7 +77,7 @@ function createNotificationsApi(client: typeof userApi) {
     },
 
     markAllAsRead() {
-      return client.patch<{ updated: number }>("/notifications/mark-all-read");
+      return client.patch<{ count: number; updated?: number }>("/notifications/mark-all-read");
     },
 
     delete(id: string) {
@@ -90,13 +90,15 @@ function createNotificationsApi(client: typeof userApi) {
   };
 }
 
-export function notificationsApiForRole(role: AuthRole) {
-  switch (role) {
+export function notificationsApiForRole(role?: AuthRole | string | null) {
+  const normalized = String(role || "").toLowerCase();
+  switch (normalized) {
     case "admin":
       return createNotificationsApi(adminApi);
     case "vendor":
       return createNotificationsApi(vendorApi);
     case "user":
+    default:
       return createNotificationsApi(userApi);
   }
 }

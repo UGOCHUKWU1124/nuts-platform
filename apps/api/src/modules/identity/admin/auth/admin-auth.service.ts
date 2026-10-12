@@ -6,13 +6,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { Prisma, ROLE } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import type { StringValue } from 'ms';
-import type { AuthTokens } from '@api/modules/auth/types/auth.types';
-import { LoginDto } from '@api/modules/auth/dto/login.dto';
+import { timingSafeEqual } from 'crypto';
+
+import { RefreshSessionService } from '@api/modules/auth/sessions/refresh-session.service';
+import type { AuthSession } from '@api/modules/auth/types/auth.types';
+import { ADMIN_AUTH_SELECT } from '@api/modules/auth/auth.selects';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { AccountLockService } from '@api/modules/security/services/account-lock.service';
 import { AuditLogService } from '@api/modules/shared/audit-log/audit-log.service';
@@ -22,27 +22,7 @@ import {
 } from '@api/modules/shared/constants/bcrypt.constants';
 import { AdminAuthUserDto } from './dto/admin-auth-user.dto';
 import { AdminRegisterDto } from './dto/admin-register.dto';
-
-/** Fields needed to issue a session — no password, no hashed tokens. */
-const ADMIN_SESSION_SELECT = {
-  id: true,
-  email: true,
-  firstName: true,
-  lastName: true,
-  isActive: true,
-  tokenVersion: true,
-} as const;
-
-/** Fields needed to verify credentials at login time. */
-const ADMIN_LOGIN_SELECT = {
-  id: true,
-  email: true,
-  firstName: true,
-  lastName: true,
-  password: true,
-  isActive: true,
-  tokenVersion: true,
-} as const;
+import { LoginDto } from '@api/modules/auth/dto/login.dto';
 
 @Injectable()
 export class AdminAuthService {
@@ -50,27 +30,23 @@ export class AdminAuthService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditLog: AuditLogService,
     private readonly accountLockService: AccountLockService,
+    private readonly refreshSessionService: RefreshSessionService,
   ) {}
 
   async login(
     dto: LoginDto,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<{ user: AdminAuthUserDto; tokens: AuthTokens }> {
-    // setup() persists emails lowercased; the lookup and the lockout key must
-    // use the same normalized value or mixed-case logins can never succeed.
+  ): Promise<{ user: AdminAuthUserDto; tokens: AuthSession['tokens'] }> {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const identifier = `email:${normalizedEmail}`;
 
-    // Only select the fields we actually need — avoids transferring hashed
-    // refresh tokens and other columns that serve no purpose here.
     const admin = await this.prisma.admin.findUnique({
       where: { email: normalizedEmail },
-      select: ADMIN_LOGIN_SELECT,
+      select: { ...ADMIN_AUTH_SELECT, password: true },
     });
 
     const passwordMatches = await bcrypt.compare(
@@ -102,8 +78,7 @@ export class AdminAuthService {
 
     void this.accountLockService.resetAttempts(identifier).catch(() => {});
 
-    // Upgrade weak legacy hashes after successful login. Never lower a hash's
-    // work factor: doing so would silently make an already stronger hash weaker.
+    // Upgrade weak legacy hashes after successful login
     if (bcrypt.getRounds(admin.password) < BCRYPT_COST_FACTOR) {
       bcrypt
         .hash(dto.password, BCRYPT_COST_FACTOR)
@@ -118,9 +93,9 @@ export class AdminAuthService {
         });
     }
 
-    const session = await this.issueSession(admin);
+    const session = await this.refreshSessionService.issueAdminSession(admin);
 
-    // Fire-and-forget audit log so it does not block the login response
+    // Fire-and-forget audit log
     this.auditLog
       .log({
         action: 'ADMIN_LOGIN',
@@ -135,14 +110,14 @@ export class AdminAuthService {
         this.logger.error('Failed to write admin login audit log', err);
       });
 
-    return session;
+    return { user: this.toAuthUserDto(admin), tokens: session.tokens };
   }
 
   async setup(
     dto: AdminRegisterDto,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<{ user: AdminAuthUserDto; tokens: AuthTokens }> {
+  ): Promise<{ user: AdminAuthUserDto; tokens: AuthSession['tokens'] }> {
     const setupSecret = this.configService.get<string>('ADMIN_SETUP_SECRET');
     if (!setupSecret) {
       throw new BadRequestException('Admin setup is not configured');
@@ -180,7 +155,7 @@ export class AdminAuthService {
               firstName: dto.firstName ?? null,
               lastName: dto.lastName ?? null,
             },
-            select: ADMIN_SESSION_SELECT,
+            select: ADMIN_AUTH_SELECT,
           });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -204,75 +179,48 @@ export class AdminAuthService {
       entity: 'Admin',
       entityId: admin.id,
       adminId: admin.id,
-      payload: {
-        role: 'ADMIN',
-      },
+      payload: { role: 'ADMIN' },
       ipAddress,
       userAgent,
     });
 
-    return this.issueSession(admin);
+    const session = await this.refreshSessionService.issueAdminSession(admin);
+    return { user: this.toAuthUserDto(admin), tokens: session.tokens };
   }
 
   async refresh(
     adminId: string,
     refreshId?: string,
-  ): Promise<{ user: AdminAuthUserDto; tokens: AuthTokens }> {
-    const admin = await this.prisma.admin.findUnique({
-      where: { id: adminId },
-      select: {
-        ...ADMIN_SESSION_SELECT,
-        refreshToken: true,
-        refreshTokenId: true,
-      },
-    });
-
-    if (!admin) {
-      throw new UnauthorizedException('Admin not found');
-    }
-
-    if (!admin.isActive) {
-      throw new UnauthorizedException('Admin account is deactivated');
-    }
-
-    if (!refreshId || !admin.refreshToken || !admin.refreshTokenId) {
+  ): Promise<{ user: AdminAuthUserDto; tokens: AuthSession['tokens'] }> {
+    if (!refreshId) {
       throw new UnauthorizedException('Invalid refresh session');
     }
 
-    if (admin.refreshTokenId !== refreshId) {
-      throw new UnauthorizedException(
-        'Refresh session has already been rotated',
-      );
-    }
-
-    const valid = await this.verifyRefreshTokenHash(
+    // Delegate to the consolidated refresh logic which has:
+    // - grace period for concurrent requests
+    // - token reuse detection with session revocation
+    // - timing-safe hash verification
+    const session = await this.refreshSessionService.refresh({
+      sub: adminId,
+      role: ROLE.ADMIN,
       refreshId,
-      admin.refreshToken,
-    );
-    if (!valid) {
-      await this.prisma.admin.updateMany({
-        where: { id: admin.id },
-        data: {
-          refreshToken: null,
-          refreshTokenId: null,
-          tokenVersion: { increment: 1 },
-        },
-      });
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+    });
 
-    return this.issueSession(admin, refreshId);
+    return {
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        firstName: session.user.firstName ?? null,
+        lastName: session.user.lastName ?? null,
+      },
+      tokens: session.tokens,
+    };
   }
 
-  /**
-   * Returns the current admin's profile for session rehydration
-   * (GET /admin/auth/me). Rejects missing or deactivated accounts so
-   * stale sessions are invalidated immediately.
-   */
   async me(adminId: string): Promise<AdminAuthUserDto> {
     const admin = await this.prisma.admin.findUnique({
       where: { id: adminId },
-      select: ADMIN_SESSION_SELECT,
+      select: ADMIN_AUTH_SELECT,
     });
 
     if (!admin) {
@@ -313,7 +261,7 @@ export class AdminAuthService {
           ? { lastName: dto.lastName.trim() }
           : {}),
       },
-      select: ADMIN_SESSION_SELECT,
+      select: ADMIN_AUTH_SELECT,
     });
 
     return this.toAuthUserDto(updated);
@@ -324,18 +272,8 @@ export class AdminAuthService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
-    try {
-      await this.prisma.admin.update({
-        where: { id: adminId },
-        data: {
-          refreshToken: null,
-          refreshTokenId: null,
-          tokenVersion: { increment: 1 },
-        },
-      });
-    } catch {
-      // If admin not found or already deleted, don't crash
-    }
+    // Use consolidated session revocation which also invalidates the Redis stamp
+    await this.refreshSessionService.revokeSession(adminId, ROLE.ADMIN);
 
     await this.auditLog
       .log({
@@ -353,28 +291,6 @@ export class AdminAuthService {
   // PRIVATE HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  private async issueSession(
-    admin: {
-      id: string;
-      email: string;
-      firstName: string | null;
-      lastName: string | null;
-      tokenVersion: number;
-    },
-    expectedRefreshId?: string,
-  ): Promise<{ user: AdminAuthUserDto; tokens: AuthTokens }> {
-    const user = this.toAuthUserDto(admin);
-    const tokens = await this.generateTokens(
-      admin.id,
-      admin.email,
-      admin.tokenVersion,
-    );
-
-    await this.storeRefreshToken(admin.id, tokens.refreshId, expectedRefreshId);
-
-    return { user, tokens };
-  }
-
   private toAuthUserDto(admin: {
     id: string;
     email: string;
@@ -387,110 +303,5 @@ export class AdminAuthService {
       firstName: admin.firstName,
       lastName: admin.lastName,
     };
-  }
-
-  private async generateTokens(
-    userId: string,
-    email: string,
-    tokenVersion: number,
-  ): Promise<AuthTokens> {
-    const refreshId = randomBytes(16).toString('hex');
-
-    const issuer = this.configService.getOrThrow<string>('JWT_ISSUER');
-    const accessAudience = this.configService.getOrThrow<string>(
-      'JWT_ACCESS_AUDIENCE',
-    );
-    const refreshAudience = this.configService.getOrThrow<string>(
-      'JWT_REFRESH_AUDIENCE',
-    );
-
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(
-        { sub: userId, email, role: ROLE.ADMIN, tokenVersion },
-        {
-          secret: this.configService.getOrThrow<string>('JWT_SECRET'),
-          expiresIn: this.configService.getOrThrow<string>(
-            'JWT_ACCESS_EXPIRES_IN',
-          ) as StringValue,
-          issuer,
-          audience: accessAudience,
-        },
-      ),
-      this.jwtService.signAsync(
-        { sub: userId, email, role: ROLE.ADMIN, refreshId },
-        {
-          secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-          expiresIn: this.configService.getOrThrow<string>(
-            'JWT_REFRESH_EXPIRES_IN',
-          ) as StringValue,
-          issuer,
-          audience: refreshAudience,
-        },
-      ),
-    ]);
-
-    return { accessToken, refreshToken, refreshId };
-  }
-
-  /**
-   * Stores a bcrypt hash of the refreshId (NOT the full JWT string).
-   *
-   * Why: The full JWT is >200 chars.  bcrypt silently truncates inputs at
-   * 72 bytes, meaning two different tokens that share the same first 72
-   * characters would both pass verification — a real security hole.
-   * The refreshId is a 32-char hex string that fits well within the limit
-   * and is the true secret identifier embedded in the token.
-   */
-  private hashRefreshToken(refreshId: string): string {
-    const refreshSecret =
-      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
-
-    return createHmac('sha256', refreshSecret).update(refreshId).digest('hex');
-  }
-
-  private async verifyRefreshTokenHash(
-    refreshId: string,
-    storedHash: string,
-  ): Promise<boolean> {
-    if (storedHash.startsWith('$2')) {
-      return bcrypt.compare(refreshId, storedHash);
-    }
-
-    const expectedHash = this.hashRefreshToken(refreshId);
-
-    return (
-      storedHash.length === expectedHash.length &&
-      timingSafeEqual(Buffer.from(storedHash), Buffer.from(expectedHash))
-    );
-  }
-
-  private async storeRefreshToken(
-    adminId: string,
-    refreshId: string,
-    expectedRefreshId?: string,
-  ): Promise<void> {
-    const hashed = this.hashRefreshToken(refreshId);
-
-    if (expectedRefreshId) {
-      const result = await this.prisma.admin.updateMany({
-        where: {
-          id: adminId,
-          refreshTokenId: expectedRefreshId,
-          isActive: true,
-        },
-        data: { refreshToken: hashed, refreshTokenId: refreshId },
-      });
-      if (result.count !== 1) {
-        throw new UnauthorizedException(
-          'Refresh session has already been rotated',
-        );
-      }
-      return;
-    }
-
-    await this.prisma.admin.update({
-      where: { id: adminId },
-      data: { refreshToken: hashed, refreshTokenId: refreshId },
-    });
   }
 }

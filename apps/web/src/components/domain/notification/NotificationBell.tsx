@@ -2,8 +2,8 @@
 
 import type { AppNotification,NotificationType } from "@/api/notifications";
 import { useNotifications } from "@/hook/use-notifications";
-import { notificationDetailPath } from "@/lib/notification-path";
-import { useAuthStore } from "@/zustand/auth";
+import { notificationDetailPath, notificationListPath } from "@/lib/notification-path";
+import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import {
 AlertTriangle,
 Bell,
@@ -62,13 +62,22 @@ export function NotificationBell({
   const {
     notifications,
     unreadCount,
+    isLoading,
     markAsRead,
     markAllAsRead,
     fetchNotifications,
     fetchUnreadCount,
   } = useNotifications();
 
-  // Lazy-load top 5 notifications only when the user opens the bell popover
+  // Eagerly warm the notification cache in background upon authenticated session
+  useEffect(() => {
+    if (isAuthenticated) {
+      void fetchUnreadCount();
+      void fetchNotifications(undefined, 5);
+    }
+  }, [isAuthenticated, fetchNotifications, fetchUnreadCount]);
+
+  // Re-sync top 5 notifications when user opens popover
   useEffect(() => {
     if (open) {
       void fetchUnreadCount();
@@ -92,14 +101,8 @@ export function NotificationBell({
 
   if (!isAuthenticated) return null;
 
-  const activeRole = role ?? user?.role ?? "user";
-  const userRole = activeRole.toLowerCase();
-  const allNotificationsHref =
-    userRole === "admin"
-      ? "/admin/notifications"
-      : userRole === "vendor"
-      ? "/vendor/notifications"
-      : "/account/notifications";
+  const activeRole = normalizeRole(role ?? user?.role) ?? "user";
+  const allNotificationsHref = notificationListPath(activeRole);
 
   const recentNotifications = notifications.slice(0, 5);
 
@@ -170,7 +173,19 @@ export function NotificationBell({
 
           {/* List */}
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto divide-y divide-border/60 sm:max-h-80">
-            {recentNotifications.length === 0 ? (
+            {isLoading && recentNotifications.length === 0 ? (
+              <div className="divide-y divide-border/40 p-2 space-y-2">
+                {[1, 2, 3].map((idx) => (
+                  <div key={idx} className="flex items-start gap-3 p-2.5 animate-pulse">
+                    <div className="h-8 w-8 rounded-full bg-muted/80 shrink-0" />
+                    <div className="flex-1 space-y-1.5 py-0.5">
+                      <div className="h-3 w-3/4 bg-muted/80 rounded" />
+                      <div className="h-2.5 w-full bg-muted/50 rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : recentNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
                 <Bell className="h-8 w-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm font-medium text-foreground">

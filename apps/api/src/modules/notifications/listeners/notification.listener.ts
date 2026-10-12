@@ -5,11 +5,13 @@ import {
   EmailOrderItem,
   EmailTemplatesService,
 } from '@api/modules/infrastructure/mail/email-templates.service';
+import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
 import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
 import { NotificationsService } from '../notifications.service';
 import { DomainEvents } from '@api/modules/shared/events/domain-events';
+import { getErrorMessage } from '@api/modules/shared/utils/error-details.util';
 import type {
   OrderCancelledPayload,
   OrderDeliveredPayload,
@@ -26,10 +28,40 @@ export class NotificationListener {
 
   constructor(
     private readonly rabbitmq: RabbitMQService,
+    private readonly emailService: EmailService,
     private readonly emailTemplates: EmailTemplatesService,
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  /**
+   * Dispatches email via RabbitMQ work queue with seamless fallback to direct
+   * circuit-breaker protected EmailService if RabbitMQ is offline or backpressured.
+   */
+  private async dispatchEmail(data: {
+    to: string;
+    subject: string;
+    html?: string;
+    text?: string;
+    type?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    const published = await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, data);
+    if (!published) {
+      try {
+        await this.emailService.sendEmail({
+          to: data.to,
+          subject: data.subject,
+          html: data.html,
+          text: data.text,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Fallback direct email delivery to ${data.to} failed: ${getErrorMessage(error)}`,
+        );
+      }
+    }
+  }
 
   /**
    * Dispatches in-app notification to RabbitMQ, with seamless fallback to direct
@@ -44,6 +76,7 @@ export class NotificationListener {
     priority: NotificationPriority;
     link?: string;
     metadata?: Record<string, unknown>;
+    dedupeKey?: string;
   }): Promise<void> {
     const published = await this.rabbitmq.publish(
       RABBITMQ_QUEUES.NOTIFICATIONS,
@@ -60,11 +93,11 @@ export class NotificationListener {
           priority: data.priority,
           link: data.link,
           metadata: data.metadata,
+          dedupeKey: data.dedupeKey,
         });
       } catch (error) {
         this.logger.error(
-          `Failed to persist in-app notification directly for user ${data.userId}`,
-          error,
+          `Failed to persist in-app notification directly for user ${data.userId}: ${getErrorMessage(error)}`,
         );
       }
     }
@@ -112,7 +145,7 @@ export class NotificationListener {
       shippingAddress: payload.shippingAddress,
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.userEmail,
       subject: `Order Confirmation - ${payload.orderNumber}`,
       html: customerHtml,
@@ -120,7 +153,7 @@ export class NotificationListener {
       metadata: { orderId: payload.orderId },
     });
 
-    // In-app notification to customer
+    // In-app notification to customer with dedupe key
     await this.dispatchNotification({
       userId: payload.userId,
       role: ROLE.USER,
@@ -128,8 +161,9 @@ export class NotificationListener {
       title: 'Order Confirmed',
       message: `Your order #${payload.orderNumber} is now processing.`,
       priority: NotificationPriority.HIGH,
-      link: `/account/orders`,
+      link: `/order/${payload.orderId}`,
       metadata: { orderId: payload.orderId },
+      dedupeKey: `ORDER_CONFIRMED:${payload.orderId}:USER:${payload.userId}`,
     });
 
     // 2. Fetch order items for per-vendor notifications
@@ -142,80 +176,95 @@ export class NotificationListener {
       },
     });
 
-    if (!orderItems || orderItems.length === 0) return;
+    if (orderItems && orderItems.length > 0) {
+      const vendorItemsMap = new Map<string, typeof orderItems>();
+      for (const item of orderItems) {
+        const existing = vendorItemsMap.get(item.vendorId) || [];
+        existing.push(item);
+        vendorItemsMap.set(item.vendorId, existing);
+      }
 
-    const vendorItemsMap = new Map<string, typeof orderItems>();
-    for (const item of orderItems) {
-      const existing = vendorItemsMap.get(item.vendorId) || [];
-      existing.push(item);
-      vendorItemsMap.set(item.vendorId, existing);
-    }
+      await Promise.allSettled(
+        Array.from(vendorItemsMap.entries()).map(async ([, vendorItems]) => {
+          try {
+            const vendor = vendorItems[0].vendor;
+            const vendorTotal = vendorItems.reduce(
+              (sum: number, i) => sum + Number(i.totalPrice),
+              0,
+            );
 
-    for (const [, vendorItems] of vendorItemsMap) {
-      const vendor = vendorItems[0].vendor;
-      const vendorTotal = vendorItems.reduce(
-        (sum: number, i) => sum + Number(i.totalPrice),
-        0,
+            const vendorOrderItems: EmailOrderItem[] = vendorItems.map(
+              (item) => ({
+                productName: item.product.name,
+                quantity: item.quantity,
+                unitPrice: Number(item.unitPrice),
+                totalPrice: Number(item.totalPrice),
+                variantOptions: item.variant
+                  ? this.formatVariantOptions(item.variant.options)
+                  : undefined,
+              }),
+            );
+
+            const vendorHtml = this.emailTemplates.newOrderForVendor({
+              vendorStoreName: vendor.storeName,
+              orderNumber: payload.orderNumber,
+              customerName: payload.userFirstName || 'Customer',
+              items: vendorOrderItems,
+              totalAmount: vendorTotal,
+              orderTotalForVendor: vendorTotal,
+              currency: payload.currency,
+            });
+
+            await this.dispatchEmail({
+              to: vendor.email,
+              subject: `New Order Received - ${payload.orderNumber}`,
+              html: vendorHtml,
+              type: 'vendor_new_order',
+              metadata: { orderId: payload.orderId, vendorId: vendor.id },
+            });
+
+            await this.dispatchNotification({
+              userId: vendor.id,
+              role: ROLE.VENDOR,
+              type: NotificationType.ORDER_CONFIRMED,
+              title: 'New Order Received!',
+              message: `You have a new sale for order #${payload.orderNumber}.`,
+              priority: NotificationPriority.HIGH,
+              link: `/vendor/order/${payload.orderId}`,
+              metadata: { orderId: payload.orderId },
+              dedupeKey: `ORDER_CONFIRMED:${payload.orderId}:VENDOR:${vendor.id}`,
+            });
+          } catch (vendorErr) {
+            this.logger.error(
+              `Failed notifying vendor for order ${payload.orderId}: ${getErrorMessage(vendorErr)}`,
+            );
+          }
+        }),
       );
-
-      const vendorOrderItems: EmailOrderItem[] = vendorItems.map((item) => ({
-        productName: item.product.name,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice),
-        totalPrice: Number(item.totalPrice),
-        variantOptions: item.variant
-          ? this.formatVariantOptions(item.variant.options)
-          : undefined,
-      }));
-
-      const vendorHtml = this.emailTemplates.newOrderForVendor({
-        vendorStoreName: vendor.storeName,
-        orderNumber: payload.orderNumber,
-        customerName: payload.userFirstName || 'Customer',
-        items: vendorOrderItems,
-        totalAmount: vendorTotal,
-        orderTotalForVendor: vendorTotal,
-        currency: payload.currency,
-      });
-
-      await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
-        to: vendor.email,
-        subject: `New Order Received - ${payload.orderNumber}`,
-        html: vendorHtml,
-        type: 'vendor_new_order',
-        metadata: { orderId: payload.orderId, vendorId: vendor.id },
-      });
-
-      await this.dispatchNotification({
-        userId: vendor.id,
-        role: ROLE.VENDOR,
-        type: NotificationType.ORDER_CONFIRMED,
-        title: 'New Order Received!',
-        message: `You have a new sale for order #${payload.orderNumber}.`,
-        priority: NotificationPriority.HIGH,
-        link: `/vendor/orders`,
-        metadata: { orderId: payload.orderId },
-      });
     }
 
-    // 3. Notify all active platform Admins
+    // 3. Notify all active platform Admins concurrently
     try {
       const admins = await this.prisma.admin.findMany({
         where: { isActive: true },
         select: { id: true },
       });
-      for (const admin of admins) {
-        await this.dispatchNotification({
-          userId: admin.id,
-          role: ROLE.ADMIN,
-          type: NotificationType.ORDER_PLACED,
-          title: 'New Order Received',
-          message: `Order #${payload.orderNumber} placed for ${payload.currency} ${payload.finalAmount || payload.totalAmount}.`,
-          priority: NotificationPriority.HIGH,
-          link: `/admin/order`,
-          metadata: { orderId: payload.orderId },
-        });
-      }
+
+      await Promise.allSettled(
+        admins.map((admin) =>
+          this.dispatchNotification({
+            userId: admin.id,
+            role: ROLE.ADMIN,
+            type: NotificationType.ORDER_PLACED,
+            title: 'New Order Received',
+            message: `Order #${payload.orderNumber} placed for ${payload.currency} ${payload.finalAmount || payload.totalAmount}.`,
+            priority: NotificationPriority.HIGH,
+            link: `/admin/order`,
+            metadata: { orderId: payload.orderId },
+            dedupeKey: `ORDER_PLACED:${payload.orderId}:ADMIN:${admin.id}`,
+          }),
+        ),
+      );
     } catch (err) {
       this.logger.error('Failed to notify admins of new order', err);
     }
@@ -266,7 +315,7 @@ export class NotificationListener {
       currency: payment?.currency || 'NGN',
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.userEmail,
       subject: `Your Order #${payload.orderNumber} Has Shipped!`,
       html,
@@ -281,8 +330,9 @@ export class NotificationListener {
       title: 'Order Shipped',
       message: `Your order #${payload.orderNumber} is on the way!`,
       priority: NotificationPriority.HIGH,
-      link: `/account/orders`,
+      link: `/order/${payload.orderId}`,
       metadata: { orderId: payload.orderId },
+      dedupeKey: `ORDER_SHIPPED:${payload.orderId}:USER:${payload.userId}`,
     });
   }
 
@@ -329,7 +379,7 @@ export class NotificationListener {
       currency: payment?.currency || 'NGN',
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.userEmail,
       subject: `Order Delivered - ${payload.orderNumber}`,
       html,
@@ -344,8 +394,9 @@ export class NotificationListener {
       title: 'Order Delivered',
       message: `Your order #${payload.orderNumber} has arrived!`,
       priority: NotificationPriority.HIGH,
-      link: `/account/orders`,
+      link: `/order/${payload.orderId}`,
       metadata: { orderId: payload.orderId },
+      dedupeKey: `ORDER_DELIVERED:${payload.orderId}:USER:${payload.userId}`,
     });
   }
 
@@ -394,7 +445,7 @@ export class NotificationListener {
       currency: payment?.currency || 'NGN',
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.userEmail,
       subject: `Order #${payload.orderNumber} Cancelled`,
       html,
@@ -409,8 +460,9 @@ export class NotificationListener {
       title: 'Order Cancelled',
       message: `Your order #${payload.orderNumber} has been cancelled.`,
       priority: NotificationPriority.HIGH,
-      link: `/account/orders`,
+      link: `/order/${payload.orderId}`,
       metadata: { orderId: payload.orderId },
+      dedupeKey: `ORDER_CANCELLED:${payload.orderId}:USER:${payload.userId}`,
     });
   }
 
@@ -456,7 +508,7 @@ export class NotificationListener {
       paymentReference: payload.paymentReference,
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.userEmail,
       subject: `Payment Confirmed - Order #${payload.orderNumber}`,
       html,
@@ -471,28 +523,36 @@ export class NotificationListener {
       title: 'Payment Successful',
       message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
       priority: NotificationPriority.HIGH,
-      link: `/account/orders`,
+      link: `/order/${payload.orderId}`,
       metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
+      dedupeKey: `PAYMENT_RECEIVED:${payload.paymentId}:USER:${payload.userId}`,
     });
 
-    // Notify all active Admins of confirmed payment
+    // Notify all active Admins of confirmed payment concurrently
     try {
       const admins = await this.prisma.admin.findMany({
         where: { isActive: true },
         select: { id: true },
       });
-      for (const admin of admins) {
-        await this.dispatchNotification({
-          userId: admin.id,
-          role: ROLE.ADMIN,
-          type: NotificationType.PAYMENT_RECEIVED,
-          title: 'Payment Confirmed',
-          message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
-          priority: NotificationPriority.MEDIUM,
-          link: `/admin/order`,
-          metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
-        });
-      }
+
+      await Promise.allSettled(
+        admins.map((admin) =>
+          this.dispatchNotification({
+            userId: admin.id,
+            role: ROLE.ADMIN,
+            type: NotificationType.PAYMENT_RECEIVED,
+            title: 'Payment Confirmed',
+            message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
+            priority: NotificationPriority.MEDIUM,
+            link: `/admin/order`,
+            metadata: {
+              paymentId: payload.paymentId,
+              orderId: payload.orderId,
+            },
+            dedupeKey: `PAYMENT_RECEIVED:${payload.paymentId}:ADMIN:${admin.id}`,
+          }),
+        ),
+      );
     } catch (err) {
       this.logger.error('Failed to notify admins of confirmed payment', err);
     }
@@ -511,7 +571,7 @@ export class NotificationListener {
       reason: payload.reason,
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.userEmail,
       subject: `Payment Failed - Order #${payload.orderNumber}`,
       html,
@@ -528,6 +588,7 @@ export class NotificationListener {
       priority: NotificationPriority.HIGH,
       link: `/checkout`,
       metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
+      dedupeKey: `PAYMENT_FAILED:${payload.paymentId}:USER:${payload.userId}`,
     });
   }
 
@@ -540,13 +601,15 @@ export class NotificationListener {
       'Referral reward event received',
     );
 
+    const currency = (payload as { currency?: string }).currency || 'NGN';
+
     const html = this.emailTemplates.referralRewardCredited({
       referrerName: payload.referrerName,
       rewardAmount: payload.rewardAmount,
-      currency: 'NGN',
+      currency,
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, {
+    await this.dispatchEmail({
       to: payload.referrerEmail,
       subject: 'You Earned a Referral Reward!',
       html,
@@ -554,15 +617,16 @@ export class NotificationListener {
       metadata: { referralId: payload.referralId },
     });
 
-    await this.rabbitmq.publish(RABBITMQ_QUEUES.NOTIFICATIONS, {
+    await this.dispatchNotification({
       userId: payload.referrerId,
       role: ROLE.USER,
       type: NotificationType.SYSTEM_ANNOUNCEMENT,
       title: 'Referral Reward Earned!',
-      message: `You earned NGN ${payload.rewardAmount} from a referral!`,
+      message: `You earned ${currency} ${payload.rewardAmount} from a referral!`,
       priority: NotificationPriority.MEDIUM,
-      link: `/account/wallet`,
+      link: `/wallet`,
       metadata: { referralId: payload.referralId },
+      dedupeKey: `SYSTEM_ANNOUNCEMENT:referral:${payload.referralId}:USER:${payload.referrerId}`,
     });
   }
 }

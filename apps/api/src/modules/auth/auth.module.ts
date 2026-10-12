@@ -32,32 +32,12 @@ import { JwtRefreshStrategy } from './strategies/refresh/jwt-refresh.strategy';
       inject: [ConfigService],
 
       useFactory: (config: ConfigService) => {
-        const privateKey = config.get<string>('JWT_PRIVATE_KEY');
-        const publicKey = config.get<string>('JWT_PUBLIC_KEY');
-
-        if (privateKey && publicKey) {
-          return {
-            privateKey,
-            publicKey,
-            signOptions: {
-              algorithm: 'RS256',
-              issuer: config.getOrThrow<string>('JWT_ISSUER'),
-              audience: config.getOrThrow<string>('JWT_ACCESS_AUDIENCE'),
-            },
-            verifyOptions: {
-              algorithms: ['RS256'],
-              issuer: config.getOrThrow<string>('JWT_ISSUER'),
-              audience: config.getOrThrow<string>('JWT_ACCESS_AUDIENCE'),
-            },
-          };
-        }
-
         return {
           secret: config.getOrThrow<string>('JWT_SECRET'),
           issuer: config.getOrThrow<string>('JWT_ISSUER'),
           audience: config.getOrThrow<string>('JWT_ACCESS_AUDIENCE'),
           signOptions: {
-            algorithm: 'HS256',
+            algorithm: 'HS256' as const,
           },
         };
       },
@@ -85,6 +65,7 @@ import { JwtRefreshStrategy } from './strategies/refresh/jwt-refresh.strategy';
     JwtRefreshStrategy,
     JwtRefreshGuard,
     AuthSessionService,
+    RefreshSessionService,
   ],
 })
 export class AuthModule {}

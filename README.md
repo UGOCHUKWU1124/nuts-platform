@@ -25,7 +25,9 @@
    - [The 15-Second Redis Grace-Period Concurrency Window](#the-15-second-redis-grace-period-concurrency-window)
    - [Cross-Subdomain & Cookie Isolation Architecture](#cross-subdomain--cookie-isolation-architecture)
    - [Client Single-Flight Refresh Lock (Web Locks API)](#client-single-flight-refresh-lock-web-locks-api)
-   - [Next.js Edge Server-Side Router Middleware & Edge-JWT Engine](#nextjs-edge-server-side-router-middleware--edge-jwt-engine)
+   - [Next.js 16 Network Boundary Proxy & Server Component Layout Auth Boundaries](#nextjs-16-network-boundary-proxy--server-component-layout-auth-boundaries)
+   - [Single-Source-of-Truth Projections & Password Defense](#single-source-of-truth-projections--password-defense)
+   - [Redis Security Stamp & Active Revocation Engine](#redis-security-stamp--active-revocation-engine)
    - [Timing-Safe Cryptographic Defenses](#timing-safe-cryptographic-defenses)
    - [Account Lifecycle: Deactivation & 1-Click Reactivation](#account-lifecycle-deactivation--1-click-reactivation)
 4. [Domain Bounded Contexts](#4-domain-bounded-contexts)
@@ -233,17 +235,34 @@ In [`apps/web/src/api/core/client.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/s
 - If Tab A initiates a refresh, Tab B awaits the lock rather than firing a redundant HTTP request. When Tab A finishes, Tab B reads the freshly persisted token.
 - All failed 401 Axios requests are held in an in-memory execution queue, re-attached with the new Bearer token, and transparently replayed.
 
-### Next.js Edge Server-Side Router Middleware & Edge-JWT Engine
-Located in [`apps/web/src/middleware.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/middleware.ts):
-- **Cryptographic Edge Token Verification (`edge-jwt`):**
-  - **Zero Trust Edge Gating:** Unlike naive implementations that decode raw unverified Base64 payloads (`atob`)—exposing the platform to role-forgery and privilege escalation—the middleware uses the browser-standard **Web Crypto API** (`crypto.subtle`) to verify HMAC-SHA256 signatures against `JWT_SECRET`.
-  - **In-Memory Key Caching:** Imported `CryptoKey` instances are cached across edge worker invocations, keeping signature verification overhead well below 0.2ms.
-  - **Tampered & Expired Token Rejection:** Forged tokens, tokens with mismatched algorithms (preventing `alg: none` attacks), or expired tokens (`exp < now`) are immediately rejected at the network edge before rendering any React layout or executing SSR.
-- **Zero Flash of Content (FOUC):** Eliminates the client-side `useEffect` redirect anti-pattern. Unauthorized requests to `/admin/*`, `/vendor/*`, or `/checkout` are intercepted at the Edge/Server level before React SSR begins, returning an immediate `HTTP 307 Redirect` to the designated portal login (`/auth/admin/login`, `/auth/vendor/login`, or `/auth/login`).
-- **Declarative Route & Policy Matrix:** Gating rules are maintained in a typed declarative policy table (`PORTAL_POLICIES` and `GUEST_AUTH_ROUTES`) cleanly segregating Platform Admin, Vendor Merchant Portal, Customer Protected Areas, and Public Storefront pages (`/vendor/:slug`, `/product/:slug`, `/category/:slug`, `/search`).
-- **Context Header Propagation:** Once cryptographically verified, the edge router attaches trusted downstream context headers (`x-user-id`, `x-user-role`, `x-authenticated`) to the internal request passed to Server Components, eliminating redundant token parsing in React Server Components.
-- **Safe Open Redirect Sanitization:** Redirect parameters (`?redirect=...`) are strictly sanitized via [`safeInternalPath`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/safe-internal-path.ts), rejecting protocol-relative URLs (`//evil.com`), external origins (`https://evil.com`), backslashes, or control characters.
-- **Universal Edge Security Headers:** Generates dynamic 16-byte cryptographically secure CSP nonces (`crypto.getRandomValues`), enforcing strict Content-Security-Policy (CSP), HSTS, X-Frame-Options (`DENY`), and Permissions-Policy.
+### Next.js 16 Network Boundary Proxy & Server Component Layout Auth Boundaries
+Located in [`apps/web/src/proxy.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/proxy.ts) and [`apps/web/src/lib/server-auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/server-auth.ts):
+- **Next.js 16 Network Boundary Proxy (`proxy.ts`):**
+  - **Zero Hardcoded Route Lists:** Eliminates fragile, brittle hardcoded route string arrays in edge routing. The network proxy does not maintain arbitrary sets of route paths or subpaths.
+  - **Perimeter Defense & Dynamic CSP Nonces:** Operates strictly at the network boundary, generating 16-byte cryptographically secure CSP nonces (`crypto.getRandomValues`), enforcing strict Content-Security-Policy (CSP), HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Permissions-Policy`.
+  - **Spoofed Header Stripping:** Unconditionally strips client-supplied identity headers (`x-user-id`, `x-user-role`, `x-authenticated`) before downstream request routing.
+  - **Nonce Propagation:** Injects `x-nonce` into internal request headers, allowing React Server Components to access nonces via `headers().get('x-nonce')` for Paystack and dynamic inline scripts.
+- **Server Component Layout Auth Boundaries (Filesystem as Source of Truth):**
+  - **Decentralized Route Group Isolation:** Rather than centralized, brittle URL pattern matching, route protection is enforced at the layout boundary of each route group:
+    - **Platform Admin:** [`apps/web/src/app/(admin)/admin/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(admin)/admin/layout.tsx) validates active admin sessions via `enforceAuth('admin', '/auth/admin/login')`. Any new page added under `(admin)/admin` is automatically protected.
+    - **Vendor Merchant Portal:** [`apps/web/src/app/(vendor)/vendor/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(vendor)/vendor/layout.tsx) validates active merchant sessions via `enforceAuth('vendor', '/auth/vendor/login')`.
+    - **Customer Protected Areas:** [`apps/web/src/components/domain/auth/ProtectedLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/auth/ProtectedLayout.tsx) automatically gates `/account`, `/checkout`, `/order`, `/wallet`, and `/review`.
+  - **Cryptographic Token Verification (`edge-jwt`):**
+    - The server authentication helper ([`server-auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/server-auth.ts)) reads HTTP-only cookies securely via `cookies()` and verifies HMAC-SHA256 signatures with Web Crypto API (`crypto.subtle`).
+    - **Silent Refresh Grace Window:** If an access token expires while a genuine `refresh_token` cookie is present, layouts allow the page shell to mount so client-side Axios refresh interceptors (coordinated via Web Locks API) can rotate tokens silently in the background.
+  - **Safe Internal Path Sanitization:** Destination redirects are sanitized via [`safeInternalPath`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/safe-internal-path.ts), rejecting open redirect vectors.
+
+### Single-Source-of-Truth Projections & Password Defense
+- **Compile-Time Safe Selects (`auth.selects.ts`):** To eliminate the risk of accidental password projection into client responses or cache dumps, all user, vendor, and admin authentication queries route through central Prisma select definitions:
+  - `authAccountSelect`: Projects strictly `{ id, email, firstName, lastName, role, isActive, isApproved, tokenVersion }`.
+  - Sensitive password hashes (`password`) and internal secrets are queried only inside dedicated authentication routines using explicit select blocks, guaranteeing that public payloads and JWT tokens can never leak credentials.
+- **Unified Identity Resolution:** Identity lookup across Customer, Merchant, and Operator portals is consolidated into `AuthService.findAccountForLogin()` with strict role verification.
+
+### Redis Security Stamp & Active Revocation Engine
+- In high-throughput architectures, verifying session validity against a relational database on every HTTP request creates severe database bottlenecking.
+- [`AuthSessionService`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/auth/sessions/auth-session.service.ts) implements an ultra-fast **Redis Security Stamp cache** (`auth:stamp:{role}:{userId}`) with a 60-second TTL:
+  - High-frequency API calls verify token validity, account active status, vendor approval, and `tokenVersion` in sub-millisecond memory lookups.
+  - State-altering security events (password changes, admin account locks, session revocations, logouts) execute immediate Redis stamp deletion (`invalidateAccountStamp`), enforcing real-time revocation across the entire cluster without waiting for JWT expiration.
 
 ### Timing-Safe Cryptographic Defenses
 - **Password Verification:** Uses `bcrypt` with cost factor 12.
@@ -431,9 +450,69 @@ Located in [`apps/api/src/modules/billing`](file:///c:/MY%20PROJECT/NUTS-P/apps/
    - **Server-to-Server Re-Verification:** The webhook payload is never trusted blindly. `PaymentsService` calls Paystack's official verification endpoint (`/transaction/verify/:reference`), validating that the received currency and kobo amount (`toPaystackAmount`) match the order's expected total.
 
 ### Real-Time Notification Pipeline (SSE & RabbitMQ)
-- **High-Efficiency Server-Sent Events (SSE):** Real-time client updates delivered over HTTP via SSE (`/api/v1/notifications/stream`), utilizing an order of magnitude less server memory than duplex WebSockets.
-- **Keep-Alive & Handshake:** Emits an immediate `{ type: 'connected' }` handshake frame on subscription and a 15-second heartbeat ping (`{ type: 'ping' }`) to keep reverse-proxy connections open through idle states.
-- **Resilient Fallback:** When RabbitMQ is connected, notifications are distributed across AMQP exchanges; if RabbitMQ is offline, [`NotificationListener`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/listeners/notification.listener.ts) fails over directly to PostgreSQL and real-time SSE broadcasts.
+Located in [`apps/api/src/modules/notifications`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications):
+
+The notification architecture provides unified in-app notification tracking, real-time Server-Sent Events (SSE) streaming, and asynchronous email processing across clustered nodes:
+
+```mermaid
+graph TD
+    DomainEvent[Domain Event: Order, Payment, Referral] --> Listener[NotificationListener]
+    Listener --> FallbackEmail{RabbitMQ Live?}
+    FallbackEmail -->|Yes| MQ_Email[q.nuts.emails]
+    FallbackEmail -->|Offline / Backpressure| DirectEmail[Brevo EmailService Direct Fallback]
+    
+    Listener --> FallbackNotif{RabbitMQ Live?}
+    FallbackNotif -->|Yes| MQ_Notif[q.nuts.notifications]
+    FallbackNotif -->|Offline / Backpressure| DirectCreate[NotificationsService.create with DedupeKey]
+    
+    MQ_Notif --> Consumer[NotificationsConsumer]
+    Consumer -->|Valid Payload| DirectCreate
+    Consumer -->|Malformed / Missing Fields| DLQ[q.nuts.dlq via nuts.dlx]
+    
+    DirectCreate --> DB[(PostgreSQL notifications: dedupeKey UNIQUE)]
+    DirectCreate --> RedisPub[Redis Pub/Sub: nuts:notifications:broadcast]
+    
+    RedisPub --> PodA[API Pod A: SSE Clients]
+    RedisPub --> PodB[API Pod B: SSE Clients]
+    RedisPub --> PodN[API Pod N: SSE Clients]
+```
+
+1. **Enterprise Multi-Pod Cluster Distribution via Redis Pub/Sub:**
+   - Instead of single-process in-memory event buses that fail under horizontal scaling, [`NotificationsService`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.service.ts) maintains a dedicated Redis subscriber connected to `nuts:notifications:broadcast`.
+   - When a notification is generated on any backend instance, it publishes an atomic broadcast event to Redis, instantly reaching connected SSE clients across all running cluster pods.
+   - If Redis is absent or offline, the service automatically degrades to local in-memory RxJS `Subject` distribution without crashing.
+
+2. **Database-Level Deduplication & Idempotency:**
+   - Every notification schema definition includes `dedupeKey String? @unique` and a composite index `@@index([userId, role, isRead, createdAt])`.
+   - Notification deduplication keys follow strict deterministic naming conventions:
+     - Orders: `ORDER_CONFIRMED:${orderId}:USER:${userId}`
+     - Vendors: `ORDER_CONFIRMED:${orderId}:VENDOR:${vendorId}`
+     - Admins: `ORDER_PLACED:${orderId}:ADMIN:${adminId}`
+     - Payments: `PAYMENT_RECEIVED:${paymentId}:USER:${userId}`
+   - When duplicate events occur (e.g., retried webhooks or message replays), Prisma's unique constraint collision (`P2002`) is trapped atomically, returning the existing row without duplicate database entries or repeated SSE emissions.
+
+3. **Role-Scoped Stream Isolation & Event IDs:**
+   - Client SSE connections at `/api/v1/notifications/sse/stream` filter events strictly by both `userId` and active `role`, preventing event cross-contamination on accounts holding multiple roles.
+   - Every SSE payload includes a persistent message `id` matching the database record ID, empowering standard browser reconnection resumption via `Last-Event-ID`.
+
+4. **Connection Rate Caps & Real-Time Security Revocation:**
+   - **Socket Ceiling:** Concurrent SSE connections are throttled to a maximum of 5 per user using Redis counters (with in-memory fallback), responding with `429 Too Many Requests` to prevent socket exhaustion and runaway browser tab leaks.
+   - **Revocation on Heartbeat:** Heartbeat pings emit every 15 seconds. On every heartbeat tick, the stream evaluates [`AuthSessionService.isSessionActive()`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/auth/sessions/auth-session.service.ts). If an account was deactivated, suspended, or its session revoked, the stream terminates immediately.
+
+5. **Asynchronous Work Queues & Fail-Safe Delivery:**
+   - High-throughput email deliveries and notification events route through dedicated RabbitMQ topic queues (`q.nuts.emails`, `q.nuts.notifications`).
+   - If the broker is offline or encountering backpressure, [`NotificationListener`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/listeners/notification.listener.ts) safely falls back directly to the circuit-breaker protected `EmailService` and atomic database creation.
+   - Corrupted or unparseable messages in [`NotificationsConsumer`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/consumers/notifications.consumer.ts) throw explicitly, routing immediately to `q.nuts.dlq` through the Dead Letter Exchange (`nuts.dlx`).
+   - Fan-outs across multiple vendors or platform administrators utilize `Promise.allSettled()` with per-recipient error boundaries, preventing single-recipient failures from interrupting the batch.
+
+6. **Automated Daily Retention Cleanup Cron:**
+   - [`NotificationRetentionCron`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/cron/notification-retention/notification-retention.cron.ts) executes daily at midnight (Africa/Lagos) under a distributed Redis mutex lock.
+   - Prunes read notifications older than 90 days and unread notifications older than 180 days in bounded batches of 1,000 to prevent database table bloat and query degradation.
+
+7. **Frontend Resilience & Cache Hydration (`apps/web`):**
+   - **Zero Stale Cache on Unauthenticated Loads:** [`use-notifications.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/hooks/use-notifications.ts) purges persisted Zustand notification caches immediately upon unauthenticated mount, preventing sensitive notification leakage across shared browser profiles.
+   - **Reconnect Sync:** Stream reconnections automatically fetch both current unread counts and page-1 notification lists, catching up on any missed updates during disconnects.
+   - **Network Error Auto-Retry:** Reverse-proxy 502 Bad Gateway responses and connection timeouts now retry with exponential backoff rather than exhausting retries permanently.
 
 ### Transactional Outbox & Domain Event Dispatcher
 - Prevents the **Dual-Write Vulnerability** (where a database write succeeds but a message broker publish fails).

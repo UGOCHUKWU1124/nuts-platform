@@ -23,18 +23,21 @@ Caching, Queues & Streams
 
 Authentication & Security
 
-* JWT — Access & Refresh Token authentication
-* Passport — JWT strategy
-* bcrypt — Password hashing
+* JWT — Dual-channel Access (Bearer + HttpOnly Cookie) & Refresh Token authentication
+* RFC 6819 Single-Use Rotation — Atomic CAS rotation with 15-second Redis grace-period concurrency window
+* Redis Security Stamp — High-frequency cached security stamp verification (`auth:stamp:{role}:{userId}`) with immediate eviction on revocation
+* Compile-Time Safe Selects (`auth.selects.ts`) — Password projection prevention ensuring credentials never leak
+* Passport — JWT strategy with role-based identity validation (User, Vendor, Admin)
+* bcrypt — Password hashing (cost factor 12) with timing-safe dummy hash comparison preventing user enumeration
 * Helmet — HTTP security headers
-* cookie-parser — HTTP-only cookie parsing
-* @nestjs/throttler — Rate limiting (100 requests / 60 seconds)
+* cookie-parser — Segmented HTTP-only cookie parsing with legacy cookie tombstoning
+* @nestjs/throttler — Distributed Redis rate limiting (100 requests / 60 seconds)
 * Custom OTP Guard — One-time password verification
 * Custom JWT Guard — Global JWT authentication
 
 API & Documentation
 
-* Swagger / OpenAPI — API documentation available at /api/docs
+* Swagger / OpenAPI — Interactive API documentation available at /api/docs
 * class-validator — DTO validation
 * class-transformer — Request payload transformation
 * compression — Gzip/Brotli response compression
@@ -46,7 +49,13 @@ Payments
 
 Email & Notifications
 
+* Real-Time Server-Sent Events (SSE) — Streamed live notifications with message IDs and connection caps (max 5)
+* Redis Pub/Sub Cluster Distribution — Multi-pod broadcast channel (`nuts:notifications:broadcast`) with in-memory fallback
+* Database Deduplication & Idempotency — Unique `dedupeKey` constraint with atomic collision handling
+* RabbitMQ Queues & Consumers — Asynchronous email (`q.nuts.emails`) and notification (`q.nuts.notifications`) workers with DLX (`nuts.dlx` / `q.nuts.dlq`)
+* Fail-Safe Fallback — Automatic circuit-breaker failover to Brevo EmailService and direct DB persistence when RabbitMQ is offline
 * Brevo — Transactional email delivery over HTTPS (`BREVO_API_KEY`, `EMAIL_FROM`)
+* Notification Retention Cron — Daily midnight distributed batch cleanup of stale notifications (90d read / 180d unread)
 
 Input Sanitization
 
@@ -153,7 +162,7 @@ To Be Implemented / Next Phase
 * Brevo — Transactional email service with templates and delivery tracking
 * AWS S3 Storage — Image uploads, optimization, CDN delivery
 * JMeter — Load and stress testing
-* Advanced Notification System — In-app notifications, push notifications (FCM), SMS fallback, email digests
+* Push Notifications (FCM) & SMS Fallback — Native mobile push notifications and SMS gateway integration
 * Expanded End-to-End Test Suite
 * Alerting & Uptime Monitoring — Prometheus AlertManager, Better Uptime or Checkly
 * Automated PostgreSQL Backup & Restore Strategy

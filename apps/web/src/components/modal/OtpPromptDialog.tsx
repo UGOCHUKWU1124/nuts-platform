@@ -93,10 +93,15 @@ export function OtpPromptDialog({
           <div className="space-y-3 pt-2">
             {requireReason && (
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                <label
+                  htmlFor="otp-prompt-reason"
+                  className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
+                >
                   {reasonLabel}
                 </label>
                 <textarea
+                  id="otp-prompt-reason"
+                  name="reason"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder={reasonPlaceholder}
@@ -108,13 +113,18 @@ export function OtpPromptDialog({
             )}
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 flex items-center justify-between">
+              <label
+                htmlFor="otp-prompt-code"
+                className="text-sm font-medium text-neutral-700 dark:text-neutral-300 flex items-center justify-between"
+              >
                 <span>{codeLabel}</span>
                 <span className="text-xs text-muted-foreground font-normal">{codeSubtitle}</span>
               </label>
               <div className="relative">
                 <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
                 <Input
+                  id="otp-prompt-code"
+                  name="otpCode"
                   type="text"
                   maxLength={10}
                   value={otpCode}

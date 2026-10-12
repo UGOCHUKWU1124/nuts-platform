@@ -6,6 +6,7 @@ import { RedisModule } from '@api/modules/infrastructure/redis/redis.module';
 import { AbandonedCartCron } from './abandoned-cart/abandoned-cart.cron';
 import { LowStockCron } from './low-stock/low-stock.cron';
 import { VendorSummaryCron } from './vendor-summary/vendor-summary.cron';
+import { NotificationRetentionCron } from './notification-retention/notification-retention.cron';
 
 @Module({
   imports: [
@@ -14,6 +15,11 @@ import { VendorSummaryCron } from './vendor-summary/vendor-summary.cron';
     PrismaModule,
     RedisModule,
   ],
-  providers: [AbandonedCartCron, LowStockCron, VendorSummaryCron],
+  providers: [
+    AbandonedCartCron,
+    LowStockCron,
+    VendorSummaryCron,
+    NotificationRetentionCron,
+  ],
 })
 export class CronModule {}

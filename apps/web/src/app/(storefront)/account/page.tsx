@@ -350,9 +350,17 @@ export default function AccountPage() {
             </div>
 
             <div>
-              <span className="text-xs font-semibold text-muted-foreground block mb-1">Direct Registration URL</span>
+              <label
+                htmlFor="direct-registration-url"
+                className="text-xs font-semibold text-muted-foreground block mb-1"
+              >
+                Direct Registration URL
+              </label>
               <div className="flex items-center gap-2">
                 <input
+                  id="direct-registration-url"
+                  name="registrationUrl"
+                  aria-label="Direct Registration URL"
                   type="text"
                   readOnly
                   value={

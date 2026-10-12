@@ -48,6 +48,7 @@ function normalizeRole(rawRole?: string | null): Role {
 export async function verifyJwtHs256(
   token: string | null | undefined,
   secret: string | null | undefined,
+  options?: { ignoreExpiration?: boolean },
 ): Promise<VerifiedJwtPayload | null> {
   if (!token || !secret) {
     return null;
@@ -120,7 +121,7 @@ export async function verifyJwtHs256(
 
     // 5. Expiration Validation
     const nowSeconds = Math.floor(Date.now() / 1000);
-    if (typeof rawPayload.exp === "number" && rawPayload.exp <= nowSeconds) {
+    if (!options?.ignoreExpiration && typeof rawPayload.exp === "number" && rawPayload.exp <= nowSeconds) {
       return null;
     }
 
@@ -140,3 +141,4 @@ export async function verifyJwtHs256(
     return null;
   }
 }
+
