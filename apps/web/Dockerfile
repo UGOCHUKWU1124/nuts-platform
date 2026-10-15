@@ -92,7 +92,7 @@ USER nextjs
 EXPOSE 3000
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -fsS "http://localhost:${PORT:-3000}/api/health" || exit 1
+  CMD curl -fsS "http://localhost:${PORT:-3000}/health" || exit 1
 
 STOPSIGNAL SIGTERM
 
