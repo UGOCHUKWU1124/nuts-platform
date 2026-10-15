@@ -130,6 +130,13 @@ function getSseUrl(role: AuthRole): string {
     admin: "admin/notifications/sse/stream",
     vendor: "vendors/notifications/sse/stream",
   };
+  if (typeof window !== "undefined") {
+    const prefix = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
+    if (prefix.startsWith("http")) {
+      return `${prefix}/${routeByRole[role]}`;
+    }
+    return `${prefix.startsWith("/") ? prefix : `/${prefix}`}/${routeByRole[role]}`;
+  }
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "") || "";
   const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
   const base = apiUrl.startsWith("http")
@@ -234,7 +241,13 @@ async function consumeNotificationStream(
 
   while (!signal.aborted && isCurrent()) {
     const headers = new Headers({ Accept: "text/event-stream" });
-    const token = getAuthToken(role);
+    let token = getAuthToken(role);
+    if (!token && typeof window !== "undefined") {
+      const refresh = await performTokenRefresh(role);
+      if (refresh.success && refresh.accessToken) {
+        token = refresh.accessToken;
+      }
+    }
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
     let response: Response;
