@@ -172,6 +172,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
     markSessionAuthenticated(userRole);
 
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("nuts_session_role", userRole);
+      } catch {
+        // Ignore storage exceptions
+      }
+    }
+
     const capabilities =
       rawUser.capabilities ??
       deriveCapabilities(
@@ -198,6 +206,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   clearSession: () => {
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.removeItem("nuts_session_role");
+      } catch {
+        // Ignore storage exceptions
+      }
+    }
     clearAuthTokens();
     markSessionUnauthenticated();
     set({
@@ -367,9 +382,22 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         get().setStatus("hydrating");
       }
 
-      // 1. Identify active session role from in-memory state or default to standard refresh
+      // 1. Identify active session role from in-memory state, sessionStorage hint, URL path, or default to standard refresh
+      const sessionHint =
+        typeof window !== "undefined"
+          ? normalizeRole(sessionStorage.getItem("nuts_session_role"))
+          : null;
+      const pathHint: AuthRole | null =
+        typeof window !== "undefined"
+          ? window.location.pathname.startsWith("/admin")
+            ? "admin"
+            : window.location.pathname.startsWith("/vendor")
+              ? "vendor"
+              : null
+          : null;
+
       const candidateRole: AuthRole =
-        get().role || getAuthSessionRole() || "user";
+        get().role || getAuthSessionRole() || sessionHint || pathHint || "user";
 
       // 2. Refresh tokens using HttpOnly refresh_token cookie (re-populates in-memory access token)
       try {

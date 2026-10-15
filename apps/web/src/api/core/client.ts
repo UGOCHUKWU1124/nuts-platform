@@ -1,4 +1,4 @@
-import { authBroadcast } from "@/lib/auth-events";
+import { authBroadcast } from "../../lib/auth-events.ts";
 import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import {
   clearAuthTokens,
@@ -8,8 +8,8 @@ import {
   markSessionUnauthenticated,
   setAuthTokens,
   type AuthRole,
-} from "./token-storage";
-import type { ApiSuccessEnvelope, PaginationMeta } from "./types";
+} from "./token-storage.ts";
+import type { ApiSuccessEnvelope, PaginationMeta } from "./types.ts";
 
 declare module "axios" {
   interface AxiosRequestConfig {
@@ -48,6 +48,11 @@ export const getApiBaseUrl = (): string => {
   if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.startsWith("http")) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
   }
+  // In the browser, always use the relative path so requests flow through Next.js BFF proxy.
+  // This keeps all cookies (refresh token, session, csrf) strictly same-origin and avoids CORS / Lax drops.
+  if (typeof window !== "undefined") {
+    return (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
+  }
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "");
   const prefix = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
   if (backend && backend.startsWith("http")) {
@@ -64,33 +69,6 @@ const axiosConfig = {
 } as const;
 
 const axiosInstance = axios.create(axiosConfig);
-
-let csrfInitPromise: Promise<void> | null = null;
-
-const ensureCsrfToken = async () => {
-  if (getCsrfToken()) return;
-  if (!csrfInitPromise) {
-    const apiUrl = getApiBaseUrl();
-    csrfInitPromise = axios
-      .get(`${apiUrl}/health`, {
-        withCredentials: true,
-      })
-      .then((res) => {
-        const token =
-          res.headers["x-csrf-token"] || res.headers["X-CSRF-TOKEN"];
-        if (token) {
-          setCsrfToken(token as string);
-        }
-      })
-      .catch(() => {
-        getCsrfToken();
-      })
-      .finally(() => {
-        csrfInitPromise = null;
-      });
-  }
-  await csrfInitPromise;
-};
 
 function setHeader(headers: AxiosRequestConfig["headers"], name: string, value: string) {
   if (!headers) return;
@@ -259,11 +237,7 @@ axiosInstance.interceptors.request.use(async (config) => {
   }
 
   if (isMutating) {
-    let csrf = getCsrfToken();
-    if (!csrf && typeof window !== "undefined") {
-      await ensureCsrfToken();
-      csrf = getCsrfToken();
-    }
+    const csrf = getCsrfToken();
     if (csrf) {
       setHeader(config.headers, "x-csrf-token", csrf);
     }
@@ -296,12 +270,11 @@ axiosInstance.interceptors.response.use(
     if (isCsrfError && !originalRequest._csrfRetry) {
       originalRequest._csrfRetry = true;
       inMemoryCsrfToken = null;
-      await ensureCsrfToken();
       const freshCsrf = getCsrfToken();
       if (freshCsrf) {
         setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
+        return axiosInstance(originalRequest);
       }
-      return axiosInstance(originalRequest);
     }
 
     const role = originalRequest.authRole;
