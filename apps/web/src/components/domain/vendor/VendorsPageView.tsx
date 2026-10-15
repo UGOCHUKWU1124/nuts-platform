@@ -233,7 +233,7 @@ export function VendorsPageView({
                   const initials = getStoreInitials(vendor.storeName);
                   const rawCategories = vendor.categories ?? [];
 
-                  // Strictly resolve every category tag to its root main category and deduplicate
+                  // Resolve every category tag to its root main category if mapped, or preserve category name, and deduplicate
                   const mainCategoriesMap = new Map<string, { id: string; name: string }>();
                   for (const c of rawCategories) {
                     const root =
@@ -243,16 +243,8 @@ export function VendorsPageView({
 
                     if (root) {
                       mainCategoriesMap.set(root.id, root);
-                    } else {
-                      const isRoot = rootCategories.find(
-                        (rc) =>
-                          rc.id === c.id ||
-                          rc.slug === c.slug ||
-                          rc.name.toLowerCase() === c.name.toLowerCase()
-                      );
-                      if (isRoot) {
-                        mainCategoriesMap.set(isRoot.id, { id: isRoot.id, name: isRoot.name });
-                      }
+                    } else if (c.name) {
+                      mainCategoriesMap.set(c.id || c.name, { id: c.id || c.name, name: c.name });
                     }
                   }
                   const vendorMainCategories = Array.from(mainCategoriesMap.values());
@@ -298,17 +290,19 @@ export function VendorsPageView({
                             {vendor.storeName}
                           </h2>
 
-                          {/* Category Tags at Bottom - ONLY Main Categories */}
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          {/* Category Tags at Bottom - Shows ALL categories the vendor belongs to */}
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
                             {vendorMainCategories.length > 0 ? (
-                              vendorMainCategories.slice(0, 3).map((c, i) => (
-                                <span key={c.id} className="inline-flex items-center">
-                                  {i > 0 && <span className="mx-1 text-muted-foreground/40">•</span>}
-                                  <span>{c.name}</span>
+                              vendorMainCategories.map((c) => (
+                                <span
+                                  key={c.id}
+                                  className="inline-flex items-center rounded-md bg-secondary/80 px-2 py-0.5 text-[11px] font-medium text-secondary-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary"
+                                >
+                                  {c.name}
                                 </span>
                               ))
                             ) : (
-                              <span>Vendor Store</span>
+                              <span className="text-xs text-muted-foreground">Vendor Store</span>
                             )}
                           </div>
                         </div>

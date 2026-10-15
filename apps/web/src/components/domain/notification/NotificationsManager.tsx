@@ -79,7 +79,7 @@ const categoryNotificationTypes = {
 
 export function getNotificationCategory(
   notif: AppNotification,
-): "orders" | "payments" | "general" {
+): "orders" | "payments" | "system" | "general" {
   if (
     categoryNotificationTypes.payments.has(notif.type) ||
     notif.type === "PAYMENT_RECEIVED" ||
@@ -97,17 +97,14 @@ export function getNotificationCategory(
     notif.type === "ORDER_DELIVERED" ||
     notif.type === "ORDER_CANCELLED"
   ) {
-    const title = (notif.title || "").toLowerCase();
-    const msg = (notif.message || "").toLowerCase();
-    if (
-      title.includes("payment successful") ||
-      title.includes("payment received") ||
-      title.includes("payment failed") ||
-      msg.includes("payment of")
-    ) {
-      return "payments";
-    }
     return "orders";
+  }
+
+  if (
+    notif.type === "LOW_STOCK_ALERT" ||
+    notif.type === "SYSTEM_ANNOUNCEMENT"
+  ) {
+    return "system";
   }
 
   const title = (notif.title || "").toLowerCase();
@@ -128,6 +125,14 @@ export function getNotificationCategory(
     notif.metadata?.orderId
   ) {
     return "orders";
+  }
+  if (
+    title.includes("stock") ||
+    title.includes("system") ||
+    title.includes("alert") ||
+    title.includes("security")
+  ) {
+    return "system";
   }
 
   return "general";
@@ -154,10 +159,10 @@ export function NotificationsManager({
   const router = useRouter();
   const rawRole = useAuthStore((state) => state.role ?? state.user?.role);
   const role = normalizeRole(rawRole) ?? "user";
-  const [filter, setFilter] = useState<"all" | "unread" | "orders" | "payments">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "orders" | "payments" | "system">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const {
     notifications,
-    unreadCount,
     isLoading,
     sseRetryExhausted,
     hasNextPage,
@@ -170,29 +175,52 @@ export function NotificationsManager({
     retryStream,
   } = useNotifications();
 
+  // Load notifications initially
   useEffect(() => {
-    void fetchNotifications(undefined, 20, false, {
-      ...(filter === "unread" ? { unreadOnly: true } : {}),
-      ...(filter === "orders" || filter === "payments" ? { category: filter } : {}),
-    });
-  }, [fetchNotifications, filter]);
+    void fetchNotifications(undefined, 50, false);
+  }, [fetchNotifications]);
 
+  // Compute accurate counts across the loaded dataset without destroying other tab counters
+  const allCount = notifications.length;
+  const unreadItemsCount = notifications.filter((n) => !n.isRead).length;
   const ordersCount = notifications.filter(
     (n) => getNotificationCategory(n) === "orders",
   ).length;
-
   const paymentsCount = notifications.filter(
     (n) => getNotificationCategory(n) === "payments",
   ).length;
+  const systemCount = notifications.filter(
+    (n) => getNotificationCategory(n) === "system",
+  ).length;
 
-  const filteredNotifications =
-    filter === "orders"
-      ? notifications.filter((n) => getNotificationCategory(n) === "orders")
-      : filter === "payments"
-      ? notifications.filter((n) => getNotificationCategory(n) === "payments")
-      : filter === "unread"
-      ? notifications.filter((n) => !n.isRead)
-      : notifications;
+  const categoryFiltered = notifications.filter((n) => {
+    switch (filter) {
+      case "unread":
+        return !n.isRead;
+      case "orders":
+        return getNotificationCategory(n) === "orders";
+      case "payments":
+        return getNotificationCategory(n) === "payments";
+      case "system":
+        return getNotificationCategory(n) === "system";
+      case "all":
+      default:
+        return true;
+    }
+  });
+
+  const filteredNotifications = searchQuery.trim()
+    ? categoryFiltered.filter((n) => {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          (n.title && n.title.toLowerCase().includes(q)) ||
+          (n.message && n.message.toLowerCase().includes(q)) ||
+          (n.type && n.type.toLowerCase().includes(q)) ||
+          (n.metadata?.orderId && String(n.metadata.orderId).toLowerCase().includes(q)) ||
+          (n.metadata?.paymentId && String(n.metadata.paymentId).toLowerCase().includes(q))
+        );
+      })
+    : categoryFiltered;
 
   const handleAction = async (notif: AppNotification) => {
     if (!notif.isRead) {
@@ -202,9 +230,9 @@ export function NotificationsManager({
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-5xl px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
       {/* Top Bar with back link & SSE status */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-6 sm:mb-8">
         <div>
           {backHref && (
             <Link
@@ -214,10 +242,10 @@ export function NotificationsManager({
               ← Back to {backLabel || "Overview"}
             </Link>
           )}
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-foreground">
             {title}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
             {subtitle}
           </p>
         </div>
@@ -228,119 +256,175 @@ export function NotificationsManager({
           role="status"
           className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
         >
-          <p className="text-muted-foreground">
-            Live notification updates are unavailable. Your notification list is still accessible.
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Live notification updates are paused. Your notification history is still accessible.
           </p>
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={retryStream}
+            className="text-xs"
           >
-            Reconnect
+            Reconnect Stream
           </Button>
         </div>
       )}
 
-      {/* Action Header & Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          <button
-            type="button"
-            onClick={() => setFilter("all")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              filter === "all"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            }`}
-          >
-            All ({notifications.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("unread")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              filter === "unread"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            }`}
-          >
-            Unread ({unreadCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("orders")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              filter === "orders"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            }`}
-          >
-            Orders ({ordersCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("payments")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              filter === "payments"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            }`}
-          >
-            Payments ({paymentsCount})
-          </button>
+      {/* Filter and Search Bar */}
+      <div className="space-y-3.5 pb-4 border-b border-border">
+        {/* Search Input */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notifications by keyword, title, order ID..."
+            className="w-full rounded-xl border border-border bg-card px-3.5 py-2 pl-9 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+          />
+          <span className="absolute left-3 top-2.5 text-muted-foreground">
+            🔍
+          </span>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {unreadCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => markAllAsRead()}
-              className="gap-1.5 text-xs h-8"
+        {/* Filter Pills & Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 [scrollbar-width:none]">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                filter === "all"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
             >
-              <CheckCheck className="h-3.5 w-3.5" />
-              Mark all as read
-            </Button>
-          )}
-          {notifications.some((n) => n.isRead) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => clearAll()}
-              className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-destructive"
+              All ({allCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("unread")}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                filter === "unread"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear read
-            </Button>
-          )}
+              Unread ({unreadItemsCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("orders")}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                filter === "orders"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              Orders ({ordersCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("payments")}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                filter === "payments"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              Payments ({paymentsCount})
+            </button>
+            {systemCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter("system")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  filter === "system"
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                }`}
+              >
+                System ({systemCount})
+              </button>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {unreadItemsCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAllAsRead()}
+                className="gap-1.5 text-xs h-8 cursor-pointer"
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                <span>Mark all as read</span>
+              </Button>
+            )}
+            {notifications.some((n) => n.isRead) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => clearAll()}
+                className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-destructive cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Clear read</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Notifications List */}
-      <div className="mt-6 space-y-3">
+      <div className="mt-5 sm:mt-6 space-y-3">
         {isLoading && notifications.length === 0 ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-24 rounded-2xl bg-secondary/50 animate-pulse"
+                className="h-20 sm:h-24 rounded-2xl bg-secondary/50 animate-pulse"
               />
             ))}
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-border py-16 px-4 text-center">
-            <Bell className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
-            <h3 className="text-base font-semibold text-foreground">
-              No notifications found
+          <div className="rounded-3xl border border-dashed border-border py-12 sm:py-16 px-4 text-center">
+            <Bell className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground/30 mb-3" />
+            <h3 className="text-sm sm:text-base font-semibold text-foreground">
+              {searchQuery ? "No matching notifications" : "No notifications found"}
             </h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              {filter === "unread"
+              {searchQuery
+                ? `No notifications found matching "${searchQuery}". Try a different keyword.`
+                : filter === "unread"
                 ? "You're all caught up! No unread messages."
-                : "You don't have any notifications in this section yet."}
+                : `You don't have any ${filter === "all" ? "" : filter + " "}notifications yet.`}
             </p>
+            {(filter !== "all" || searchQuery) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFilter("all");
+                  setSearchQuery("");
+                }}
+                className="mt-4 text-xs cursor-pointer"
+              >
+                Show all notifications
+              </Button>
+            )}
           </div>
         ) : (
           filteredNotifications.map((notif) => (
