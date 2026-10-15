@@ -142,7 +142,6 @@ export class CartController {
       productId,
       dto.quantity,
       variantId,
-      dto.addedFrom,
     );
   }
 

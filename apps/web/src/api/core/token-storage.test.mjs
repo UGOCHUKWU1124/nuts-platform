@@ -23,43 +23,32 @@ test("access tokens remain isolated by explicit account role", () => {
   clearAuthTokens();
 });
 
-test("session role hint is read without deriving it from the current route", () => {
-  const originalDocument = globalThis.document;
-  Object.defineProperty(globalThis, "document", {
+test("getAuthSessionRole returns role from in-memory token or null", () => {
+  clearAuthTokens();
+  const originalWindow = globalThis.window;
+  Object.defineProperty(globalThis, "window", {
     configurable: true,
-    value: { cookie: "session_active=vendor" },
-  });
-
-  try {
-    assert.equal(getAuthSessionRole(), "vendor");
-  } finally {
-    if (originalDocument === undefined) {
-      delete globalThis.document;
-    } else {
-      Object.defineProperty(globalThis, "document", {
-        configurable: true,
-        value: originalDocument,
-      });
-    }
-  }
-});
-
-test("unknown session role hints are ignored", () => {
-  const originalDocument = globalThis.document;
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: { cookie: "session_active=owner" },
+    value: {},
   });
 
   try {
     assert.equal(getAuthSessionRole(), null);
+
+    const mockAdminToken =
+      "header." +
+      Buffer.from(JSON.stringify({ role: "admin" })).toString("base64") +
+      ".sig";
+    setAuthTokens("admin", { accessToken: mockAdminToken });
+    assert.equal(getAuthSessionRole(), "admin");
+    clearAuthTokens();
+    assert.equal(getAuthSessionRole(), null);
   } finally {
-    if (originalDocument === undefined) {
-      delete globalThis.document;
+    if (originalWindow === undefined) {
+      delete globalThis.window;
     } else {
-      Object.defineProperty(globalThis, "document", {
+      Object.defineProperty(globalThis, "window", {
         configurable: true,
-        value: originalDocument,
+        value: originalWindow,
       });
     }
   }

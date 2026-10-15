@@ -14,6 +14,8 @@ export const USER_LOGIN_SELECT = {
   password: true,
   isActive: true,
   deactivatedBy: true,
+  deactivationReason: true,
+  deactivatedAt: true,
 } as const satisfies Prisma.UserSelect;
 
 export const USER_REFRESH_SELECT = {

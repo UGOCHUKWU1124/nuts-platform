@@ -388,3 +388,20 @@ select {
   animation: nuts-pulse-expand 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
+/* ─── Globally Eliminate Scrollbar Sliders Everywhere ─── */
+html,
+body,
+* {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, Opera, Edge */
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+

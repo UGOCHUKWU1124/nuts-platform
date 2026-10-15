@@ -2,7 +2,7 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import { getNodeChildren } from "@/lib/cart-path";
+import { getNodeChildren } from "@/lib/category-tree";
 import {
 ChevronRight
 } from "lucide-react";

@@ -26,11 +26,16 @@ import {
 import { AuthService } from './auth.service';
 import { AuthCookieService } from './cookies/auth-cookie.service';
 
-import { AuthApiResponseDto, AuthResponseDto } from './dto/auth-response.dto';
+import {
+  AuthApiResponseDto,
+  AuthResponseDto,
+  VerifyOtpResponseDto,
+} from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 
 import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -123,6 +128,8 @@ export class AuthController {
     return {
       user: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -159,6 +166,8 @@ export class AuthController {
     return {
       user: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -167,6 +176,7 @@ export class AuthController {
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Message('Tokens refreshed successfully')
   @ApiOperation({
     summary: 'Refresh access token',
     description: 'Rotates the refresh session and issues a new access token.',
@@ -198,14 +208,16 @@ export class AuthController {
     return {
       user: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @Message('Successfully logged out')
+  @Message('Logged out successfully')
   @ApiOperation({
-    summary: 'Log out the current user',
+    summary: 'Log out the current user session',
   })
   @ApiOkResponse({
     description: 'Logged out successfully.',
@@ -219,16 +231,44 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<null> {
-    const refreshToken = getCookieValue(
-      req.cookies as unknown,
-      AUTH_REFRESH_COOKIE,
-    );
+    const refreshToken =
+      getCookieValue(req.cookies as unknown, AUTH_REFRESH_COOKIE) ??
+      getCookieValue(req.cookies as unknown, 'refresh_token');
 
     await this.authService.logout(
       user.id,
       user.role,
       user.sessionId,
       refreshToken,
+      extractIpAddress(req),
+      extractUserAgent(req),
+    );
+
+    this.authCookies.clearAuthCookies(res);
+
+    return null;
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @Message('All sessions logged out successfully')
+  @ApiOperation({
+    summary: 'Log out from all devices and invalidate all active sessions',
+  })
+  @ApiOkResponse({
+    description: 'All sessions logged out successfully.',
+    type: ApiResponseDto<null>,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Not authenticated',
+  })
+  async logoutAll(
+    @GetUser() user: AuthenticatedUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<null> {
+    await this.authService.logoutAll(
+      user.id,
       extractIpAddress(req),
       extractUserAgent(req),
     );
@@ -266,6 +306,30 @@ export class AuthController {
   async requestRegistrationOtp(@Body() dto: RequestOtpDto): Promise<null> {
     await this.authService.requestRegistrationOtp(dto);
     return null;
+  }
+
+  @Public()
+  @StrictThrottle()
+  @Post(['otp/verify', 'verify-otp'])
+  @HttpCode(HttpStatus.OK)
+  @Message('Verification code confirmed successfully')
+  @ApiOperation({
+    summary: 'Verify registration OTP code',
+    description:
+      'Validates the 6-digit OTP code before proceeding to shipping address setup and account completion.',
+  })
+  @ApiBody({ type: VerifyOtpDto })
+  @ApiOkResponse({
+    description: 'Verification code confirmed successfully.',
+    type: ApiResponseDto<VerifyOtpResponseDto>,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid or expired OTP code',
+  })
+  async verifyRegistrationOtp(
+    @Body() dto: VerifyOtpDto,
+  ): Promise<VerifyOtpResponseDto> {
+    return this.authService.verifyRegistrationOtp(dto);
   }
 
   @Public()

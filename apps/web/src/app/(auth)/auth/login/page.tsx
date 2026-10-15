@@ -7,7 +7,7 @@ import { Button } from "@/component/ui/button";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 import { useAuthStore } from "@/zustand/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, LogIn } from "lucide-react";
+import { CheckCircle2, LogIn, ShieldAlert } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -22,6 +22,13 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+interface SuspendedAccountInfo {
+  email: string;
+  reason: string;
+  suspendedUntil: string | null;
+  message: string;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -29,6 +36,7 @@ function LoginForm() {
   const login = useAuthStore((s) => s.login);
 
   const [deactivatedCredentials, setDeactivatedCredentials] = useState<LoginFormData | null>(null);
+  const [suspendedInfo, setSuspendedInfo] = useState<SuspendedAccountInfo | null>(null);
   const [isReactivating, setIsReactivating] = useState(false);
 
   const methods = useForm<LoginFormData>({
@@ -47,16 +55,52 @@ function LoginForm() {
       toast.success("Welcome back!");
       router.push(redirectUrl);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Invalid email or password. Please try again.";
+      const res = (
+        err as {
+          response?: {
+            data?: {
+              message?: string;
+              code?: string;
+              error?: { code?: string; reason?: string; suspendedUntil?: string };
+              reason?: string;
+              suspendedUntil?: string;
+            };
+          };
+        }
+      )?.response?.data;
+
+      const msg = res?.message ?? "Invalid email or password. Please try again.";
 
       if (msg === "ACCOUNT_DEACTIVATED") {
         setDeactivatedCredentials(data);
+        setSuspendedInfo(null);
         return;
       }
 
-      toast.error(msg);
+      const isSuspended =
+        res?.error?.code === "ACCOUNT_SUSPENDED" ||
+        res?.code === "ACCOUNT_SUSPENDED" ||
+        (typeof msg === "string" && msg.toLowerCase().includes("suspended"));
+
+      if (isSuspended) {
+        setSuspendedInfo({
+          email: data.email,
+          reason:
+            res?.error?.reason ||
+            res?.reason ||
+            "Administrative review or policy violation.",
+          suspendedUntil:
+            res?.error?.suspendedUntil || res?.suspendedUntil || null,
+          message:
+            typeof msg === "string"
+              ? msg
+              : "Your account has been suspended by an administrator.",
+        });
+        setDeactivatedCredentials(null);
+        return;
+      }
+
+      toast.error(typeof msg === "string" ? msg : "Authentication failed");
     }
   }
 
@@ -94,7 +138,65 @@ function LoginForm() {
       </div>
 
       <div className="rounded-3xl border border-border/80 bg-card p-5 sm:p-8 shadow-sm space-y-6">
-        {deactivatedCredentials ? (
+        {suspendedInfo ? (
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-5 space-y-4 animate-in fade-in-0 duration-300">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <h3 className="text-sm font-bold text-foreground">
+                  Account Suspended
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Access for <strong className="text-foreground">{suspendedInfo.email}</strong> is temporarily suspended by platform administration.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-rose-500/20 bg-background/50 p-3.5 space-y-2 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="text-muted-foreground font-medium">Suspension Reason:</span>
+                <span className="font-semibold text-foreground text-right">{suspendedInfo.reason}</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="text-muted-foreground font-medium">Duration:</span>
+                <span className="font-semibold text-rose-600 dark:text-rose-400 text-right">
+                  {suspendedInfo.suspendedUntil
+                    ? `Suspended until ${new Date(suspendedInfo.suspendedUntil).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}`
+                    : "Indefinite (Subject to manual review)"}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              If your suspension has an expiration date, your account will be restored automatically when the period concludes. For appeals, please contact support.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full text-xs font-semibold rounded-xl h-9"
+                onClick={() => setSuspendedInfo(null)}
+              >
+                Dismiss & Switch Account
+              </Button>
+              <Button
+                type="button"
+                asChild
+                className="w-full text-xs font-semibold rounded-xl h-9 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <a href="mailto:support@nutscommerce.com?subject=Account%20Suspension%20Inquiry">
+                  Contact Support
+                </a>
+              </Button>
+            </div>
+          </div>
+        ) : deactivatedCredentials ? (
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-4 animate-in fade-in-0 duration-300">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">

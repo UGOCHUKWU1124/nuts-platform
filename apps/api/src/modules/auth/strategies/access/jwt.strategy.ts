@@ -15,8 +15,20 @@ function extractAccessToken(req: Request): string | null {
   const authHeader = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
   if (authHeader) return authHeader;
 
-  // 2. Standard HttpOnly access_token cookie
-  return jwtFromCookie(AUTH_ACCESS_COOKIE)(req);
+  // 2. Standard HttpOnly accessToken cookie
+  const cookieToken =
+    jwtFromCookie(AUTH_ACCESS_COOKIE)(req) ??
+    jwtFromCookie('access_token')(req);
+  if (cookieToken) return cookieToken;
+
+  // 3. Query parameter (standard for EventSource SSE / WebSocket handshakes where headers cannot be set)
+  const query = req.query;
+  if (typeof query === 'object' && query !== null) {
+    if (typeof query.token === 'string') return query.token;
+    if (typeof query.accessToken === 'string') return query.accessToken;
+  }
+
+  return null;
 }
 
 @Injectable()

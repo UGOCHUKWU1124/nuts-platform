@@ -77,9 +77,26 @@ export default function VendorRegisterPage() {
       setResendTimer(60);
       toast.success("Verification code sent to your vendor email!");
     } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        retryAfter?: number;
+        error?: { retryAfter?: number };
+      }>;
+      const data = axiosErr?.response?.data;
+      const retryAfter =
+        (typeof data?.retryAfter === "number" && data.retryAfter) ||
+        (typeof data?.error?.retryAfter === "number" && data.error.retryAfter) ||
+        null;
       const msg =
-        (err as AxiosError<{ message: string }>)?.response?.data?.message ?? "Failed to send verification code. Please try again.";
-      toast.error(msg);
+        data?.message ?? "Failed to send verification code. Please try again.";
+
+      if (retryAfter && retryAfter > 0) {
+        setResendTimer(retryAfter);
+        setOtpSent(true);
+        toast.info(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }

@@ -76,17 +76,8 @@ export class AdminProductsController {
   @ApiUnauthorizedResponse({
     description: 'Unauthorized — no valid JWT session.',
   })
-  async findAll(
-    @Query() query: QueryProductDto,
-    @Body() body?: QueryProductDto,
-  ) {
-    const filters = {
-      ...query,
-      ...(body && typeof body === 'object' && Object.keys(body).length > 0
-        ? body
-        : {}),
-    };
-    return this.productsService.findAllForAdmin(filters);
+  async findAll(@Query() query: QueryProductDto) {
+    return this.productsService.findAllForAdmin(query);
   }
 
   /** Cursor-based query — filters travel in the request body. Alias for GET. */

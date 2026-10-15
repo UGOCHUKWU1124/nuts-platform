@@ -303,6 +303,22 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
     const fetched = await this.prisma.notification.findMany({
       where,
+      select: {
+        id: true,
+        userId: true,
+        role: true,
+        type: true,
+        title: true,
+        message: true,
+        priority: true,
+        link: true,
+        metadata: true,
+        dedupeKey: true,
+        isRead: true,
+        readAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take,
     });

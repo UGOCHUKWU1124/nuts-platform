@@ -69,15 +69,7 @@ export function NotificationBell({
     fetchUnreadCount,
   } = useNotifications();
 
-  // Eagerly warm the notification cache in background upon authenticated session
-  useEffect(() => {
-    if (isAuthenticated) {
-      void fetchUnreadCount();
-      void fetchNotifications(undefined, 5);
-    }
-  }, [isAuthenticated, fetchNotifications, fetchUnreadCount]);
-
-  // Re-sync top 5 notifications when user opens popover
+  // Fetch top 5 notifications only on-demand when user opens popover
   useEffect(() => {
     if (open) {
       void fetchUnreadCount();

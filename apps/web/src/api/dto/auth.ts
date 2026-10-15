@@ -32,6 +32,17 @@ export interface AuthProfileDto {
 export interface AuthResponseDto {
   user: AuthUserDto;
   accessToken?: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
+}
+
+export interface AdminAuthResponseDto {
+  admin: AuthUserDto;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
 }
 
 export interface RegisterResponseDto {

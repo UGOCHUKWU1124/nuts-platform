@@ -686,12 +686,54 @@ export class RefreshSessionService {
       ),
     ]);
 
+    const expiresIn = this.getAccessExpiresInSeconds(accessToken);
+
     return {
       accessToken,
       refreshToken,
       refreshId,
+      expiresIn,
+      tokenType: 'Bearer',
       ...(sessionId ? { sessionId } : {}),
     };
+  }
+
+  private getAccessExpiresInSeconds(accessToken: string): number {
+    try {
+      const payload: unknown = this.jwtService.decode(accessToken);
+      if (
+        typeof payload === 'object' &&
+        payload !== null &&
+        'exp' in payload &&
+        typeof (payload as { exp: number }).exp === 'number' &&
+        'iat' in payload &&
+        typeof (payload as { iat: number }).iat === 'number'
+      ) {
+        return (
+          (payload as { exp: number }).exp - (payload as { iat: number }).iat
+        );
+      }
+    } catch {
+      // Decode fallback
+    }
+
+    return Math.floor(this.msFromExpires(String(this.accessExpiresIn)) / 1000);
+  }
+
+  private msFromExpires(value: string): number {
+    const match = /^(\d+)([smhd])$/.exec(value.trim());
+    if (!match) return 900;
+    const amount = Number(match[1]);
+    const unit = match[2];
+    const multipliers = {
+      s: 1_000,
+      m: 60_000,
+      h: 3_600_000,
+      d: 86_400_000,
+    } as const;
+    const multiplier =
+      multipliers[unit as keyof typeof multipliers] ?? multipliers.m;
+    return amount * multiplier;
   }
 
   private getRefreshExpiresAt(refreshToken: string): Date {

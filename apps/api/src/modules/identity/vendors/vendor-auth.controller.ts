@@ -109,7 +109,12 @@ export class VendorAuthController {
     @Body() dto: CreateVendorDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ vendor: VendorResponseDto; accessToken?: string }> {
+  ): Promise<{
+    vendor: VendorResponseDto;
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+  }> {
     const session = await this.vendorsService.register(
       dto,
       extractIpAddress(req),
@@ -118,12 +123,14 @@ export class VendorAuthController {
 
     // Unapproved vendors do not receive session tokens
     if (session.tokens) {
-      this.authCookies.setAuthCookies(res, session.tokens, 'vendor');
+      this.authCookies.setAuthCookies(res, session.tokens);
     }
 
     return {
       vendor: session.profile,
       accessToken: session.tokens?.accessToken,
+      tokenType: session.tokens?.tokenType,
+      expiresIn: session.tokens?.expiresIn,
     };
   }
 
@@ -153,7 +160,12 @@ export class VendorAuthController {
     @Body() dto: VendorLoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ vendor: VendorResponseDto; accessToken?: string }> {
+  ): Promise<{
+    vendor: VendorResponseDto;
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+  }> {
     const session = await this.vendorsService.login(
       dto,
       extractIpAddress(req),
@@ -161,11 +173,13 @@ export class VendorAuthController {
     );
 
     // Login always produces tokens (only register can return null)
-    this.authCookies.setAuthCookies(res, session.tokens!, 'vendor');
+    this.authCookies.setAuthCookies(res, session.tokens!);
 
     return {
       vendor: session.profile,
       accessToken: session.tokens!.accessToken,
+      tokenType: session.tokens!.tokenType,
+      expiresIn: session.tokens!.expiresIn,
     };
   }
 
@@ -193,7 +207,12 @@ export class VendorAuthController {
   async refresh(
     @GetUser() payload: RefreshJwtPayload,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ vendor: VendorResponseDto; accessToken?: string }> {
+  ): Promise<{
+    vendor: VendorResponseDto;
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+  }> {
     if (payload.role !== ROLE.VENDOR) {
       throw new UnauthorizedException('Invalid token role');
     }
@@ -204,11 +223,13 @@ export class VendorAuthController {
     );
 
     // Refresh always produces tokens
-    this.authCookies.setAuthCookies(res, session.tokens!, 'vendor');
+    this.authCookies.setAuthCookies(res, session.tokens!);
 
     return {
       vendor: session.profile,
       accessToken: session.tokens!.accessToken,
+      tokenType: session.tokens!.tokenType,
+      expiresIn: session.tokens!.expiresIn,
     };
   }
 
@@ -219,7 +240,7 @@ export class VendorAuthController {
   @Roles(ROLE.VENDOR)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @Message('Successfully logged out')
+  @Message('Logged out successfully')
   @ApiOperation({
     summary: 'Log out the current vendor session',
   })

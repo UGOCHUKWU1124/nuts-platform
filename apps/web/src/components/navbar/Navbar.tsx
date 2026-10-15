@@ -73,13 +73,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
   const [accountOpen, setAccountOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const hasSessionCookie =
-    typeof document !== "undefined" &&
-    document.cookie.includes("session_active=");
-
-  const isLoggedIn =
-    (isAuthenticated && (!!user || !!role)) ||
-    (Boolean(user) && hasSessionCookie);
+  const isLoggedIn = isAuthenticated && (!!user || !!role);
   const capabilities = useAuthStore((state) => state.capabilities);
   const canPurchase = capabilities ? capabilities.canPurchase : !isLoggedIn;
   const canSell = capabilities?.canSell ?? false;
@@ -313,7 +307,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                           Store Orders
                         </Link>
                         <Link
-                          href="/vendor/manage-wallet"
+                          href="/vendor/wallet"
                           onClick={() => setAccountOpen(false)}
                           className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
                         >
@@ -321,13 +315,23 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                           Vendor Wallet
                         </Link>
                         <Link
-                          href="/vendor/settings"
+                          href="/vendor/setting"
                           onClick={() => setAccountOpen(false)}
                           className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
                         >
                           <Settings className="h-4 w-4 text-muted-foreground" />
                           Store Settings
                         </Link>
+                        {user?.storeSlug && (
+                          <Link
+                            href={`/vendor/${user.storeSlug}`}
+                            onClick={() => setAccountOpen(false)}
+                            className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                          >
+                            <Store className="h-4 w-4 text-muted-foreground" />
+                            My Storefront
+                          </Link>
+                        )}
                       </>
                     ) : canAdminister ? (
                       <>
@@ -432,7 +436,12 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                       type="button"
                       onClick={() => {
                         setAccountOpen(false);
-                        void logoutWithFeedback(logout, { redirectTo: "/auth/login" });
+                        const redirectPath = canAdminister
+                          ? "/auth/admin/login"
+                          : canSell
+                            ? "/auth/vendor/login"
+                            : "/auth/login";
+                        void logoutWithFeedback(logout, { redirectTo: redirectPath });
                       }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
                     >

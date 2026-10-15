@@ -16,9 +16,9 @@ import { Input } from "@/component/ui/input";
 import { useCart } from "@/hook/use-cart";
 import { useLocalStorageValue, writeLocalStorageValue } from "../../../hook/use-local-storage-value";
 import { useWishlist } from "@/hook/use-wishlist";
-import { resolveCartItemProductHref } from "@/lib/cart-path";
 import { queryKey } from "@/lib/query-key";
 import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
+import { clearClientCart } from "@/lib/cart-cleanup";
 import { formatPrice } from "@/lib/util";
 import { useShoppingDrawerStore } from "@/zustand/shopping-drawer";
 import { useAuthStore } from "@/zustand/auth";
@@ -32,10 +32,10 @@ import { toast } from "sonner";
 type Address = { fullName: string; phone: string; street: string; city: string; state: string; country: string };
 const blankAddress: Address = { fullName: "", phone: "", street: "", city: "", state: "", country: "Nigeria" };
 
-function CartLine({ item, cartAddedFrom }: { item: CartItemResponseDto; cartAddedFrom?: Record<string, string> | null }) {
+function CartLine({ item }: { item: CartItemResponseDto; cartAddedFrom?: unknown }) {
   const { updateItem, removeItem } = useCart();
   const pending = updateItem.isPending || removeItem.isPending;
-  const productHref = resolveCartItemProductHref(item, cartAddedFrom);
+  const productHref = `/product/${item.product.slug}`;
   const closeDrawer = () => useShoppingDrawerStore.getState().close();
 
   return (
@@ -173,6 +173,7 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
     mutationFn: () => { if (!selectedAddress) throw new Error("Select a delivery address"); const { fullName, phone, street, city, state, country } = selectedAddress; return orderService.checkout({ shippingAddress: { fullName, phone, street, city, state, country }, ...(discountCode.trim() ? { discountCode: discountCode.trim() } : {}) } as CheckoutPayload); },
     onSuccess: async ({ data: order }) => {
       try {
+        clearClientCart(queryClient);
         const initialized = await resolvePaymentInitialization(order);
         if (!initialized.reference) throw new Error("Payment initialization did not return a reference");
 
@@ -403,7 +404,7 @@ export function ShoppingDrawer() {
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
               {isCheckout
-                ? "Confirm delivery, then pay securely"
+                ? "Review delivery and proceed to payment"
                 : isCart
                   ? `${cart?.totalItemCount ?? 0} item${(cart?.totalItemCount ?? 0) === 1 ? "" : "s"} ready when you are`
                   : `${wishlist.length} saved for later`}

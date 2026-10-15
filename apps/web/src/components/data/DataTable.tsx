@@ -35,6 +35,7 @@ interface DataTableProps<T> {
   data: T[] | { data: T[]; meta?: unknown } | null | undefined;
   keyField?: keyof T | string;
   isLoading?: boolean;
+  isFetching?: boolean;
   emptyMessage?: string;
   emptyIcon?: ReactNode;
   pagination?: DataTablePagination;
@@ -47,6 +48,7 @@ export function DataTable<T extends object>({
   data,
   keyField = "id",
   isLoading,
+  isFetching,
   emptyMessage = "No records found matching your filters.",
   emptyIcon,
   pagination,
@@ -93,7 +95,12 @@ export function DataTable<T extends object>({
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs transition-all", className)}>
+    <div className={cn("relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs transition-all", className)}>
+      {isFetching && (
+        <div className="absolute top-0 left-0 right-0 z-20 h-0.5 bg-primary/20 overflow-hidden">
+          <div className="h-full bg-primary w-1/3 animate-[pulse_1s_infinite] transition-all" />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm border-collapse">
           <thead>
@@ -108,7 +115,7 @@ export function DataTable<T extends object>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/50">
+          <tbody className={cn("divide-y divide-border/50 transition-opacity duration-150", isFetching && "opacity-50 pointer-events-none")}>
             {safeData.map((row, i) => {
               const rowValues = row as Record<string, unknown>;
               const rowKey = String(rowValues[String(keyField)] ?? i);

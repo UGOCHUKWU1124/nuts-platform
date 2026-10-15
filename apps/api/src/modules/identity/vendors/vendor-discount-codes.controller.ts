@@ -151,6 +151,34 @@ export class VendorDiscountCodesController {
     return null;
   }
 
+  @Patch(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @Message('Discount code reactivated successfully')
+  @ApiOperation({
+    summary: 'Reactivate a discount code',
+    description: 'Reactivate an inactive discount code for your store.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Discount code ID',
+  })
+  @ApiResponse({
+    status: 200,
+    type: ApiResponseDto<null>,
+    description: 'Discount code reactivated',
+  })
+  @ApiNotFoundResponse({
+    description: 'Discount code not found',
+  })
+  async reactivate(
+    @GetVendor('id') vendorId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<null> {
+    await this.discountCodeService.reactivate(id, vendorId, false);
+
+    return null;
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @Message('Discount code deleted successfully')

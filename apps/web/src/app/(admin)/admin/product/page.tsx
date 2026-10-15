@@ -122,6 +122,10 @@ export default function AdminProductPage() {
   const [editingProduct, setEditingProduct] = useState<AdminProductItem | null>(null);
   const [stockProduct, setStockProduct] = useState<AdminProductItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminProductItem | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<{
+    product: AdminProductItem;
+    active: boolean;
+  } | null>(null);
   const [variantsList, setVariantsList] = useState<ProductVariantItem[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -133,7 +137,7 @@ export default function AdminProductPage() {
   const initialCatId = searchParams.get("categoryId") || "ALL";
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCatId);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.admin.product, debouncedSearch, status, selectedCategory, page],
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
@@ -259,6 +263,7 @@ export default function AdminProductPage() {
     onSuccess: () => {
       toast.success("Product status updated");
       refreshProducts();
+      setToggleActiveTarget(null);
     },
     onError: (err: AxiosError<{ message: string }>) =>
       toast.error(err?.response?.data?.message ?? "Failed to update status"),
@@ -487,7 +492,7 @@ export default function AdminProductPage() {
               r.isActive ? "text-amber-500 hover:text-amber-600" : "text-emerald-500 hover:text-emerald-600"
             }`}
             onClick={() =>
-              toggleActiveMutation.mutate({ id: r.id, active: !!r.isActive })
+              setToggleActiveTarget({ product: r, active: !!r.isActive })
             }
           >
             {r.isActive ? <Ban className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
@@ -568,10 +573,15 @@ export default function AdminProductPage() {
               { value: "active", label: "Active" },
               { value: "inactive", label: "Inactive" },
             ]}
+            onRefresh={refreshProducts}
+            isLoading={isLoading || isFetching}
           />
         </div>
 
         <select
+          id="admin-product-category-filter"
+          name="categoryFilter"
+          aria-label="Filter products by category"
           value={selectedCategory}
           onChange={(e) => {
             setSelectedCategory(e.target.value);
@@ -611,6 +621,7 @@ export default function AdminProductPage() {
         columns={columns}
         data={Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []}
         isLoading={isLoading}
+        isFetching={isFetching}
         emptyMessage="No products matched your search criteria."
         pagination={
           data?.meta
@@ -697,6 +708,7 @@ export default function AdminProductPage() {
                 </div>
                 <input
                   id="adminHasVariants"
+                  name="hasVariants"
                   type="checkbox"
                   checked={Boolean(hasVariants)}
                   onChange={(e) => {
@@ -863,6 +875,35 @@ export default function AdminProductPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM TOGGLE ACTIVE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(toggleActiveTarget)}
+        onOpenChange={(v) => !v && setToggleActiveTarget(null)}
+        title={toggleActiveTarget?.active ? "Deactivate Product" : "Reactivate Product"}
+        description={
+          toggleActiveTarget?.active ? (
+            <>
+              Are you sure you want to deactivate <strong>&quot;{toggleActiveTarget?.product.name}&quot;</strong>? It will be immediately hidden from customer storefront searches and catalog browsing.
+            </>
+          ) : (
+            <>
+              Are you sure you want to reactivate <strong>&quot;{toggleActiveTarget?.product.name}&quot;</strong>? It will become visible and purchasable by customers immediately.
+            </>
+          )
+        }
+        confirmText={toggleActiveTarget?.active ? "Deactivate Product" : "Reactivate Product"}
+        variant={toggleActiveTarget?.active ? "warning" : "default"}
+        isLoading={toggleActiveMutation.isPending}
+        onConfirm={() => {
+          if (toggleActiveTarget) {
+            toggleActiveMutation.mutate({
+              id: toggleActiveTarget.product.id,
+              active: toggleActiveTarget.active,
+            });
+          }
+        }}
       />
     </div>
   );

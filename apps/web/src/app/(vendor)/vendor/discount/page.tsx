@@ -28,6 +28,7 @@ Check,
 Copy,
 Pencil,
 Plus,
+RotateCcw,
 Tag,
 Trash2
 } from "lucide-react";
@@ -72,6 +73,7 @@ export default function DashboardDiscountPage() {
   const [editingDiscount, setEditingDiscount] = useState<VendorDiscount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VendorDiscount | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<VendorDiscount | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<VendorDiscount | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -79,7 +81,7 @@ export default function DashboardDiscountPage() {
   const pageSize = 15;
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: queryKey.vendor.discount,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
@@ -159,6 +161,16 @@ export default function DashboardDiscountPage() {
       setDeactivateTarget(null);
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to deactivate discount code")),
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => vendorApi.patch(`/vendors/discounts/${id}/reactivate`),
+    onSuccess: () => {
+      toast.success("Discount coupon reactivated successfully");
+      refreshDiscounts();
+      setReactivateTarget(null);
+    },
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to reactivate discount code")),
   });
 
   const deleteMutation = useMutation({
@@ -302,7 +314,7 @@ export default function DashboardDiscountPage() {
             <Pencil className="h-3.5 w-3.5" />
           </Button>
 
-          {r.isActive && (
+          {r.isActive ? (
             <Button
               variant="ghost"
               size="sm"
@@ -311,6 +323,16 @@ export default function DashboardDiscountPage() {
               onClick={() => setDeactivateTarget(r)}
             >
               <Ban className="h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Reactivate coupon"
+              className="h-8 w-8 p-0 rounded-lg text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              onClick={() => setReactivateTarget(r)}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
             </Button>
           )}
 
@@ -360,6 +382,8 @@ export default function DashboardDiscountPage() {
           { value: "active", label: "Active Coupons" },
           { value: "inactive", label: "Disabled Coupons" },
         ]}
+        onRefresh={refreshDiscounts}
+        isLoading={isLoading || isFetching}
       />
 
       {(() => {
@@ -369,9 +393,10 @@ export default function DashboardDiscountPage() {
           ? ((data as { data: VendorDiscount[] }).data)
           : [];
         const filtered = rawList.filter((discount: VendorDiscount) => {
-          const matchesSearch = `${discount.code} ${discount.description ?? ""}`
+          const q = search.trim().toLowerCase();
+          const matchesSearch = !q || `${discount.code} ${discount.description ?? ""}`
             .toLowerCase()
-            .includes(search.toLowerCase());
+            .includes(q);
           const matchesStatus =
             !status ||
             (status === "active" && discount.isActive) ||
@@ -385,6 +410,7 @@ export default function DashboardDiscountPage() {
             columns={columns}
             data={paginatedData}
             isLoading={isLoading}
+            isFetching={isFetching}
             emptyMessage="No promotion coupon codes found for your store."
             pagination={{
               page,
@@ -547,6 +573,23 @@ export default function DashboardDiscountPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM REACTIVATE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(reactivateTarget)}
+        onOpenChange={(v) => !v && setReactivateTarget(null)}
+        title="Reactivate Coupon"
+        description={
+          <>
+            Reactivate discount code <strong>&quot;{reactivateTarget?.code}&quot;</strong>? Customers will be able to apply it on their orders again.
+          </>
+        }
+        confirmText="Reactivate Code"
+        isLoading={reactivateMutation.isPending}
+        onConfirm={() =>
+          reactivateTarget && reactivateMutation.mutate(reactivateTarget.id)
+        }
       />
     </div>
   );

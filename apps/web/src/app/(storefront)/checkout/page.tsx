@@ -10,10 +10,11 @@ import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { queryKey } from "@/lib/query-key";
 import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
+import { clearClientCart } from "@/lib/cart-cleanup";
 import { formatPrice } from "@/lib/util";
 import { useAuthStore } from "@/zustand/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation,useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 ArrowLeft,
 CheckCircle2,
@@ -43,6 +44,7 @@ type AddressForm = z.infer<typeof addressSchema>;
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [promoCode, setPromoCode] = useState(() => searchParams.get("code") ?? "");
   const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number } | null>(null);
@@ -140,37 +142,32 @@ export default function CheckoutPage() {
       const orderId = order.id;
       const directUrl = order.authorizationUrl;
 
-      // Clean up applied discount from localStorage on successful order
-      try {
-        localStorage.removeItem("nuts_applied_discount");
-      } catch {}
+      // Automatically purge client cart state upon order creation
+      clearClientCart(queryClient);
 
+      // 1. Direct Paystack URL from checkout response
       if (directUrl) {
         const checkoutUrl = safePaystackCheckoutUrl(directUrl);
-        if (!checkoutUrl) {
-          toast.error("The payment provider returned an invalid checkout link.");
-          router.push(`/order/${encodeURIComponent(orderId)}`);
-          return;
-        }
-        window.location.assign(checkoutUrl);
-        return;
-      }
-
-      try {
-        const { data: payment } = await paymentService.getByOrderId(orderId);
-        if (payment.paymentLink) {
-          const checkoutUrl = safePaystackCheckoutUrl(payment.paymentLink);
-          if (!checkoutUrl) {
-            toast.error("The payment provider returned an invalid checkout link.");
-            router.push(`/order/${encodeURIComponent(orderId)}`);
-            return;
-          }
+        if (checkoutUrl) {
           window.location.assign(checkoutUrl);
           return;
         }
-      } catch (error: unknown) {
+      }
+
+      // 2. Initialize Paystack gateway immediately for this order
+      try {
+        const initRes = await paymentService.initialize(orderId);
+        const authUrl = initRes.data?.authorizationUrl;
+        if (authUrl) {
+          const checkoutUrl = safePaystackCheckoutUrl(authUrl);
+          if (checkoutUrl) {
+            window.location.assign(checkoutUrl);
+            return;
+          }
+        }
+      } catch (initErr: unknown) {
         toast.error(
-          `Your order was created, but payment could not be opened. Continue from your order details. ${getApiErrorMessage(error, "")}`.trim()
+          getApiErrorMessage(initErr, "Order created, but payment could not be opened. Please retry from order details.")
         );
       }
 
@@ -744,7 +741,7 @@ export default function CheckoutPage() {
               </>
             ) : (
               <>
-                Pay securely
+                Proceed to Payment
                 <CreditCard className="h-4 w-4" />
               </>
             )}

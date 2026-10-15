@@ -87,6 +87,8 @@ describe('RefreshSessionService user sessions', () => {
     expect(first.tokens.sessionId).toBeDefined();
     expect(second.tokens.sessionId).toBeDefined();
     expect(first.tokens.sessionId).not.toBe(second.tokens.sessionId);
+    expect(first.tokens.tokenType).toBe('Bearer');
+    expect(first.tokens.expiresIn).toBeGreaterThan(0);
     expect(prisma.userAuthSession.create).toHaveBeenCalledTimes(2);
     expect(prisma.userAuthSession.create).toHaveBeenNthCalledWith(
       1,

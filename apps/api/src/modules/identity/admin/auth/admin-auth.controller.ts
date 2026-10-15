@@ -95,11 +95,13 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
-      user: session.user,
+      admin: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -143,11 +145,13 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
-      user: session.user,
+      admin: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -157,11 +161,11 @@ export class AdminAuthController {
   @Roles(ROLE.ADMIN)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @Message('Admin token refreshed successfully')
+  @Message('Tokens refreshed successfully')
   @ApiOperation({
     summary: 'Rotate admin access and refresh tokens',
     description:
-      'Uses the httpOnly refresh_token cookie to issue a new access + ' +
+      'Uses the httpOnly refreshToken cookie to issue a new access + ' +
       'refresh token pair. The previous refresh token is invalidated ' +
       '(rotation). Requires a valid refresh token and the ADMIN role.',
   })
@@ -184,11 +188,13 @@ export class AdminAuthController {
       payload.refreshId,
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
-      user: session.user,
+      admin: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 

@@ -5,11 +5,9 @@ import type { CookieOptions, Response } from 'express';
 import {
   AUTH_ACCESS_COOKIE,
   AUTH_REFRESH_COOKIE,
-  AUTH_SESSION_COOKIE,
   AUTH_COOKIE_PATH,
 } from '../constants/auth-cookies.constants';
 import type { AuthTokens } from '../types/auth.types';
-import type { AuthCookieRole } from '../constants/auth-cookies.constants';
 
 @Injectable()
 export class AuthCookieService {
@@ -76,46 +74,20 @@ export class AuthCookieService {
     );
   }
 
-  setAuthCookies(
-    res: Response,
-    tokens: AuthTokens,
-    role: AuthCookieRole = 'user',
-  ): void {
-    // 1. Standard HttpOnly access_token cookie
+  setAuthCookies(res: Response, tokens: AuthTokens): void {
+    // 1. Standard HttpOnly accessToken cookie
     res.cookie(AUTH_ACCESS_COOKIE, tokens.accessToken, {
       ...this.baseOptions,
       maxAge: this.accessMaxAge,
       path: AUTH_COOKIE_PATH,
     });
 
-    // 2. Standard HttpOnly refresh_token cookie
+    // 2. Standard HttpOnly refreshToken cookie
     res.cookie(AUTH_REFRESH_COOKIE, tokens.refreshToken, {
       ...this.baseOptions,
       maxAge: this.refreshMaxAge,
       path: AUTH_COOKIE_PATH,
     });
-
-    // 3. Frontend session marker (non-HttpOnly) — carries the role
-    res.cookie(AUTH_SESSION_COOKIE, role, {
-      ...this.baseOptions,
-      httpOnly: false,
-      maxAge: this.refreshMaxAge,
-      path: '/',
-    });
-
-    // 4. Clean up legacy role-prefixed cookies from prior revisions
-    const legacyCookies = [
-      'user_refresh_token',
-      'admin_refresh_token',
-      'vendor_refresh_token',
-      'user_session',
-      'admin_session',
-      'vendor_session',
-    ];
-    for (const name of legacyCookies) {
-      res.clearCookie(name, { ...this.baseOptions, path: '/' });
-      res.clearCookie(name, { ...this.baseOptions, path: AUTH_COOKIE_PATH });
-    }
   }
 
   clearAuthCookies(res: Response): void {
@@ -127,25 +99,15 @@ export class AuthCookieService {
       ...this.baseOptions,
       path: AUTH_COOKIE_PATH,
     });
-    res.clearCookie(AUTH_SESSION_COOKIE, {
+    // Clear legacy snake_case cookie names if present
+    res.clearCookie('access_token', {
       ...this.baseOptions,
-      httpOnly: false,
-      path: '/',
+      path: AUTH_COOKIE_PATH,
     });
-
-    // Evict legacy cookie names
-    const legacyCookies = [
-      'user_refresh_token',
-      'admin_refresh_token',
-      'vendor_refresh_token',
-      'user_session',
-      'admin_session',
-      'vendor_session',
-    ];
-    for (const name of legacyCookies) {
-      res.clearCookie(name, { ...this.baseOptions, path: '/' });
-      res.clearCookie(name, { ...this.baseOptions, path: AUTH_COOKIE_PATH });
-    }
+    res.clearCookie('refresh_token', {
+      ...this.baseOptions,
+      path: AUTH_COOKIE_PATH,
+    });
   }
 
   private msFromExpires(value: string): number {

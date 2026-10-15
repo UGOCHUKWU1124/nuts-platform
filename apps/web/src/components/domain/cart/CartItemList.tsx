@@ -5,7 +5,6 @@ import type { CartItemResponseDto } from "@/api/dto/cart";
 import { Button } from "@/component/ui/button";
 import { Card,CardContent } from "@/component/ui/card";
 import { useCart } from "@/hook/use-cart";
-import { resolveCartItemProductHref } from "@/lib/cart-path";
 import { formatPrice } from "@/lib/util";
 import { Minus,Plus,ShoppingBag,Trash2 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
@@ -13,10 +12,9 @@ import { toast } from "sonner";
 
 export function CartItemList({
   items,
-  cartAddedFrom,
 }: {
   items: CartItemResponseDto[];
-  cartAddedFrom?: Record<string, string> | null;
+  cartAddedFrom?: unknown;
 }) {
   const { updateItem, removeItem, clearCart } = useCart();
 
@@ -25,7 +23,7 @@ export function CartItemList({
   return (
     <div className="space-y-4">
       {items.map((item) => {
-        const productHref = resolveCartItemProductHref(item, cartAddedFrom);
+        const productHref = `/product/${item.product.slug}`;
         return (
           <Card key={item.id} className="rounded-2xl border-border/70 shadow-xs">
             <CardContent className="p-4">

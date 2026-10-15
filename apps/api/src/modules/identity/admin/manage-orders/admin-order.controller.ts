@@ -53,14 +53,8 @@ export class AdminOrdersController {
   @ApiForbiddenResponse({
     description: 'Forbidden — user does not have ADMIN role.',
   })
-  findAll(@Query() query: QueryOrderDto, @Body() body?: QueryOrderDto) {
-    const filters = {
-      ...query,
-      ...(body && typeof body === 'object' && Object.keys(body).length > 0
-        ? body
-        : {}),
-    };
-    return this.ordersService.findAllAdmin(filters);
+  findAll(@Query() query: QueryOrderDto) {
+    return this.ordersService.findAllAdmin(query);
   }
 
   @Post('query')

@@ -72,6 +72,7 @@ interface GlobalSearchBarProps {
   variant?: "hero" | "navbar";
   className?: string;
   categories?: CategoryResponseDto[];
+  autoFocus?: boolean;
 }
 
 export function GlobalSearchBar({
@@ -79,6 +80,7 @@ export function GlobalSearchBar({
   variant = "hero",
   className = "",
   categories,
+  autoFocus = false,
 }: GlobalSearchBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -87,6 +89,18 @@ export function GlobalSearchBar({
   const debouncedQuery = useDebouncedValue(query.trim(), 350);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when requested (e.g. mobile search toggle)
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus]);
 
   // Close dropdown whenever pathname or search params change
   useEffect(() => {
@@ -258,6 +272,8 @@ export function GlobalSearchBar({
         </div>
 
         <input
+          ref={inputRef}
+          autoFocus={autoFocus}
           id="global-search-input"
           name="search"
           type="text"
