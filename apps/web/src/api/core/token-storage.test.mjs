@@ -53,3 +53,26 @@ test("getAuthSessionRole returns role from in-memory token or null", () => {
     }
   }
 });
+
+test("getApiBaseUrl returns relative /api/v1 in browser for same-origin BFF proxy", async () => {
+  const { getApiBaseUrl } = await import("./client.ts");
+  const originalWindow = globalThis.window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {},
+  });
+
+  try {
+    const url = getApiBaseUrl();
+    assert.equal(url, "/api/v1");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
+  }
+});
