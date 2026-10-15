@@ -14,7 +14,6 @@ ShoppingCart,
 Store,
 User as UserIcon,
 Wallet,
-X,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
@@ -23,7 +22,6 @@ import { useEffect,useRef,useState } from "react";
 import type { CategoryResponseDto } from "@/api/dto/category";
 import { CategoryNavMenu } from "@/component/category/CategoryNavMenu";
 import { NotificationBell } from "@/component/notification/NotificationBell";
-import { GlobalSearchBar } from "@/component/search/GlobalSearchBar";
 import { useCart } from "@/hook/use-cart";
 import { useHydrated } from "../../hook/use-hydrated";
 import { useWishlist } from "@/hook/use-wishlist";
@@ -32,37 +30,7 @@ import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import { notificationListPath } from "@/lib/notification-path";
 import { logoutWithFeedback } from "@/lib/logout";
 
-function MobileSearchControl({
-  categories,
-}: {
-  categories?: CategoryResponseDto[];
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="xl:hidden flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        aria-label="Toggle mobile search"
-        aria-expanded={open}
-      >
-        {open ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-      </button>
-      {open && (
-        <div className="absolute left-0 right-0 top-full border-t border-border/80 bg-background/95 px-4 py-2.5 shadow-md backdrop-blur-md animate-in slide-in-from-top-2 duration-150 xl:hidden">
-          <GlobalSearchBar
-            categories={categories}
-            variant="navbar"
-            placeholder="Search products, vendors, categories..."
-            className="w-full"
-          />
-        </div>
-      )}
-    </>
-  );
-}
+import { SearchDrawer } from "@/components/search/SearchDrawer";
 
 export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = {}) {
   const { data: cachedCategories } = usePublicCategories(categories);
@@ -91,6 +59,8 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
     return pathname.startsWith(href);
   };
 
+  const [searchDrawerOpen, setSearchDrawerOpen] = useState(false);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -98,8 +68,19 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
       }
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        setSearchDrawerOpen((prev) => !prev);
+      }
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const firstName = user?.firstName ?? "";
@@ -156,20 +137,32 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
           </nav>
         </div>
 
-        {/* Center: Search Bar (Desktop / Tablet) */}
-        <div className="hidden xl:block flex-1 max-w-md mx-4 lg:mx-6">
-          <GlobalSearchBar
-            categories={navCategories}
-            variant="navbar"
-            placeholder="Search products, vendors, categories..."
-            className="w-full"
-          />
+        {/* Center: Search Trigger (Desktop / Tablet) */}
+        <div className="hidden md:block flex-1 max-w-md mx-3 lg:mx-6">
+          <button
+            type="button"
+            onClick={() => setSearchDrawerOpen(true)}
+            className="flex w-full items-center justify-between rounded-full border border-border/80 bg-secondary/60 px-4 py-2 text-sm text-muted-foreground transition-all hover:border-black dark:hover:border-white hover:bg-card hover:text-foreground cursor-pointer group shadow-2xs"
+            aria-label="Open search drawer"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+              <span className="truncate">Search products, vendors, categories...</span>
+            </div>
+          </button>
         </div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Mobile Search Toggle Button */}
-          <MobileSearchControl key={pathname} categories={navCategories} />
+          <button
+            type="button"
+            onClick={() => setSearchDrawerOpen(true)}
+            className="md:hidden flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground cursor-pointer"
+            aria-label="Open search drawer"
+          >
+            <Search className="h-5 w-5" />
+          </button>
 
           {/* Wishlist and Cart - Only show for customer sessions */}
           {canPurchase && (
@@ -456,6 +449,12 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
         </div>
       </div>
 
+      {/* Global Search Popout Drawer with Recommended For You & Quick Suggestions */}
+      <SearchDrawer
+        isOpen={searchDrawerOpen}
+        onClose={() => setSearchDrawerOpen(false)}
+        categories={navCategories}
+      />
     </header>
   );
 }
