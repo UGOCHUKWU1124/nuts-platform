@@ -47,9 +47,9 @@ export default function CheckoutPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [promoCode, setPromoCode] = useState(() => searchParams.get("code") ?? "");
+  const [discountCode, setDiscountCode] = useState(() => searchParams.get("code") ?? "");
   const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number } | null>(null);
-  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [addressMode, setAddressMode] = useState<"default" | "new">("default");
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
@@ -102,7 +102,7 @@ export default function CheckoutPage() {
     }
   }, [defaultAddress, form]);
 
-  // Revalidate a saved promotion against the server before applying it.
+  // Revalidate a saved discount code against the server before applying it.
   useEffect(() => {
     let initialCode = searchParams.get("code") ?? "";
     if (!initialCode) {
@@ -118,7 +118,7 @@ export default function CheckoutPage() {
     void cartService
       .previewDiscount(initialCode)
       .then((res) => {
-          setPromoCode(res.data.code);
+          setDiscountCode(res.data.code);
           const discountData = {
             code: res.data.code,
             amount: res.data.discountAmount,
@@ -134,7 +134,7 @@ export default function CheckoutPage() {
             localStorage.removeItem("nuts_applied_discount");
           } catch {}
         })
-      .finally(() => setIsApplyingPromo(false));
+      .finally(() => setIsApplyingDiscount(false));
   }, [searchParams]);
 
   const checkoutMutation = useMutation({
@@ -217,11 +217,11 @@ export default function CheckoutPage() {
     });
   };
 
-  const handleApplyPromo = async () => {
-    if (!promoCode.trim() || checkoutMutation.isPending) return;
-    setIsApplyingPromo(true);
+  const handleApplyDiscount = async () => {
+    if (!discountCode.trim() || checkoutMutation.isPending) return;
+    setIsApplyingDiscount(true);
     try {
-      const res = await cartService.previewDiscount(promoCode.trim());
+      const res = await cartService.previewDiscount(discountCode.trim());
       const discountData = {
         code: res.data.code,
         amount: res.data.discountAmount,
@@ -232,20 +232,20 @@ export default function CheckoutPage() {
       } catch {}
       toast.success(`Discount code "${res.data.code}" applied!`);
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, "Invalid or expired promo code"));
+      toast.error(getApiErrorMessage(err, "Invalid or expired discount code"));
       setAppliedDiscount(null);
       try {
         localStorage.removeItem("nuts_applied_discount");
       } catch {}
     } finally {
-      setIsApplyingPromo(false);
+      setIsApplyingDiscount(false);
     }
   };
 
-  const handleRemovePromo = () => {
+  const handleRemoveDiscount = () => {
     if (checkoutMutation.isPending) return;
     setAppliedDiscount(null);
-    setPromoCode("");
+    setDiscountCode("");
     try {
       localStorage.removeItem("nuts_applied_discount");
     } catch {}
@@ -418,6 +418,61 @@ export default function CheckoutPage() {
                   </div>
                 )}
               </div>
+
+              {/* Discount Code inside Mobile Summary */}
+              <div className="border-t border-border/60 pt-3">
+                <label
+                  htmlFor="mobile-checkout-discount-code"
+                  className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5"
+                >
+                  Discount Code
+                </label>
+                {appliedDiscount ? (
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Tag className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div className="min-w-0 truncate">
+                        <span className="font-semibold text-foreground uppercase">{appliedDiscount.code}</span>
+                        <span className="ml-1 text-emerald-600 dark:text-emerald-400 font-semibold">(-{formatPrice(discountAmount)})</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveDiscount}
+                      disabled={checkoutMutation.isPending}
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors font-semibold shrink-0 pl-2 cursor-pointer disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      id="mobile-checkout-discount-code"
+                      name="discountCode"
+                      aria-label="Discount code"
+                      placeholder="Discount code"
+                      value={discountCode}
+                      onChange={(e) => setDiscountCode(e.target.value)}
+                      disabled={checkoutMutation.isPending || isApplyingDiscount}
+                      className="h-9 rounded-xl bg-background text-xs uppercase min-w-0"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleApplyDiscount}
+                      disabled={checkoutMutation.isPending || isApplyingDiscount || !discountCode.trim()}
+                      className="h-9 rounded-xl px-3 text-xs font-semibold shrink-0 cursor-pointer"
+                    >
+                      {isApplyingDiscount ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Apply"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -435,7 +490,17 @@ export default function CheckoutPage() {
                         e.preventDefault();
                         handleCheckoutSubmit();
                       }
-                    : form.handleSubmit((v) => handleCheckoutSubmit(v))
+                    : form.handleSubmit(
+                        (v) => handleCheckoutSubmit(v),
+                        (errors) => {
+                          const firstError = Object.values(errors)[0];
+                          if (firstError?.message) {
+                            toast.error(String(firstError.message));
+                          } else {
+                            toast.error("Please fill in all required shipping address fields.");
+                          }
+                        }
+                      )
                 }
                 className="space-y-4 sm:space-y-6"
               >
@@ -453,7 +518,7 @@ export default function CheckoutPage() {
                   {/* Address Choice: Default vs New Address */}
                   {hasDefaultAddress && defaultAddress && (
                     <div className="mb-4 sm:mb-6 space-y-3">
-                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                         <button
                           type="button"
                           onClick={() => setAddressMode("default")}
@@ -654,7 +719,7 @@ export default function CheckoutPage() {
           </div>
 
           {/* Right Column: Sticky Order Summary (Desktop / Tablet) */}
-          <aside className="space-y-4 sm:space-y-6 rounded-2xl sm:rounded-3xl border border-border bg-card p-4 sm:p-6 lg:p-7 shadow-xs lg:sticky lg:top-24">
+          <aside className="hidden lg:block space-y-4 sm:space-y-6 rounded-2xl sm:rounded-3xl border border-border bg-card p-4 sm:p-6 lg:p-7 shadow-xs lg:sticky lg:top-24">
             <div className="flex items-center justify-between">
               <h2 className="text-base sm:text-lg font-bold text-foreground">
                 Order Review
@@ -708,7 +773,7 @@ export default function CheckoutPage() {
               })}
             </div>
 
-            {/* Promo Code Input / Applied State */}
+            {/* Discount Code Input / Applied State */}
             <div>
               <label
                 htmlFor="checkout-discount-code"
@@ -727,7 +792,7 @@ export default function CheckoutPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={handleRemovePromo}
+                    onClick={handleRemoveDiscount}
                     disabled={checkoutMutation.isPending}
                     className="text-xs text-muted-foreground hover:text-destructive transition-colors font-semibold shrink-0 pl-2 cursor-pointer disabled:opacity-50"
                   >
@@ -740,20 +805,20 @@ export default function CheckoutPage() {
                     id="checkout-discount-code"
                     name="discountCode"
                     aria-label="Discount code"
-                    placeholder="Promo or coupon code"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    disabled={checkoutMutation.isPending || isApplyingPromo}
+                    placeholder="Discount code"
+                    value={discountCode}
+                    onChange={(e) => setDiscountCode(e.target.value)}
+                    disabled={checkoutMutation.isPending || isApplyingDiscount}
                     className="h-10 rounded-xl bg-background text-xs sm:text-sm uppercase min-w-0"
                   />
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleApplyPromo}
-                    disabled={checkoutMutation.isPending || isApplyingPromo || !promoCode.trim()}
+                    onClick={handleApplyDiscount}
+                    disabled={checkoutMutation.isPending || isApplyingDiscount || !discountCode.trim()}
                     className="h-10 rounded-xl px-4 text-xs sm:text-sm font-semibold shrink-0"
                   >
-                    {isApplyingPromo ? (
+                    {isApplyingDiscount ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       "Apply"
@@ -803,7 +868,7 @@ export default function CheckoutPage() {
             <Button
               type="submit"
               form="checkout-form"
-              disabled={checkoutMutation.isPending || isApplyingPromo}
+              disabled={checkoutMutation.isPending || isApplyingDiscount}
               className="hidden w-full rounded-full bg-primary py-6 text-sm sm:text-base font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 lg:flex lg:items-center lg:justify-center lg:gap-2 cursor-pointer"
             >
               {checkoutMutation.isPending ? (
@@ -820,7 +885,7 @@ export default function CheckoutPage() {
       </div>
 
       {/* Mobile Fixed Bottom Payment Bar with Safe Area Support */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-xl lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pt-2.5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -831,9 +896,25 @@ export default function CheckoutPage() {
             </p>
           </div>
           <Button
-            type="submit"
-            form="checkout-form"
-            disabled={checkoutMutation.isPending || isApplyingPromo}
+            type="button"
+            onClick={() => {
+              if (effectiveAddressMode === "default") {
+                handleCheckoutSubmit();
+              } else {
+                form.handleSubmit(
+                  (v) => handleCheckoutSubmit(v),
+                  (errors) => {
+                    const firstError = Object.values(errors)[0];
+                    if (firstError?.message) {
+                      toast.error(String(firstError.message));
+                    } else {
+                      toast.error("Please fill in all required shipping address fields.");
+                    }
+                  }
+                )();
+              }
+            }}
+            disabled={checkoutMutation.isPending || isApplyingDiscount}
             className="h-11 rounded-xl px-5 sm:px-6 text-xs sm:text-sm font-bold shadow-sm cursor-pointer shrink-0"
           >
             {checkoutMutation.isPending ? (

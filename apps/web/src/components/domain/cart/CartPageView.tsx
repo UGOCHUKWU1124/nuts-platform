@@ -31,9 +31,9 @@ export interface CartPageViewProps {
 
 export function CartPageView({ initialCart, categories }: CartPageViewProps) {
   const { items, cart, isLoading, updateItem, removeItem, clearCart } = useCart(initialCart);
-  const [promoCode, setPromoCode] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number } | null>(null);
-  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const persistedDiscountValue = useLocalStorageValue("nuts_applied_discount");
   const persistedDiscount = useMemo(() => {
     try {
@@ -47,13 +47,13 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
     return null;
   }, [persistedDiscountValue]);
   const effectiveDiscount = appliedDiscount ?? persistedDiscount;
-  const effectivePromoCode = promoCode || persistedDiscount?.code || "";
+  const effectiveDiscountCode = discountCode || persistedDiscount?.code || "";
 
-  const handleApplyPromo = async () => {
-    if (!effectivePromoCode.trim()) return;
-    setIsApplyingPromo(true);
+  const handleApplyDiscount = async () => {
+    if (!effectiveDiscountCode.trim()) return;
+    setIsApplyingDiscount(true);
     try {
-      const res = await cartService.previewDiscount(effectivePromoCode.trim());
+      const res = await cartService.previewDiscount(effectiveDiscountCode.trim());
       const discountData = {
         code: res.data.code,
         amount: res.data.discountAmount,
@@ -64,19 +64,19 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
       } catch {}
       toast.success(`Discount code "${res.data.code}" applied!`);
     } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, "Invalid or expired promo code"));
+      toast.error(getApiErrorMessage(error, "Invalid or expired discount code"));
       setAppliedDiscount(null);
       try {
         writeLocalStorageValue("nuts_applied_discount", null);
       } catch {}
     } finally {
-      setIsApplyingPromo(false);
+      setIsApplyingDiscount(false);
     }
   };
 
-  const handleRemovePromo = () => {
+  const handleRemoveDiscount = () => {
     setAppliedDiscount(null);
-    setPromoCode("");
+    setDiscountCode("");
     try {
       writeLocalStorageValue("nuts_applied_discount", null);
     } catch {}
@@ -299,13 +299,13 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
                 </div>
               </div>
 
-              {/* Promo Code Input / Applied State */}
+              {/* Discount Code Input / Applied State */}
               <div className="mt-6">
                 <label
-                  htmlFor="cart-promo-code"
+                  htmlFor="cart-discount-code"
                   className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2"
                 >
-                  Promo / Gift Code
+                  Discount Code
                 </label>
                 {effectiveDiscount ? (
                   <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs">
@@ -318,7 +318,7 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
                     </div>
                     <button
                       type="button"
-                      onClick={handleRemovePromo}
+                      onClick={handleRemoveDiscount}
                       className="text-xs text-muted-foreground hover:text-destructive transition-colors font-semibold"
                     >
                       Remove
@@ -327,22 +327,22 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
                 ) : (
                   <div className="flex gap-2">
                     <Input
-                      id="cart-promo-code"
-                      name="promoCode"
-                      aria-label="Promo code"
-                      placeholder="Enter promo code"
-                      value={effectivePromoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
+                      id="cart-discount-code"
+                      name="discountCode"
+                      aria-label="Discount code"
+                      placeholder="Enter discount code"
+                      value={effectiveDiscountCode}
+                      onChange={(e) => setDiscountCode(e.target.value)}
                       className="h-10 rounded-xl uppercase text-sm"
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={handleApplyPromo}
-                      disabled={isApplyingPromo || !effectivePromoCode.trim()}
+                      onClick={handleApplyDiscount}
+                      disabled={isApplyingDiscount || !effectiveDiscountCode.trim()}
                       className="h-10 rounded-xl px-4 text-sm font-medium"
                     >
-                      {isApplyingPromo ? (
+                      {isApplyingDiscount ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         "Apply"
