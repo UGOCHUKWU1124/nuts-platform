@@ -99,6 +99,25 @@ export class AdminDiscountCodesController {
     return null;
   }
 
+  @Patch(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @Message('Discount code reactivated successfully')
+  @ApiOperation({
+    summary: 'Reactivate a discount code',
+    description: 'Set a deactivated discount code back to active status.',
+  })
+  @ApiParam({ name: 'id', description: 'Discount code ID' })
+  @ApiResponse({
+    status: 200,
+    type: ApiResponseDto<null>,
+    description: 'Discount code reactivated',
+  })
+  @ApiNotFoundResponse({ description: 'Discount code not found' })
+  async reactivate(@Param('id', ParseUUIDPipe) id: string): Promise<null> {
+    await this.discountCodeService.reactivate(id, undefined, true);
+    return null;
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @Message('Discount code deleted successfully')

@@ -1,4 +1,4 @@
-import { cartService,type AddToCartPayload } from "@/api/cart";
+import { cartService } from "@/api/cart";
 import type {
 CartItemResponseDto,
 CartResponseDto,
@@ -7,8 +7,6 @@ import { queryKey } from "@/lib/query-key";
 import { useAuthStore } from "@/zustand/auth";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-
-import { storeItemAddedPath } from "@/lib/cart-path";
 
 function matchesCartItem(
   line: CartItemResponseDto,
@@ -188,8 +186,6 @@ export function useCart(initialData?: CartResponseDto | null) {
       productId,
       quantity,
       variantId,
-      addedFrom = "PRODUCT_PAGE",
-      path,
     }: {
       productId: string;
       quantity?: number;
@@ -198,17 +194,13 @@ export function useCart(initialData?: CartResponseDto | null) {
       productSlug?: string;
       price?: number;
       variantName?: string;
-      addedFrom?: AddToCartPayload["addedFrom"];
+      addedFrom?: unknown;
       path?: string;
     }) => {
       if (!isCustomerSession) return Promise.reject(new Error("Cart operations require a customer account."));
-      if (path) {
-        storeItemAddedPath(productId, path, addedFrom);
-      }
       return cartService.addItem(productId, {
         quantity: quantity ?? 1,
         ...(variantId ? { variantId } : {}),
-        addedFrom: addedFrom,
       });
     },
     onMutate: async (variables) => {

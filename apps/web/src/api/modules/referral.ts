@@ -20,9 +20,12 @@ export const referralService = {
    * reject self-referral early (optional at pre-check stage).
    */
   validate(code: string, email?: string): Promise<{ data: ReferralValidateResult }> {
-    return publicApi.post<ReferralValidateResult>("/account/referral/validate", {
-      code: code.trim().toUpperCase(),
-      ...(email ? { email } : {}),
+    const cleanCode = code.trim().toUpperCase();
+    return publicApi.get<ReferralValidateResult>("/account/referral/validate", {
+      params: {
+        code: cleanCode,
+        ...(email ? { email } : {}),
+      },
     });
   },
 

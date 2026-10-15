@@ -64,7 +64,28 @@ function useNotificationStreamLifecycle() {
     }
 
     void store.fetchUnreadCount();
-    return store.initStream(activeRole, sessionKey);
+    const cleanupStream = store.initStream(activeRole, sessionKey);
+
+    const handleReconnectionTrigger = () => {
+      const currentStore = useNotificationsStore.getState();
+      if (currentStore.sseRetryExhausted || !currentStore.sseConnected) {
+        currentStore.retryStream();
+      }
+    };
+
+    window.addEventListener("online", handleReconnectionTrigger);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleReconnectionTrigger();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("online", handleReconnectionTrigger);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      cleanupStream();
+    };
   }, [activeRole, isAuthenticated, sessionKey, currentUserId]);
 }
 

@@ -16,7 +16,9 @@ DialogTitle,
 } from "@/component/ui/dialog";
 import { Input } from "@/component/ui/input";
 import { Label } from "@/component/ui/label";
+import { clearClientCart } from "@/lib/cart-cleanup";
 import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
+import { useQueryClient } from "@tanstack/react-query";
 import { CreditCard } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -29,6 +31,7 @@ interface CheckoutFlowProps {
 
 export function CheckoutFlow({ onOrderCreated, user }: CheckoutFlowProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [otpOpen, setOtpOpen] = useState(false);
   const [otp, setOtp] = useState("");
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
@@ -48,6 +51,7 @@ export function CheckoutFlow({ onOrderCreated, user }: CheckoutFlowProps) {
       } as CheckoutPayload);
       const orderId = order.id;
       setPendingOrderId(orderId);
+      clearClientCart(queryClient);
       onOrderCreated?.(orderId);
 
       // Request payment OTP
@@ -69,12 +73,16 @@ export function CheckoutFlow({ onOrderCreated, user }: CheckoutFlowProps) {
     if (!pendingOrderId || !otp) return;
     try {
       const { data: res }: { data: InitializePaymentResponseDto } = await paymentService.initialize(
-pendingOrderId, otp);
+        pendingOrderId,
+        otp
+      );
       if (res.authorizationUrl) {
         const checkoutUrl = safePaystackCheckoutUrl(res.authorizationUrl);
         if (!checkoutUrl) throw new Error("Invalid Paystack checkout URL");
+        clearClientCart(queryClient);
         window.location.assign(checkoutUrl);
       } else {
+        clearClientCart(queryClient);
         toast.success("Payment initialized");
         router.push("/order");
       }

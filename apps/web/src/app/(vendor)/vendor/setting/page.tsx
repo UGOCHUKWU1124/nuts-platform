@@ -3,6 +3,7 @@
 import { vendorAccountService } from "@/api";
 import { getApiErrorMessage } from "@/api/core/error";
 import { FormInput } from "@/component/form/FormInput";
+import { ImageUpload } from "@/component/form/ImageUpload";
 import { FormTextarea } from "@/component/form/FormTextarea";
 import { ConfirmDialog } from "@/component/modal/ConfirmDialog";
 import { ThemeSelector } from "@/component/theme/ThemeSelector";
@@ -197,16 +198,19 @@ export default function VendorSettingPage() {
                       onSubmit={methods.handleSubmit((data) => updateMutation.mutate(data))}
                       className="space-y-4"
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-4">
                         <FormInput
                           name="storeName"
                           label="Store Name"
                           placeholder="e.g. Obsidian Leatherworks"
                         />
-                        <FormInput
+                        <ImageUpload
                           name="storeLogoUrl"
-                          label="Store Logo Image URL"
-                          placeholder="https://..."
+                          label="Store Logo Image"
+                          authRole="vendor"
+                          single={true}
+                          maxImages={1}
+                          aspectHint="square (1:1 recommended)"
                         />
                       </div>
 

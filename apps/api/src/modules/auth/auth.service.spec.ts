@@ -41,6 +41,9 @@ describe('AuthService', () => {
 
     mockOtpService = {
       verifyOtp: jest.fn().mockResolvedValue(true),
+      consumeVerification: jest.fn().mockResolvedValue(false),
+      verifyRegistrationOtp: jest.fn().mockResolvedValue(true),
+      isOtpVerified: jest.fn().mockResolvedValue(false),
     };
 
     mockEmailService = {
@@ -65,12 +68,15 @@ describe('AuthService', () => {
     mockRefreshSessionService = {
       revokeSession: jest.fn().mockResolvedValue(undefined),
       revokeUserSession: jest.fn().mockResolvedValue(undefined),
+      revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
       revokeUserSessionByRefreshToken: jest.fn().mockResolvedValue(undefined),
       issueUserSession: jest.fn().mockResolvedValue({
         tokens: {
           accessToken: 'access-jwt-token',
           refreshToken: 'refresh-jwt-token',
           refreshId: 'ref-1',
+          expiresIn: 900,
+          tokenType: 'Bearer',
         },
         user: { id: 'u-1', email: 'test@example.com' },
       }),
@@ -263,6 +269,14 @@ describe('AuthService', () => {
       expect(
         mockRefreshSessionService.revokeUserSession,
       ).not.toHaveBeenCalled();
+    });
+
+    it('revokes all user sessions when logoutAll is invoked', async () => {
+      await service.logoutAll('u-1');
+
+      expect(
+        mockRefreshSessionService.revokeAllUserSessions,
+      ).toHaveBeenCalledWith('u-1');
     });
   });
 });

@@ -20,7 +20,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { getNodeChildren, resolveCategoryPath } from "@/lib/cart-path";
+import { getNodeChildren, resolveCategoryPath } from "@/lib/category-tree";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 export interface HierarchicalCategoryViewProps {
@@ -260,6 +260,9 @@ function CategoryCatalogContent({
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <Input
+              id="category-search-input"
+              name="categorySearch"
+              aria-label="Search in this category"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search in this category..."
@@ -278,9 +281,12 @@ function CategoryCatalogContent({
 
           <div className="flex items-center gap-3">
             <select
+              id="category-sort-select"
+              name="sortBy"
+              aria-label="Sort products"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="h-10 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-4 text-xs sm:text-sm font-semibold text-neutral-800 dark:text-neutral-200 focus:outline-none"
+              className="h-10 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-4 text-xs sm:text-sm font-semibold text-neutral-800 dark:text-neutral-200 focus:outline-none cursor-pointer"
             >
               <option value="newest">Newest Arrivals</option>
               <option value="price_asc">Price: Low to High</option>
@@ -313,7 +319,6 @@ function CategoryCatalogContent({
                 key={product.id}
                 product={product}
                 categoryPath={`/category/${slugs.join("/")}`}
-                addedFrom="CATEGORY_PAGE"
                 priority={index < 4}
               />
             ))}

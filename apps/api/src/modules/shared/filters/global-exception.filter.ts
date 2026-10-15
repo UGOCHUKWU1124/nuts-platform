@@ -11,6 +11,8 @@ interface HttpExceptionBody {
   statusCode?: number;
   message?: string | string[];
   error?: string;
+  retryAfter?: number;
+  [key: string]: unknown;
 }
 
 interface RequestWithActor extends Request {
@@ -34,6 +36,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let message = 'Internal server error';
     let errors: string[] | null = null;
     let errorCode = 'INTERNAL_ERROR';
+    let retryAfter: number | undefined;
 
     // HTTP exceptions
     if (exception instanceof HttpException) {
@@ -41,6 +44,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       const res = exception.getResponse() as HttpExceptionBody;
       const rawMessage = res?.message;
+
+      if (
+        typeof res === 'object' &&
+        res !== null &&
+        typeof res.retryAfter === 'number'
+      ) {
+        retryAfter = res.retryAfter;
+        response.setHeader('Retry-After', String(retryAfter));
+      }
 
       if (Array.isArray(rawMessage)) {
         message = rawMessage[0];
@@ -114,7 +126,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...(errors && !(status >= 500 && isProduction)
           ? { details: errors }
           : {}),
+        ...(typeof retryAfter === 'number' ? { retryAfter } : {}),
       },
+      ...(typeof retryAfter === 'number' ? { retryAfter } : {}),
       timestamp: new Date().toISOString(),
     });
   }

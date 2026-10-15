@@ -10,6 +10,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
+import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { NotificationsService } from './notifications.service';
@@ -22,6 +23,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
+  @Message('Notifications retrieved successfully')
   @ApiOperation({
     summary: 'List notifications for current user with cursor pagination',
   })
@@ -39,6 +41,7 @@ export class NotificationsController {
   }
 
   @Get('unread-count')
+  @Message('Unread notification count retrieved successfully')
   @ApiOperation({ summary: 'Get total unread notification count' })
   async getUnreadCount(@GetUser() user: AuthenticatedUser) {
     const count = await this.notificationsService.getUnreadCount(
@@ -49,6 +52,7 @@ export class NotificationsController {
   }
 
   @Get(':id')
+  @Message('Notification retrieved successfully')
   @ApiOperation({ summary: 'Get a notification for the current user' })
   async getById(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -58,6 +62,7 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
+  @Message('Notification marked as read successfully')
   @ApiOperation({ summary: 'Mark a notification as read' })
   async markAsRead(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -66,19 +71,22 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(id, user.id, user.role);
   }
 
-  @Patch('mark-all-read')
+  @Patch(['mark-all-read', 'read-all'])
+  @Message('All notifications marked as read successfully')
   @ApiOperation({ summary: 'Mark all unread notifications as read' })
   async markAllAsRead(@GetUser() user: AuthenticatedUser) {
     return this.notificationsService.markAllAsRead(user.id, user.role);
   }
 
-  @Delete('clear-all')
+  @Delete(['clear-all', 'read'])
+  @Message('All read notifications cleared successfully')
   @ApiOperation({ summary: 'Clear all read notifications' })
   async clearAll(@GetUser() user: AuthenticatedUser) {
     return this.notificationsService.clearAll(user.id, user.role);
   }
 
   @Delete(':id')
+  @Message('Notification deleted successfully')
   @ApiOperation({ summary: 'Delete a single notification' })
   async delete(
     @Param('id', new ParseUUIDPipe()) id: string,

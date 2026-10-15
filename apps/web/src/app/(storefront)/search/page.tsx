@@ -3,7 +3,7 @@ import { ProductCatalogView } from "@/component/product/ProductCatalogView";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { GlobalSearchBar } from "@/component/search/GlobalSearchBar";
 import Link from "@/components/navigation/AppLink";
-import { findCategoryFullPath } from "@/lib/cart-path";
+import { findCategoryFullPath } from "@/lib/category-tree";
 import { Search, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 

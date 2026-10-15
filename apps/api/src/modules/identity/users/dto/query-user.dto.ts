@@ -17,7 +17,12 @@ import { ToBoolean } from '@api/modules/shared/decorators/to-boolean.decorator';
  * - INACTIVE   — isActive = false, self-deactivated (no admin ban)
  * - BANNED     — isActive = false, deactivated by an admin
  */
-export const USER_STATUSES = ['ACTIVE', 'INACTIVE', 'BANNED'] as const;
+export const USER_STATUSES = [
+  'ACTIVE',
+  'INACTIVE',
+  'BANNED',
+  'SUSPENDED',
+] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export class QueryUserDto {

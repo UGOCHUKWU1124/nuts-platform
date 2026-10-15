@@ -6,6 +6,7 @@ import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
 import { Button } from "@/component/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AxiosError } from "axios";
 import { ArrowLeft,KeyRound,Mail,RefreshCw } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
@@ -86,7 +87,27 @@ export default function ForgotPasswordPage() {
       setResendTimer(60);
       toast.success("Password reset code sent to your email!");
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, "Failed to send reset code. Please try again."));
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        retryAfter?: number;
+        error?: { retryAfter?: number };
+      }>;
+      const respData = axiosErr?.response?.data;
+      const retryAfter =
+        (typeof respData?.retryAfter === "number" && respData.retryAfter) ||
+        (typeof respData?.error?.retryAfter === "number" && respData.error.retryAfter) ||
+        null;
+      const msg = getApiErrorMessage(err, "Failed to send reset code. Please try again.");
+
+      if (retryAfter && retryAfter > 0) {
+        setTargetEmail(data.email);
+        resetMethods.setValue("email", data.email);
+        setStep("verify");
+        setResendTimer(retryAfter);
+        toast.info(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }
@@ -101,7 +122,24 @@ export default function ForgotPasswordPage() {
       setResendTimer(60);
       toast.success("New verification code sent!");
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, "Failed to resend code. Please try again."));
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        retryAfter?: number;
+        error?: { retryAfter?: number };
+      }>;
+      const respData = axiosErr?.response?.data;
+      const retryAfter =
+        (typeof respData?.retryAfter === "number" && respData.retryAfter) ||
+        (typeof respData?.error?.retryAfter === "number" && respData.error.retryAfter) ||
+        null;
+      const msg = getApiErrorMessage(err, "Failed to resend code. Please try again.");
+
+      if (retryAfter && retryAfter > 0) {
+        setResendTimer(retryAfter);
+        toast.info(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }

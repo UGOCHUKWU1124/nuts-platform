@@ -77,9 +77,6 @@ export function NotificationDetail({ id }: { id: string }) {
               <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium">
                 {item.type.replaceAll("_", " ")}
               </span>
-              <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium">
-                {item.priority}
-              </span>
             </div>
             <h1 className="mt-4 text-2xl font-bold tracking-tight">{item.title}</h1>
             <time className="mt-2 block text-sm text-muted-foreground" dateTime={item.createdAt}>
@@ -97,23 +94,6 @@ export function NotificationDetail({ id }: { id: string }) {
             )}
           </div>
         </div>
-        {item.metadata && Object.keys(item.metadata).length > 0 && (
-          <section className="mt-8 border-t border-border pt-5">
-            <h2 className="text-sm font-semibold">Additional details</h2>
-            <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-              {Object.entries(item.metadata).map(([key, value]) => (
-                <div key={key} className="rounded-xl bg-secondary/50 p-3">
-                  <dt className="text-xs font-medium capitalize text-muted-foreground">
-                    {key.replaceAll(/([A-Z])/g, " $1").replaceAll("_", " ")}
-                  </dt>
-                  <dd className="mt-1 break-words text-sm">
-                    {typeof value === "string" ? value : JSON.stringify(value)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        )}
       </article>
     </main>
   );

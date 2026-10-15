@@ -643,6 +643,10 @@ export default function AccountSettingPage() {
         codeSubtitle="Sent to your email"
         confirmText="Confirm Deactivation"
         isLoading={deactivateMutation.isPending}
+        onRequestOtp={async () => {
+          await userService.requestDeactivateOtp();
+          toast.success("Verification code resent to your email.");
+        }}
         onSubmit={({ otpCode }) => deactivateMutation.mutate(otpCode)}
       />
 

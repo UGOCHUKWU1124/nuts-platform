@@ -62,21 +62,44 @@ export const userService = {
 };
 
 export const adminUserService = {
+  requestOtp() {
+    return adminApi.post<{ message: string }>("/admin/users/request-otp");
+  },
   list(params: ProductQueryParams & { search?: string; status?: string }) {
     return adminApi.get<AdminUserResponseDto[]>("/admin/users", { params });
   },
+  unsuspend(id: string, otpCode: string) {
+    return adminApi.patch<{ success: boolean }>(`/admin/users/${id}/unsuspend`, {}, {
+      headers: { "x-otp-code": otpCode },
+    });
+  },
   reactivate(id: string, otpCode: string) {
-    return adminApi.patch<{ success: boolean }>(`/admin/users/${id}/reactivate`, {}, {
+    return this.unsuspend(id, otpCode);
+  },
+  suspend(
+    id: string,
+    payload: { reason: string; duration?: string; suspendedUntil?: string },
+    otpCode: string,
+  ) {
+    return adminApi.patch<{ success: boolean; message: string }>(
+      `/admin/users/${id}/suspend`,
+      payload,
+      {
+        headers: { "x-otp-code": otpCode },
+      },
+    );
+  },
+  deactivate(
+    id: string,
+    payload: { reason: string; duration?: string; suspendedUntil?: string },
+    otpCode: string,
+  ) {
+    return this.suspend(id, payload, otpCode);
+  },
+  delete(id: string, otpCode: string) {
+    return adminApi.delete<void>(`/admin/users/${id}`, {
       headers: { "x-otp-code": otpCode },
     });
-  },
-  deactivate(id: string, payload: { reason: string }, otpCode: string) {
-    return adminApi.patch<{ success: boolean }>(`/admin/users/${id}/deactivate`, payload, {
-      headers: { "x-otp-code": otpCode },
-    });
-  },
-  delete(id: string) {
-    return adminApi.delete<void>(`/admin/users/${id}`);
   },
 };
 

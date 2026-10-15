@@ -103,7 +103,7 @@ export function setupSwagger(
     .setTitle('Nuts API — E-Commerce Platform')
     .setDescription(
       `## Overview REST API for the **NUTS Multi-Vendor Marketplace Platform**.
-Architected with NestJS, TypeScript, PostgreSQL, Prisma, Redis, and RabbitMQ following Domain-Driven Design (DDD) principles.
+Architected with NestJS 11, TypeScript 5.8, PostgreSQL 16, Prisma 7, Redis Alpine, and RabbitMQ following Domain-Driven Design (DDD) principles.
 
 The platform enforces strict zero-trust role isolation across three autonomous security boundaries:
 1. **Customer Storefront Domain** (Shoppers, Cart, Checkout, Customer Orders, Customer Wallet, Reviews)
@@ -114,7 +114,7 @@ The platform enforces strict zero-trust role isolation across three autonomous s
 
 ## Authentication & Authorization Model
 
-All protected operations enforce a **zero-trust capability-driven security model**. Authentication identities are strictly separated; role spoofing and cross-domain access are physically prevented by database isolation and backend \`RolesGuard\` validation.
+All protected operations enforce a **zero-trust capability-driven security model**. Authentication identities are strictly partitioned across database tables and logical boundaries; role spoofing and cross-domain access are physically prevented by database isolation and backend \`RolesGuard\` validation.
 
 ### Security Principals & Server-Driven Capabilities
 Every authenticated identity returns a capability manifest from \`GET /api/v1/auth/me\` that dictates valid client actions:
@@ -132,49 +132,135 @@ Every authenticated identity returns a capability manifest from \`GET /api/v1/au
 ## Session & Token Management
 
 The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to OWASP ASVS:
-- **Access Token:** Short-lived JWT (15-minute lifespan). Encodes identity (\`sub\`, \`email\`, \`role\`) and permissions.
-- **Refresh Token:** Long-lived rotating cryptographic token (7-day lifespan). Bound to a single client device session stored in Redis/DB with automatic reuse detection and replay mitigation.
+- **Protocol Token Type (\`tokenType\`):** Always \`'Bearer'\`, indicating the standard HTTP Authorization header scheme (\`Authorization: Bearer <accessToken>\`).
+- **Access Token (\`accessToken\`):** Short-lived JWT (15-minute lifespan). Stateless bearer credential carrying identity claims (\`sub\`, \`email\`, \`role\`, \`tokenVersion\`, \`sessionId\`). Returned in JSON login/refresh responses for client in-memory storage, and set as an \`accessToken\` HttpOnly cookie.
+- **Refresh Token (\`refreshToken\`):** Long-lived rotating cryptographic token (7-day lifespan). Bound to a single client device session stored in Redis/DB with automatic reuse detection and replay mitigation. Delivered **strictly via the \`refreshToken\` HttpOnly cookie** and never exposed in JSON responses.
+- **One-Time Passcode (\`otp\`):** Ephemeral 6-digit numeric code (10-minute TTL) stored in Redis for registration email verification, sensitive account modifications, and password resets.
+- **Session Identifier (\`sessionId\` / \`refreshTokenId\`):** Cryptographic UUID tracking each active device session, enabling per-device logout and multi-session revocation (\`POST /api/v1/auth/logout-all\`).
 
 ### Supported Authentication Transports
 1. **HttpOnly Cookies (Standard for Web Clients):**
    - Automatically issued upon successful authentication as \`Secure\`, \`HttpOnly\`, \`SameSite=Lax\` cookies:
-     - \`access_token\`: Primary authentication bearer cookie.
-     - \`refresh_token\`: Secret refresh cookie scoped to session endpoints.
-     - \`session_active\`: Client-readable session state hint.
+     - \`accessToken\`: Primary authentication bearer cookie.
+     - \`refreshToken\`: Rotating session refresh cookie scoped to session endpoints (\`path: '/'\`).
 2. **Authorization Header (Mobile Clients & Swagger UI Testing):**
    - Provide the JWT in the standard header:
-     \`Authorization: Bearer <access_token>\`
+     \`Authorization: Bearer <accessToken>\`
    - Use the **"Authorize"** button in Swagger UI to test protected endpoints.
 
 ---
 
-## Domain Authentication Endpoints
+## Security Architecture & Attack Defenses
 
-### 1. Customer Authentication (\`/api/v1/auth\`)
+NUTS Platform implements comprehensive defense-in-depth against top web vulnerabilities:
+
+1. **Cross-Site Scripting (XSS) Immunity:**
+   - Client access tokens reside strictly in JavaScript memory closures (never in \`localStorage\` or \`sessionStorage\`).
+   - Refresh tokens are delivered via \`HttpOnly\`, \`Secure\`, \`SameSite=Lax\` cookies, physically inaccessible to browser JavaScript.
+   - Dynamic Content Security Policy (CSP) with cryptographic Web Crypto nonces blocks inline script execution.
+
+2. **Cross-Site Request Forgery (CSRF) Mitigation:**
+   - Double-Submit Cookie pattern with custom \`x-csrf-token\` headers on state-changing requests (\`POST\`, \`PUT\`, \`PATCH\`, \`DELETE\`).
+   - Validated against cryptographically signed HMAC nonces. Server-to-server payment webhooks (\`/payments/webhook\`) bypass CSRF checks at line 1 of middleware, validated instead by timing-safe HMAC-SHA512 request signature verification.
+
+3. **Brute Force & Credential Stuffing Defense:**
+   - Redis-backed sliding-window rate limiters (\`@StrictThrottle\`, \`@RefreshTokenThrottle\`, \`@OtpThrottle\`) returning \`429 Too Many Requests\` with \`Retry-After\`.
+   - Account lockout with exponential delay backoff on consecutive failed attempts.
+   - Constant-time password validation using \`bcrypt.compare\` (cost factor 12) with fake-hash comparison (\`UNKNOWN_ACCOUNT_PASSWORD_HASH\`) against non-existent accounts, eliminating username enumeration via timing attacks.
+
+4. **Token Hijacking & Session Replay Defenses:**
+   - RFC 6819 single-use refresh token rotation with compare-and-swap (CAS) semantics.
+   - 15-second Redis grace period window (\`auth:grace:{refreshId}\`) permitting legitimate in-flight network retries and multi-tab single-flight refresh without false-positive session revocation.
+   - Immediate cluster-wide invalidation via cached security stamps (\`auth:stamp:{role}:{userId}\`) upon password change, account suspension, or logout.
+
+5. **Injection & Mass Assignment Prevention:**
+   - PostgreSQL interactions executed via Prisma ORM with parameterized queries, eliminating SQL injection.
+   - Strict NestJS validation pipes (\`whitelist: true\`, \`forbidNonWhitelisted: true\`) rejecting extraneous payload attributes.
+   - Compile-time safe selects (\`auth.selects.ts\`) physically excluding sensitive fields (e.g. \`password\`) from API outputs.
+
+6. **Broken Object Level Authorization (BOLA / IDOR):**
+   - Multi-tenant tenant/vendor isolation enforced in service queries (\`where: { id, vendorId }\`, \`where: { id, userId }\`).
+   - Administrative and vendor backoffices physically decoupled from storefront purchase flows.
+
+7. **Financial Fraud & Double-Spending:**
+   - \`DECIMAL(10, 2)\` fixed-point arithmetic using \`Prisma.Decimal\`, preventing IEEE-754 precision drift.
+   - Conditional atomic SQL wallet debits (\`WHERE balance >= :amount\`).
+   - Two-phase escrow crediting 85% merchant earnings to \`pendingBalance\` upon payment confirmation, unlocking to available \`balance\` strictly upon order delivery (\`DELIVERED\`).
+
+---
+
+## Concurrency & Race Condition Controls
+
+- **Candidate Cart Selection & Pessimistic Row Locking (\`FOR UPDATE\`):**
+  - Checkout executes inside an atomic transaction with row-level locks on all user carts.
+  - Multi-cart evaluation in-memory selects the active cart with items (\`cartItems.length > 0\`), pruning empty orphan carts and evicting Redis cache (\`user:cart:v3:\${userId}\`).
+- **Inventory Matrix & Deadlock Prevention:**
+  - Stock decrements execute atomically: \`UPDATE products SET stock = stock - :qty WHERE stock >= :qty\`.
+  - Multiple items in a batch are sorted lexicographically by ID prior to row acquisition, eliminating circular deadlock cycles (\`SQLSTATE 40P01\`).
+- **Signed Asynchronous Payment Settlement:**
+  - Paystack HMAC-SHA512 signed webhooks authoritatively settle \`PENDING\` orders to \`PROCESSING\` even if client redirect fails or network latency disrupts callback queries.
+  - Metadata fallback resolves payments by \`orderId\` when reference strings differ.
+- **Automated Unpaid Order Sweeper (\`UnpaidOrdersCron\`):**
+  - Distributed cron running every 5 minutes under atomic Redis lock (\`cron:lock:unpaid-orders\`). Sweeps orders in \`PENDING\` state older than 30 minutes, restoring inventory stock and setting status to \`CANCELLED\`.
+
+---
+
+## Domain API Endpoints
+
+### 1. Customer Authentication & Identity (\`/api/v1/auth\`, \`/api/v1/account\`)
 - \`POST /api/v1/auth/request-otp\` — Send registration / verification OTP
 - \`POST /api/v1/auth/register\` — Register customer account (requires verified email OTP)
 - \`POST /api/v1/auth/login\` — Customer credentials login (issues session cookies)
 - \`POST /api/v1/auth/refresh\` — Rotate customer refresh session and tokens
 - \`POST /api/v1/auth/logout\` — Revoke current device session and clear cookies
+- \`POST /api/v1/auth/logout-all\` — Invalidate all active sessions across all devices and clear cookies
 - \`GET  /api/v1/auth/me\` — Retrieve authenticated identity and capability flags (\`canPurchase\`, \`canSell\`, \`canAdminister\`)
 - \`POST /api/v1/auth/forgot-password\` & \`POST /api/v1/auth/reset-password\`
+- \`GET  /api/v1/account\` (or \`/api/v1/users\`) — Retrieve customer profile
+- \`PATCH /api/v1/account\` — Update customer profile details
+- \`PATCH /api/v1/account/deactivate\` — Self-deactivate account
+- \`POST /api/v1/account/reactivate\` — Publicly restore deactivated account within 60-day grace period
 
-### 2. Vendor / Merchant Authentication (\`/api/v1/vendors/auth\` or \`/api/v1/vendors\`)
+### 2. Vendor / Merchant Operations (\`/api/v1/vendors\`, \`/api/v1/vendors/auth\`)
 - \`POST /api/v1/vendors/auth/otp/request\` — Request vendor registration email OTP
 - \`POST /api/v1/vendors/register\` — Register vendor store and wallet (requires verified email OTP)
 - \`POST /api/v1/vendors/login\` — Vendor merchant login (issues session cookies)
 - \`POST /api/v1/vendors/refresh\` — Rotate vendor refresh session and tokens
 - \`POST /api/v1/vendors/logout\` — Revoke vendor session and clear cookies
-- \`POST /api/v1/vendors/auth/forgot-password/otp/request\` & \`POST /api/v1/vendors/auth/forgot-password/reset\`
+- \`GET  /api/v1/vendors/me\` — Retrieve authenticated vendor identity, storeName, and storeSlug
+- \`GET  /api/v1/vendors/account\` — Retrieve full vendor business profile
+- \`PATCH /api/v1/vendors/account\` — Update vendor store settings and branding
+- \`GET  /api/v1/vendors/products\` & \`POST /api/v1/vendors/products\` — Manage merchant catalog
+- \`GET  /api/v1/vendors/orders\` — Manage merchant orders and status transitions
+- \`GET  /api/v1/vendors/wallet\` — Inspect merchant wallet and escrow balances
+- \`PATCH /api/v1/vendors/discounts/:id/reactivate\` — Reactivate vendor promotional discount code
 
-### 3. Administrator Authentication (\`/api/v1/admin/auth\`)
+### 3. Administrator Operations (\`/api/v1/admin\`)
 - \`POST /api/v1/admin/auth/login\` — Administrator login (enforces strict \`ADMIN\` role verification)
 - \`POST /api/v1/admin/auth/refresh\` — Rotate administrator session and tokens
 - \`POST /api/v1/admin/auth/logout\` — Revoke administrator session and clear cookies
 - \`GET  /api/v1/admin/auth/me\` — Retrieve authenticated administrator profile
-- \`POST /api/v1/admin/auth/create-admin\` — Provision additional administrator accounts (Admin only)
+- \`GET  /api/v1/admin/users\` — Search, inspect, suspend, and reactivate platform users
+- \`GET  /api/v1/admin/vendors\` & \`PATCH /api/v1/admin/vendors/:id/approve\` — Vendor partner approvals
+- \`GET  /api/v1/admin/search/status\` — Operational health diagnostics for search indexing and Redis cache
+- \`PATCH /api/v1/admin/discounts/:id/reactivate\` — Reactivate platform-wide discount campaign
 
-### 4. Real-Time Notifications & Streaming (\`/api/v1/notifications\`)
+### 4. Shopping Cart & Checkout Orchestration (\`/api/v1/cart\`, \`/api/v1/orders/checkout\`)
+- \`GET    /api/v1/cart\` — Retrieve authenticated customer's active cart with products and variants
+- \`GET    /api/v1/cart/discount-preview\` — Preview cart totals with applied discount code
+- \`POST   /api/v1/cart/items/:productId\` — Add product or variant to cart with specified quantity
+- \`PATCH  /api/v1/cart/items/:productId\` — Update cart item quantity atomically (quantity 0 removes item)
+- \`DELETE /api/v1/cart/items/:productId\` — Remove specific product or variant from cart
+- \`DELETE /api/v1/cart\` — Clear all items from current active cart
+- \`POST   /api/v1/orders/checkout\` — Execute order checkout under pessimistic row locks (\`FOR UPDATE\`), selecting non-empty candidate carts, pruning empty orphan carts, and invalidating Redis cart cache (\`user:cart:v3:\${userId}\`)
+
+### 5. Payments & Webhooks (\`/api/v1/payments\`)
+- \`POST /api/v1/payments/otp/request\` — Request payment authorization OTP for order
+- \`POST /api/v1/payments/initialize\` — Initialize Paystack payment transaction (requires verified OTP)
+- \`POST /api/v1/payments/verify\` — Verify Paystack payment reference
+- \`POST /api/v1/payments/webhook\` — Cryptographically signed Paystack HMAC-SHA512 webhook handler
+
+### 6. Real-Time Notifications & Streaming (\`/api/v1/notifications\`)
 - \`GET   /api/v1/notifications\` — List paginated notifications (role-scoped, supports unreadOnly filter)
 - \`GET   /api/v1/notifications/unread-count\` — Retrieve live unread notification count
 - \`PATCH /api/v1/notifications/:id/read\` — Mark a single notification as read
@@ -183,13 +269,17 @@ The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to
 
 ---
 
-## Resiliency, Rate Limiting & Security
+## Unified Response Envelope
 
-- **Strict Throttling:** Sensitive endpoints (auth, OTP, checkout) enforce strict rate limits (e.g. 5 req/min). Throttled requests respond with \`429 Too Many Requests\` and include a \`Retry-After\` header.
-- **Account Lockout:** Multiple consecutive failed password attempts trigger temporary account locks with exponential backoff.
-- **CSRF Defense:** State-changing cookie-authenticated requests enforce double-submit CSRF origin and token validation.
-- **Unified Response Envelope:** All endpoints respond with the standard RFC-compliant envelope:
-  \`{ "success": boolean, "statusCode": number, "data": T, "timestamp": string, "requestId": string }\``,
+All endpoints respond with the standard RFC-compliant envelope:
+\`\`\`json
+{
+  "success": true,
+  "message": "Operation completed successfully",
+  "data": { ... },
+  "timestamp": "2026-10-15T13:30:00.000Z"
+}
+\`\`\``,
     )
     .setVersion('1.0.0');
 
@@ -363,12 +453,19 @@ The platform employs a **Dual-Token Ephemeral Session Architecture** adhering to
       },
       'JWT-auth',
     )
-    .addCookieAuth('access_token', {
+    .addCookieAuth('accessToken', {
       type: 'apiKey',
       in: 'cookie',
-      name: 'access_token',
+      name: 'accessToken',
       description:
-        'HttpOnly access_token cookie automatically dispatched on login/register for browser-based clients.',
+        'HttpOnly accessToken cookie automatically dispatched on login/register for browser-based clients.',
+    })
+    .addCookieAuth('refreshToken', {
+      type: 'apiKey',
+      in: 'cookie',
+      name: 'refreshToken',
+      description:
+        'HttpOnly refreshToken cookie automatically dispatched for session rotation.',
     })
     .build();
 

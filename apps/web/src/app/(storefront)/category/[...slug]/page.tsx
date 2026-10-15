@@ -6,7 +6,7 @@ serverGetProductReviews,
 serverGetProducts,
 } from "@/api/server";
 import { HierarchicalCategoryView } from "@/component/domain/category/HierarchicalCategoryView";
-import { findCategoryNode,resolveCategoryPath } from "@/lib/cart-path";
+import { findCategoryNode,resolveCategoryPath } from "@/lib/category-tree";
 import { Metadata } from "next";
 import type { ProductCardDto } from "@/api/dto/product";
 import type { PaginationMeta, CursorPaginationMeta } from "@/api/core/types";

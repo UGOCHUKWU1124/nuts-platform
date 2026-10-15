@@ -246,4 +246,32 @@ describe('CsrfMiddleware', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(status).not.toHaveBeenCalled();
   });
+
+  it('allows referral code validation without pre-existing CSRF cookie from trusted origin', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/account/referral/validate',
+      configurable: true,
+    });
+    req.cookies = {};
+    res.cookie = jest.fn();
+    res.setHeader = jest.fn();
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  it('allows account reactivation without pre-existing CSRF cookie from trusted origin', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/account/reactivate',
+      configurable: true,
+    });
+    req.cookies = {};
+    res.cookie = jest.fn();
+    res.setHeader = jest.fn();
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+  });
 });

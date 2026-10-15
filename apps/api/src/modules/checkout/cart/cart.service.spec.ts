@@ -20,6 +20,7 @@ describe('CartService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       cartItem: {
         findFirst: jest.fn().mockResolvedValue(null),

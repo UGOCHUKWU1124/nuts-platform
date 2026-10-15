@@ -99,12 +99,17 @@ export function generateStatusNote(params: {
       note = 'Status updated';
     }
   } else {
-    // System-triggered transition (e.g., payment confirmed)
+    // System-triggered transition (e.g., payment confirmed or auto-expired)
     if (
       fromStatus === OrderStatus.PENDING &&
       toStatus === OrderStatus.PROCESSING
     ) {
       note = 'Payment confirmed';
+    } else if (
+      fromStatus === OrderStatus.PENDING &&
+      toStatus === OrderStatus.CANCELLED
+    ) {
+      note = 'Cancelled automatically';
     } else {
       note = 'Status updated';
     }

@@ -2,6 +2,7 @@ import { authBroadcast } from "@/lib/auth-events";
 import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import {
   clearAuthTokens,
+  decodeRoleFromToken,
   getAuthToken,
   isSessionKnownUnauthenticated,
   markSessionUnauthenticated,
@@ -14,11 +15,13 @@ declare module "axios" {
   interface AxiosRequestConfig {
     authRole?: AuthRole | null;
     _retry?: boolean;
+    _csrfRetry?: boolean;
   }
 
   interface InternalAxiosRequestConfig {
     authRole?: AuthRole | null;
     _retry?: boolean;
+    _csrfRetry?: boolean;
   }
 }
 
@@ -26,20 +29,11 @@ let inMemoryCsrfToken: string | null = null;
 
 export const getCsrfToken = (): string | null => {
   if (inMemoryCsrfToken) return inMemoryCsrfToken;
-  if (typeof sessionStorage !== "undefined") {
-    const stored = sessionStorage.getItem("nuts_csrf_token");
-    if (stored) {
-      inMemoryCsrfToken = stored;
-      return inMemoryCsrfToken;
-    }
-  }
-  // Fallback: check legacy document.cookie and clean it up
+  // Read directly from the secure csrf_token cookie set by the server
   if (typeof document !== "undefined") {
     const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
     if (match?.[1]) {
       inMemoryCsrfToken = decodeURIComponent(match[1]);
-      // Clean up legacy web-domain cookie to eliminate duplicate CSRF cookies
-      document.cookie = "csrf_token=; Max-Age=0; path=/;";
       return inMemoryCsrfToken;
     }
   }
@@ -48,17 +42,6 @@ export const getCsrfToken = (): string | null => {
 
 export const setCsrfToken = (token: string | null | undefined) => {
   inMemoryCsrfToken = token || null;
-  if (typeof sessionStorage !== "undefined") {
-    if (token) {
-      sessionStorage.setItem("nuts_csrf_token", token);
-    } else {
-      sessionStorage.removeItem("nuts_csrf_token");
-    }
-  }
-  if (typeof document !== "undefined") {
-    // Ensure no redundant web-domain cookie remains
-    document.cookie = "csrf_token=; Max-Age=0; path=/;";
-  }
 };
 
 export const getApiBaseUrl = (): string => {
@@ -130,6 +113,7 @@ export interface RefreshSessionResult {
   success: boolean;
   accessToken?: string;
   user?: unknown;
+  role?: AuthRole;
   reason?: "expired" | "unavailable" | "invalid-response";
 }
 
@@ -182,14 +166,29 @@ async function executeTokenRefresh(
       return { success: false, reason: "invalid-response" };
     }
 
-    const user = data.user ?? data.vendor;
-    setAuthTokens(role, { accessToken: data.accessToken });
-    authBroadcast.publish({ type: "SESSION_REFRESHED", role, user });
+    const user = data.user ?? data.vendor ?? data.admin;
+    if (!user) {
+      return { success: false, reason: "invalid-response" };
+    }
+
+    const tokenRole = decodeRoleFromToken(data.accessToken);
+    const resolvedRole: AuthRole =
+      tokenRole ||
+      (user.role ? (String(user.role).toLowerCase() as AuthRole) : null) ||
+      role;
+
+    setAuthTokens(resolvedRole, { accessToken: data.accessToken });
+    authBroadcast.publish({
+      type: "SESSION_REFRESHED",
+      role: resolvedRole,
+      user: { ...user, role: resolvedRole },
+    });
 
     return {
       success: true,
       accessToken: data.accessToken,
-      user,
+      user: { ...user, role: resolvedRole },
+      role: resolvedRole,
     };
   } catch (error) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
@@ -288,6 +287,22 @@ axiosInstance.interceptors.response.use(
 
     const originalRequest = error.config;
     if (!originalRequest) return Promise.reject(error);
+
+    const isCsrfError =
+      error.response?.status === 403 &&
+      (error.response?.data?.errors?.[0]?.code === "CSRF_ERROR" ||
+        error.response?.data?.message === "CSRF token validation failed");
+
+    if (isCsrfError && !originalRequest._csrfRetry) {
+      originalRequest._csrfRetry = true;
+      inMemoryCsrfToken = null;
+      await ensureCsrfToken();
+      const freshCsrf = getCsrfToken();
+      if (freshCsrf) {
+        setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
+      }
+      return axiosInstance(originalRequest);
+    }
 
     const role = originalRequest.authRole;
     if (

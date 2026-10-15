@@ -5,7 +5,6 @@ import { orderService,paymentService } from "@/api";
 import { getApiErrorMessage } from "@/api/core/error";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { ConfirmDialog } from "@/component/modal/ConfirmDialog";
-import { OtpPromptDialog } from "@/component/modal/OtpPromptDialog";
 import { OrderStatusBadge } from "@/component/order/OrderItemSnapshot";
 import { WriteReviewDialog } from "@/component/review/WriteReviewDialog";
 import { Button } from "@/component/ui/button";
@@ -25,7 +24,7 @@ Star
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function OrderDetailPage() {
@@ -37,8 +36,7 @@ export default function OrderDetailPage() {
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [isEditShippingOpen, setIsEditShippingOpen] = useState(false);
   const [shippingAddressText, setShippingAddressText] = useState("");
-  const [isPaymentOtpOpen, setIsPaymentOtpOpen] = useState(false);
-  const [isRequestingPaymentOtp, setIsRequestingPaymentOtp] = useState(false);
+  const [isInitializingPayment, setIsInitializingPayment] = useState(false);
 
   // 1. Fetch Order
   const { data: order, isLoading } = useQuery({
@@ -48,9 +46,41 @@ export default function OrderDetailPage() {
       return data;
     },
     enabled: !!id,
-    staleTime: 1000 * 60 * 10,
+    refetchInterval: (query) =>
+      query.state.data?.status === "PENDING" ? 3000 : false,
+    staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
   });
+
+  // Background self-healing check: automatically verify payment if order is PENDING
+  useEffect(() => {
+    if (!order || order.status !== "PENDING") return;
+
+    let cancelled = false;
+    const verifyPendingPayment = async () => {
+      try {
+        const { data: payment } = await paymentService.getByOrderId(id);
+        if (cancelled || !payment?.transactionReference) return;
+
+        if (payment.status === "SUCCESS") {
+          qc.invalidateQueries({ queryKey: queryKey.order.detail(id) });
+          return;
+        }
+
+        const verifyRes = await paymentService.verify(payment.transactionReference);
+        if (!cancelled && verifyRes.data?.status === "SUCCESS") {
+          qc.invalidateQueries({ queryKey: queryKey.order.detail(id) });
+        }
+      } catch {
+        // Silent recovery — background polling and webhook will settle state
+      }
+    };
+
+    void verifyPendingPayment();
+    return () => {
+      cancelled = true;
+    };
+  }, [order, id, qc]);
 
   // Cancel Mutation
   const cancelMutation = useMutation({
@@ -77,39 +107,27 @@ export default function OrderDetailPage() {
       toast.error(getApiErrorMessage(err, "Failed to update shipping address")),
   });
 
-  // Payment Initialization Flow
+  // Direct Paystack Initialization Flow
   const handleInitiatePayment = async () => {
     try {
-      setIsRequestingPaymentOtp(true);
-      await paymentService.requestOtp(id);
-      toast.success("A payment authorization code has been sent to your email.");
-      setIsPaymentOtpOpen(true);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to request payment authorization code."));
-    } finally {
-      setIsRequestingPaymentOtp(false);
-    }
-  };
-
-  const paymentMutation = useMutation({
-    mutationFn: (otpCode: string) => paymentService.initialize(id, otpCode),
-    onSuccess: (res) => {
-      setIsPaymentOtpOpen(false);
+      setIsInitializingPayment(true);
+      const res = await paymentService.initialize(id);
       const authUrl = res.data?.authorizationUrl;
       if (authUrl) {
         const checkoutUrl = safePaystackCheckoutUrl(authUrl);
         if (!checkoutUrl) throw new Error("Invalid Paystack checkout URL");
-        toast.success("Redirecting to Paystack to complete payment...");
+        toast.success("Redirecting to Paystack...");
         window.location.assign(checkoutUrl);
       } else {
         toast.success("Payment initiated successfully");
         qc.invalidateQueries({ queryKey: queryKey.order.detail(id) });
       }
-    },
-    onError: (err: unknown) => {
-      toast.error(getApiErrorMessage(err, "Payment initialization failed. Check your OTP code."));
-    },
-  });
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Payment initialization failed. Please retry."));
+    } finally {
+      setIsInitializingPayment(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -194,12 +212,12 @@ export default function OrderDetailPage() {
                 <Button
                   type="button"
                   size="sm"
-                  disabled={isRequestingPaymentOtp}
+                  disabled={isInitializingPayment}
                   onClick={handleInitiatePayment}
                   className="rounded-xl text-xs font-bold bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 shadow-xs flex items-center gap-2"
                 >
                   <CreditCard className="h-3.5 w-3.5" />
-                  <span>{isRequestingPaymentOtp ? "Requesting OTP..." : "Pay with Paystack"}</span>
+                  <span>{isInitializingPayment ? "Connecting..." : "Pay with Paystack"}</span>
                 </Button>
               </>
             )}
@@ -222,7 +240,7 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="text-left sm:text-right">
-              <p className="text-xs text-muted-foreground">Total Final Amount</p>
+              <p className="text-xs text-muted-foreground">{isPending ? "Amount Due" : "Total Paid Amount"}</p>
               <p className="text-2xl font-bold text-foreground">{formatPrice(order.finalAmount)}</p>
             </div>
           </div>
@@ -468,21 +486,6 @@ export default function OrderDetailPage() {
             </div>
           </div>
         )}
-
-        {/* Dialog 3: Payment OTP Prompt */}
-        <OtpPromptDialog
-          open={isPaymentOtpOpen}
-          onOpenChange={setIsPaymentOtpOpen}
-          title="Payment Authorization"
-          description={`Enter the 6-digit verification code sent to your email to authorize the payment of ${formatPrice(
-            order.finalAmount
-          )}.`}
-          codeLabel="Payment Verification Code"
-          codeSubtitle="Sent to your email"
-          confirmText="Proceed to Paystack"
-          isLoading={paymentMutation.isPending}
-          onSubmit={({ otpCode }) => paymentMutation.mutate(otpCode)}
-        />
       </div>
     </CustomerLayout>
   );

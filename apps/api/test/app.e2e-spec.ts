@@ -50,6 +50,7 @@ describe('Nuts API (e2e)', () => {
 
     const mockOtpService = {
       verifyOtp: jest.fn().mockResolvedValue(true),
+      consumeVerification: jest.fn().mockResolvedValue(true),
       sendOtp: jest.fn().mockResolvedValue({ success: true }),
     };
 
@@ -70,6 +71,13 @@ describe('Nuts API (e2e)', () => {
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      userAuthSession: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'sess-1' }),
+        update: jest.fn(),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       userWallet: {
         findUnique: jest.fn(),

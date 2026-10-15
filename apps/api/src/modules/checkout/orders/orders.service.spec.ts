@@ -59,10 +59,13 @@ describe('OrdersService', () => {
       },
       cart: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
+        deleteMany: jest.fn(),
         update: jest.fn(),
       },
       cartItem: {
         update: jest.fn(),
+        deleteMany: jest.fn(),
       },
       user: {
         findUnique: jest.fn().mockResolvedValue({

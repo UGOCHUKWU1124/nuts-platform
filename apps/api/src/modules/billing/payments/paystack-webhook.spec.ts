@@ -178,6 +178,61 @@ describe('Paystack Webhook & Payment Verification Security', () => {
       });
     });
 
+    it('successfully advances order to PROCESSING using signed webhook data when paystackVerify fails or times out', async () => {
+      const payload = {
+        event: 'charge.success',
+        data: {
+          reference: 'TX-REF-FALLBACK',
+          status: 'success',
+          amount: 10000, // 100 NGN in kobo
+          currency: 'NGN',
+          metadata: {
+            order_id: 'ord-fallback',
+          },
+        },
+      };
+      const rawBody = JSON.stringify(payload);
+      const signature = generateSignature(rawBody);
+
+      const existingPayment = {
+        id: 'pay-fallback',
+        orderId: 'ord-fallback',
+        amount: new Prisma.Decimal(100),
+        currency: 'NGN',
+        status: PaymentStatus.PENDING,
+        transactionReference: 'TX-REF-FALLBACK',
+      };
+
+      mockPrisma.payment.findUnique.mockResolvedValue(existingPayment);
+
+      // Paystack verify times out or returns null
+      jest.spyOn<any, any>(service, 'paystackVerify').mockResolvedValue(null);
+
+      mockPrisma.payment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.order.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.order.findUnique.mockResolvedValue({
+        orderNumber: 'ORD-FALLBACK',
+        orderItems: [
+          { vendorId: 'v-1', quantity: 1, unitPrice: new Prisma.Decimal(100) },
+        ],
+      });
+      mockPrisma.payment.findUniqueOrThrow.mockResolvedValue({
+        ...existingPayment,
+        status: PaymentStatus.SUCCESS,
+      });
+
+      await service.handleWebhook(rawBody, signature);
+
+      expect(mockPrisma.payment.updateMany).toHaveBeenCalledWith({
+        where: { id: 'pay-fallback', status: PaymentStatus.PENDING },
+        data: expect.objectContaining({ status: PaymentStatus.SUCCESS }),
+      });
+      expect(mockPrisma.order.updateMany).toHaveBeenCalledWith({
+        where: { id: 'ord-fallback', status: OrderStatus.PENDING },
+        data: { status: OrderStatus.PROCESSING },
+      });
+    });
+
     it('rejects payment and marks FAILED if Paystack amount does not match order amount', async () => {
       const payload = {
         event: 'charge.success',
