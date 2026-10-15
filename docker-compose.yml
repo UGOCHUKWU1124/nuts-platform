@@ -140,11 +140,11 @@ services:
     networks:
       - nuts_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
-      interval: 20s
-      timeout: 5s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 3s
       retries: 5
-      start_period: 20s
+      start_period: 15s
 
   # ── Next.js Client (Production) ────────────────────────────────────────────
   client-prod:
@@ -181,11 +181,11 @@ services:
     networks:
       - nuts_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
-      interval: 30s
-      timeout: 5s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 3s
       retries: 3
-      start_period: 30s
+      start_period: 15s
 
   # ── Nginx Reverse Proxy (Production Only) ──────────────────────────────────
   nginx:
