@@ -9,7 +9,8 @@ const API_BASE =
 const isDevEnv = process.env.NODE_ENV === "development";
 const FETCH_RETRIES = 2;
 const FETCH_RETRY_MS = 100;
-const FETCH_TIMEOUT_MS = isDevEnv ? 15_000 : 10_000;
+const FETCH_TIMEOUT_MS =
+  Number(process.env.SERVER_FETCH_TIMEOUT_MS) || (isDevEnv ? 15_000 : 3_500);
 const SLOW_UPSTREAM_MS = Number(process.env.SERVER_FETCH_SLOW_MS) || 1_000;
 
 export interface ServerEnvelope<T> {
