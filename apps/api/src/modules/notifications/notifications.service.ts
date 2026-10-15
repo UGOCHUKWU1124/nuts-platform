@@ -77,6 +77,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
     try {
       this.subClient = this.redis.duplicate();
+      this.subClient.on('error', (err) => {
+        this.logger.warn(
+          `Redis notification pub/sub subscriber error: ${getErrorMessage(err)}`,
+        );
+      });
       await this.subClient.subscribe(NOTIFICATION_REDIS_CHANNEL);
 
       this.subClient.on('message', (channel, message) => {
