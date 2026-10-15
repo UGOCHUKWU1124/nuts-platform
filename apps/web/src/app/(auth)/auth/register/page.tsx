@@ -1,6 +1,7 @@
 "use client";
 
 import { publicApi } from "@/api/core/client";
+import { authService } from "@/api/modules/auth";
 import type { RegisterResponseDto, VerifyOtpResponseDto } from "@/api/dto/auth";
 import { referralService } from "@/api/referral";
 import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
@@ -12,16 +13,14 @@ import { AxiosError } from "axios";
 import {
   ArrowLeft,
   ArrowRight,
-  Check,
   CheckCircle2,
+  Clock,
   Gift,
-  KeyRound,
   Loader2,
   Mail,
   MapPin,
   RefreshCw,
   ShieldCheck,
-  User,
   UserPlus,
   XCircle,
 } from "lucide-react";
@@ -72,7 +71,7 @@ export default function RegisterPage() {
   const [activeStep, setActiveStep] = useState<Step>(1);
   const [resendTimer, setResendTimer] = useState(0);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   // Referral code live-validation state
   const [referralValid, setReferralValid] = useState<boolean | null>(null);
@@ -105,9 +104,10 @@ export default function RegisterPage() {
   const {
     handleSubmit,
     setValue,
+    setError,
     trigger,
     getValues,
-    formState: { isSubmitting },
+    formState: { isSubmitting, errors },
   } = methods;
 
   const currentEmail = useWatch({ control: methods.control, name: "email" });
@@ -170,21 +170,59 @@ export default function RegisterPage() {
     }
   }, [resendTimer]);
 
+  // Keep browser tab title synchronized with OTP countdown
+  useEffect(() => {
+    if (activeStep === 2 && resendTimer > 0) {
+      document.title = `(${resendTimer}s) Verify OTP — NUTS`;
+    } else if (activeStep === 2) {
+      document.title = "Verify OTP — NUTS";
+    }
+  }, [resendTimer, activeStep]);
+
+  function extractRetryAfter(err: unknown): number | null {
+    const axiosErr = err as AxiosError<{
+      message?: string;
+      retryAfter?: number;
+      error?: { retryAfter?: number };
+    }>;
+    const data = axiosErr?.response?.data;
+    if (typeof data?.retryAfter === "number") return data.retryAfter;
+    if (typeof data?.error?.retryAfter === "number") return data.error.retryAfter;
+    const header = axiosErr?.response?.headers?.["retry-after"];
+    if (header && !isNaN(Number(header))) return Number(header);
+    const msg = typeof data?.message === "string" ? data.message : "";
+    const match = msg.match(/(\d+)\s*(?:second|sec|s)/i);
+    if (match && match[1]) return parseInt(match[1], 10);
+    return null;
+  }
+
   // Request OTP from API
-  async function requestOtpCode(emailToVerify: string): Promise<boolean> {
+  async function requestOtpCode(emailToVerify?: string): Promise<boolean> {
+    const target = emailToVerify || currentEmail || getValues("email");
+    if (!target) {
+      toast.error("Please enter your email address first.");
+      return false;
+    }
     setIsSendingOtp(true);
     try {
       await publicApi.post<VerifyOtpResponseDto>("/auth/otp/request", {
-        email: emailToVerify,
+        email: target,
       });
-      setOtpSent(true);
       setResendTimer(60);
-      toast.success(`Verification code dispatched to ${emailToVerify}`);
+      toast.success(`Verification code dispatched to ${target}`);
       return true;
     } catch (err: unknown) {
+      const retryAfter = extractRetryAfter(err);
       const msg =
         (err as AxiosError<{ message: string }>)?.response?.data?.message ??
         "Failed to send verification code. Please check your email or try again.";
+
+      if (retryAfter && retryAfter > 0) {
+        setResendTimer(retryAfter);
+        toast.info(msg);
+        return true;
+      }
+
       toast.error(msg);
       return false;
     } finally {
@@ -213,14 +251,42 @@ export default function RegisterPage() {
     }
   }
 
-  // Step 2 -> Step 3
+  // Step 2 -> Step 3: Server-side OTP Validation before advancing to Shipping
   async function handleVerifyOtpAndProceed() {
     const isOtpValid = await trigger("otpCode");
     if (!isOtpValid) {
       toast.error("Please enter the complete 6-digit verification code.");
       return;
     }
-    setActiveStep(3);
+
+    const emailToUse = currentEmail || getValues("email");
+    if (!emailToUse) {
+      toast.error("Missing email address. Please return to step 1.");
+      setActiveStep(1);
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      await authService.verifyRegistrationOtp({
+        email: emailToUse,
+        otpCode: (otpCode || getValues("otpCode")).trim(),
+      });
+      toast.success("Verification code confirmed!");
+      setActiveStep(3);
+    } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{ message?: string; error?: { message?: string } }>;
+      const msg =
+        axiosErr?.response?.data?.message ??
+        "Invalid or expired verification code. Please check and try again.";
+      setError("otpCode", {
+        type: "manual",
+        message: msg,
+      });
+      toast.error(msg);
+    } finally {
+      setIsVerifyingOtp(false);
+    }
   }
 
   // Step 3 -> Final Submit
@@ -267,83 +333,10 @@ export default function RegisterPage() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             Create Your Account
           </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto">
-            {activeStep === 1 && "Step 1: Set up your credentials and personal info"}
-            {activeStep === 2 && "Step 2: Enter the 6-digit code sent to your email"}
-            {activeStep === 3 && "Step 3: Add your default delivery destination"}
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Sign up to get started with your customer account
           </p>
         </div>
-
-        {/* Multi-Step Wizard Indicator */}
-        <nav aria-label="Registration steps" className="flex items-center justify-between max-w-md mx-auto px-2">
-          {/* Step 1 Pill */}
-          <button
-            type="button"
-            onClick={() => setActiveStep(1)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
-              activeStep === 1
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : activeStep > 1
-                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                  : "bg-secondary text-muted-foreground"
-            }`}
-          >
-            {activeStep > 1 ? (
-              <Check className="h-3.5 w-3.5 stroke-[3]" />
-            ) : (
-              <User className="h-3.5 w-3.5" />
-            )}
-            <span>1. Account</span>
-          </button>
-
-          <div
-            className={`h-0.5 flex-1 mx-2 transition-colors ${
-              activeStep > 1 ? "bg-primary" : "bg-border"
-            }`}
-          />
-
-          {/* Step 2 Pill */}
-          <button
-            type="button"
-            onClick={() => otpSent && setActiveStep(2)}
-            disabled={!otpSent}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-              activeStep === 2
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : activeStep > 2
-                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                  : "bg-secondary text-muted-foreground"
-            }`}
-          >
-            {activeStep > 2 ? (
-              <Check className="h-3.5 w-3.5 stroke-[3]" />
-            ) : (
-              <KeyRound className="h-3.5 w-3.5" />
-            )}
-            <span>2. OTP</span>
-          </button>
-
-          <div
-            className={`h-0.5 flex-1 mx-2 transition-colors ${
-              activeStep > 2 ? "bg-primary" : "bg-border"
-            }`}
-          />
-
-          {/* Step 3 Pill */}
-          <button
-            type="button"
-            onClick={() => otpCode.length === 6 && setActiveStep(3)}
-            disabled={otpCode.length !== 6}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-              activeStep === 3
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "bg-secondary text-muted-foreground"
-            }`}
-          >
-            <MapPin className="h-3.5 w-3.5" />
-            <span>3. Shipping</span>
-          </button>
-        </nav>
 
         {/* Wizard Form Card */}
         <div className="rounded-3xl border border-border/80 bg-card p-5 sm:p-8 shadow-sm">
@@ -472,40 +465,95 @@ export default function RegisterPage() {
                     </p>
                   </div>
 
-                  {/* Monospaced 6-digit OTP input */}
+                  {/* 6-box segmented OTP display */}
                   <div className="max-w-xs mx-auto space-y-2">
-                    <FormInput
-                      name="otpCode"
-                      label="6-Digit Verification Code"
-                      placeholder="••••••"
-                      maxLength={6}
-                      autoFocus
-                      className="font-mono text-center text-xl sm:text-2xl tracking-[0.4em] h-14 rounded-2xl"
-                    />
-                    {otpSent && (
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                        ✓ Dispatched to inbox
+                    <div className="relative group">
+                      <input
+                        id="otp-digit-input"
+                        name="otpCode"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        autoFocus
+                        value={otpCode || ""}
+                        onChange={(e) => {
+                          const clean = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          setValue("otpCode", clean, { shouldValidate: true });
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
+                        aria-label="6-Digit Verification Code"
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        {[0, 1, 2, 3, 4, 5].map((index) => {
+                          const char = (otpCode || "")[index];
+                          const isFocused =
+                            (otpCode || "").length === index ||
+                            ((otpCode || "").length === 6 && index === 5);
+                          return (
+                            <div
+                              key={index}
+                              className={`flex h-13 w-11 sm:h-14 sm:w-12 items-center justify-center rounded-2xl border text-xl sm:text-2xl font-bold font-mono transition-all select-none ${
+                                char
+                                  ? "border-primary bg-primary/5 text-foreground shadow-xs ring-1 ring-primary/20"
+                                  : isFocused
+                                    ? "border-primary ring-2 ring-primary/30 bg-card text-foreground"
+                                    : "border-border/80 bg-muted/20 text-muted-foreground"
+                              }`}
+                            >
+                              {char ||
+                                (isFocused ? (
+                                  <span className="animate-pulse text-primary font-normal text-xl leading-none">
+                                    |
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/30 text-xs">
+                                    •
+                                  </span>
+                                ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {errors.otpCode?.message && (
+                      <p className="text-xs font-semibold text-rose-500 pt-1 tracking-normal">
+                        {errors.otpCode.message}
                       </p>
                     )}
+
+                    <p className="text-[11px] text-muted-foreground tracking-normal">
+                      Click or tap the boxes above to type or paste your 6-digit code.
+                    </p>
                   </div>
 
                   {/* Resend & Edit Email Controls */}
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-xs pt-1">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       onClick={() => void requestOtpCode(currentEmail)}
                       disabled={isSendingOtp || resendTimer > 0}
-                      className="rounded-xl h-9 text-xs font-semibold"
+                      className="rounded-xl h-9 text-xs font-semibold px-4 border-border/80"
                     >
                       {isSendingOtp ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          Dispatching code...
+                        </>
+                      ) : resendTimer > 0 ? (
+                        <>
+                          <Clock className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
+                          Resend code in {resendTimer}s
+                        </>
                       ) : (
-                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                          Resend Code
+                        </>
                       )}
-                      {resendTimer > 0
-                        ? `Resend code in ${resendTimer}s`
-                        : "Resend Code"}
                     </Button>
 
                     <button
@@ -530,11 +578,20 @@ export default function RegisterPage() {
                     <Button
                       type="button"
                       onClick={handleVerifyOtpAndProceed}
-                      disabled={otpCode?.length !== 6}
+                      disabled={otpCode?.length !== 6 || isVerifyingOtp}
                       className="flex-1 rounded-2xl h-11 text-xs sm:text-sm font-bold shadow-sm"
                     >
-                      Continue to Shipping
-                      <ArrowRight className="h-4 w-4 ml-1.5" />
+                      {isVerifyingOtp ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin mr-1.5" />
+                          Verifying Code...
+                        </>
+                      ) : (
+                        <>
+                          Continue to Shipping
+                          <ArrowRight className="h-4 w-4 ml-1.5" />
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>

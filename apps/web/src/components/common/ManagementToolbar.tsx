@@ -50,6 +50,9 @@ export function ManagementToolbar({
         <div className="relative min-w-0 w-full flex-1 max-w-md sm:min-w-[240px]">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
           <Input
+            id="management-search-input"
+            name="managementSearch"
+            aria-label={placeholder}
             value={value}
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
@@ -71,6 +74,9 @@ export function ManagementToolbar({
         {onFilterChange && filters.length > 0 && (
           <div className="relative w-full min-w-0 sm:w-auto">
             <select
+              id="management-filter-select"
+              name="filter"
+              aria-label={filterPlaceholder}
               value={filterValue ?? ""}
               onChange={(event) => onFilterChange(event.target.value)}
               className="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-xs font-medium text-foreground shadow-2xs focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-secondary/40 transition-colors sm:w-auto"
@@ -89,6 +95,9 @@ export function ManagementToolbar({
         {onSecondaryFilterChange && secondaryFilters.length > 0 && (
           <div className="relative w-full min-w-0 sm:w-auto">
             <select
+              id="management-secondary-filter-select"
+              name="secondaryFilter"
+              aria-label={secondaryFilterPlaceholder}
               value={secondaryFilterValue ?? ""}
               onChange={(event) => onSecondaryFilterChange(event.target.value)}
               className="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-xs font-medium text-foreground shadow-2xs focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-secondary/40 transition-colors sm:w-auto"

@@ -57,17 +57,8 @@ export class AdminVendorsController {
   @ApiForbiddenResponse({
     description: 'Forbidden — user does not have ADMIN role.',
   })
-  async findAll(
-    @Query() query: QueryAdminVendorsDto,
-    @Body() body?: QueryAdminVendorsDto,
-  ) {
-    const filters = {
-      ...query,
-      ...(body && typeof body === 'object' && Object.keys(body).length > 0
-        ? body
-        : {}),
-    };
-    return this.adminVendorsService.findAll(filters);
+  async findAll(@Query() query: QueryAdminVendorsDto) {
+    return this.adminVendorsService.findAll(query);
   }
 
   /** Cursor-based query — filters travel in the request body. */

@@ -3236,6 +3236,21 @@ export class ProductsService {
             mode: 'insensitive',
           },
         },
+        {
+          vendor: {
+            OR: [
+              {
+                storeName: { contains: normalizedSearch, mode: 'insensitive' },
+              },
+              { email: { contains: normalizedSearch, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          category: {
+            name: { contains: normalizedSearch, mode: 'insensitive' },
+          },
+        },
       ];
     }
 

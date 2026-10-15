@@ -5,14 +5,12 @@ import { Button } from "@/component/ui/button";
 import { useAuthStore } from "@/zustand/auth";
 import { logoutWithFeedback } from "@/lib/logout";
 import {
-Activity,
-ChevronDown,
-ExternalLink,
-LogIn,
-LogOut,
-Menu,
-Settings,
-Shield
+  ChevronDown,
+  ExternalLink,
+  LogIn,
+  LogOut,
+  Menu,
+  Shield,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
@@ -178,26 +176,7 @@ export function AdminHeader({ onMobileMenuClick }: { onMobileMenuClick?: () => v
                   </div>
                 </div>
 
-                <div className="space-y-0.5">
-                  <Link
-                    href="/admin/setting"
-                    onClick={() => setDropdownOpen(false)}
-                    className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                  >
-                    <Settings className="h-4 w-4 text-muted-foreground" />
-                    System & Cache
-                  </Link>
-                  <Link
-                    href="/admin/analytic"
-                    onClick={() => setDropdownOpen(false)}
-                    className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                  >
-                    <Activity className="h-4 w-4 text-muted-foreground" />
-                    Analytics Reports
-                  </Link>
-                </div>
-
-                <div className="border-t border-border/60 my-1 pt-1">
+                <div className="border-t border-border/60 mt-1 pt-1">
                   <button
                     type="button"
                     onClick={() => {

@@ -42,7 +42,6 @@ import { OtpService } from '@api/modules/auth/otp/otp.service';
 import { OtpThrottle } from '@api/modules/shared/decorators/custom-throttler.decorator';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
-import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 
 @ApiTags('PAYMENTS')
@@ -115,7 +114,6 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @Message('Payment initialized successfully')
   @Roles(ROLE.USER)
-  @OtpRequired('payment')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Initialize Paystack payment for an order',
@@ -176,15 +174,15 @@ export class PaymentsController {
   }
 
   // ---------------------------------------------------------------------------
-  // PAYSTACK CALLBACK
+  // PAYSTACK CALLBACK & VERIFICATION
   // ---------------------------------------------------------------------------
 
   @Public()
-  @Get('callback')
+  @Get(['callback', 'verify'])
   @HttpCode(HttpStatus.OK)
   @Message('Payment verified successfully')
   @ApiOperation({
-    summary: 'Paystack payment callback',
+    summary: 'Paystack payment callback and verification',
   })
   @ApiQuery({
     name: 'reference',
@@ -215,12 +213,41 @@ export class PaymentsController {
     return this.paymentsService.verifyByReference(paymentReference);
   }
 
+  @Public()
+  @Get('verify/:reference')
+  @HttpCode(HttpStatus.OK)
+  @Message('Payment verified successfully')
+  @ApiOperation({
+    summary: 'Verify payment by transaction reference parameter',
+  })
+  @ApiParam({
+    name: 'reference',
+    required: true,
+    type: String,
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    type: PaymentResponseDto,
+  })
+  async verifyByParam(
+    @Param('reference')
+    reference: string,
+  ): Promise<PaymentResponseDto> {
+    const paymentReference = reference?.trim();
+
+    if (!paymentReference) {
+      throw new BadRequestException('Payment reference is required.');
+    }
+
+    return this.paymentsService.verifyByReference(paymentReference);
+  }
+
   // ---------------------------------------------------------------------------
   // WEBHOOK
   // ---------------------------------------------------------------------------
 
   @Public()
-  @Post('webhook')
+  @Post(['webhook', 'webhooks'])
   @HttpCode(HttpStatus.OK)
   @Message('Payment webhook processed successfully')
   @ApiOperation({

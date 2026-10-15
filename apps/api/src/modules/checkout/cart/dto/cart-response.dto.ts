@@ -34,12 +34,6 @@ export class CartMetadataDto {
   @ApiProperty({ description: 'Abandoned cart alert sent' })
   abandonedCartAlerted!: boolean;
 
-  @ApiPropertyOptional({
-    description: 'Cart origin source',
-    example: { type: 'PRODUCT_PAGE' },
-  })
-  addedFrom?: Record<string, string> | null;
-
   @ApiProperty({ description: 'Created at' })
   createdAt!: Date;
 

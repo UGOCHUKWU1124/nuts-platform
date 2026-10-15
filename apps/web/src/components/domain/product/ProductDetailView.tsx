@@ -15,7 +15,7 @@ import { ProductReviews } from "@/component/review/ProductReviews";
 import { Button } from "@/component/ui/button";
 import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
-import { findCategoryBreadcrumbs } from "@/lib/cart-path";
+import { findCategoryBreadcrumbs } from "@/lib/category-tree";
 import { queryKey } from "@/lib/query-key";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatPrice } from "@/lib/util";

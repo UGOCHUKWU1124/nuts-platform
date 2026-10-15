@@ -113,6 +113,7 @@ export default function DashboardProductPage() {
   const [editingProduct, setEditingProduct] = useState<VendorProduct | null>(null);
   const [stockProduct, setStockProduct] = useState<VendorProduct | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VendorProduct | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<VendorProduct | null>(null);
   const [variantsList, setVariantsList] = useState<ProductVariantItem[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -120,7 +121,7 @@ export default function DashboardProductPage() {
   const qc = useQueryClient();
   const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.vendor.product, debouncedSearch, status, page],
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
@@ -226,6 +227,7 @@ export default function DashboardProductPage() {
     onSuccess: () => {
       toast.success("Product status updated");
       refreshProducts();
+      setToggleActiveTarget(null);
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update product status")),
   });
@@ -448,9 +450,7 @@ export default function DashboardProductPage() {
                 ? "text-amber-500 hover:text-amber-600"
                 : "text-emerald-500 hover:text-emerald-600"
             }`}
-            onClick={() =>
-              toggleActiveMutation.mutate({ id: r.id, active: !!r.isActive })
-            }
+            onClick={() => setToggleActiveTarget(r)}
           >
             {r.isActive ? <Ban className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
           </Button>
@@ -503,12 +503,15 @@ export default function DashboardProductPage() {
           { value: "active", label: "Active" },
           { value: "inactive", label: "Inactive" },
         ]}
+        onRefresh={refreshProducts}
+        isLoading={isLoading || isFetching}
       />
 
       <DataTable
         columns={columns}
         data={data?.data ?? []}
         isLoading={isLoading}
+        isFetching={isFetching}
         emptyMessage="No product listings found in your store."
         pagination={
           data?.meta
@@ -595,6 +598,7 @@ export default function DashboardProductPage() {
                 </div>
                 <input
                   id="hasVariants"
+                  name="hasVariants"
                   type="checkbox"
                   checked={Boolean(hasVariants)}
                   onChange={(e) => {
@@ -752,6 +756,35 @@ export default function DashboardProductPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM TOGGLE ACTIVE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(toggleActiveTarget)}
+        onOpenChange={(v) => !v && setToggleActiveTarget(null)}
+        title={toggleActiveTarget?.isActive ? "Deactivate Product Listing" : "Reactivate Product Listing"}
+        description={
+          toggleActiveTarget?.isActive ? (
+            <>
+              Are you sure you want to deactivate <strong>&quot;{toggleActiveTarget?.name}&quot;</strong>? It will no longer be visible to customers on your storefront until reactivated.
+            </>
+          ) : (
+            <>
+              Reactivate <strong>&quot;{toggleActiveTarget?.name}&quot;</strong>? It will immediately become visible to shoppers again.
+            </>
+          )
+        }
+        confirmText={toggleActiveTarget?.isActive ? "Deactivate Listing" : "Reactivate Listing"}
+        variant={toggleActiveTarget?.isActive ? "destructive" : "default"}
+        isLoading={toggleActiveMutation.isPending}
+        onConfirm={() => {
+          if (toggleActiveTarget) {
+            toggleActiveMutation.mutate(
+              { id: toggleActiveTarget.id, active: !!toggleActiveTarget.isActive },
+              { onSettled: () => setToggleActiveTarget(null) }
+            );
+          }
+        }}
       />
     </div>
   );

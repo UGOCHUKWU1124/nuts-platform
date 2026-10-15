@@ -9,6 +9,7 @@ import {
   HttpStatus,
   Patch,
   Post,
+  Query,
   Req,
   Res,
 } from '@nestjs/common';
@@ -332,6 +333,7 @@ export class UsersController {
    * a validity flag so the UI can give immediate feedback.
    */
   @Public()
+  @Get('referral/validate')
   @Post('referral/validate')
   @HttpCode(HttpStatus.OK)
   @Message('Referral code validated')
@@ -344,11 +346,18 @@ export class UsersController {
   @ApiOkResponse({ description: 'Referral code is valid.' })
   @ApiBadRequestResponse({ description: 'Invalid referral code.' })
   async validateReferralCode(
-    @Body() body: { code: string; email?: string },
+    @Query('code') queryCode?: string,
+    @Query('email') queryEmail?: string,
+    @Body() body?: { code?: string; email?: string },
   ): Promise<{ valid: boolean; message: string }> {
+    const rawCode = queryCode || body?.code;
+    const email = queryEmail || body?.email;
+    if (!rawCode || !rawCode.trim()) {
+      return { valid: false, message: 'Referral code is required' };
+    }
     await this.referralService.validateReferralCode(
-      body.code,
-      body.email ?? '__pre_validation__@nuts.placeholder',
+      rawCode.trim(),
+      email ?? '__pre_validation__@nuts.placeholder',
     );
     return { valid: true, message: 'Referral code is valid' };
   }

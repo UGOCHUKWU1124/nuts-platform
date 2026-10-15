@@ -124,6 +124,9 @@ export function VendorsPageView({
           <div className="relative w-full max-w-xs">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              id="vendors-search-input"
+              name="vendorSearch"
+              aria-label="Search stores by name"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search stores by name..."

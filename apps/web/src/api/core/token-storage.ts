@@ -28,7 +28,9 @@ export const markSessionUnauthenticated = (role?: string) => {
   if (role) {
     knownUnauthenticatedRoles.add(role.toLowerCase());
   } else {
-    ["user", "admin", "vendor"].forEach((r) => knownUnauthenticatedRoles.add(r));
+    ["user", "admin", "vendor"].forEach((r) =>
+      knownUnauthenticatedRoles.add(r),
+    );
   }
 };
 
@@ -98,16 +100,44 @@ export const onTokenChange = (listener: TokenListener): (() => void) => {
   };
 };
 
-export const getAuthSessionRole = (): AuthRole | null => {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("session_active="));
-  if (!match) return null;
-  const value = match.split("=")[1]?.toLowerCase();
-  if (value === "user" || value === "admin" || value === "vendor") {
-    return value as AuthRole;
+export const decodeRoleFromToken = (token?: string | null): AuthRole | null => {
+  if (!token || typeof token !== "string") return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const parsed = JSON.parse(jsonPayload);
+    const rawRole = parsed?.role ? String(parsed.role).toLowerCase() : null;
+    if (rawRole === "admin" || rawRole === "vendor" || rawRole === "user") {
+      return rawRole as AuthRole;
+    }
+  } catch {
+    // Malformed token payload
   }
   return null;
 };
+
+export const getAuthSessionRole = (): AuthRole | null => {
+  if (typeof window === "undefined") return null;
+
+  for (const role of ["admin", "vendor", "user"] as const) {
+    const token = accessTokens[role];
+    if (token) {
+      const decoded = decodeRoleFromToken(token);
+      if (decoded) return decoded;
+      return role;
+    }
+  }
+
+  return null;
+};
+
+

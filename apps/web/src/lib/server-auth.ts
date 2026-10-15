@@ -13,8 +13,12 @@ export interface ServerSession {
  */
 export async function getServerSession(): Promise<ServerSession> {
   const cookieStore = await cookies();
-  const accessToken = cookieStore.get("access_token")?.value;
-  const refreshToken = cookieStore.get("refresh_token")?.value;
+  const accessToken =
+    cookieStore.get("accessToken")?.value ??
+    cookieStore.get("access_token")?.value;
+  const refreshToken =
+    cookieStore.get("refreshToken")?.value ??
+    cookieStore.get("refresh_token")?.value;
   const secret = process.env.JWT_SECRET;
 
   if (!accessToken || !secret) {

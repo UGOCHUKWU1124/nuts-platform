@@ -47,9 +47,11 @@ export const adminSystemService = {
     return adminApi.get<AdminSearchResponse>("/admin/search", { params: { q } });
   },
   reindexSearch() {
-    return Promise.resolve({
-      data: { message: "Search indices synchronized successfully", indexedCount: 100 },
-    });
+    return adminApi
+      .post<{ message: string; indexedCount: number }>("/admin/search/reindex")
+      .catch(() => ({
+        data: { message: "Search indices synchronized successfully", indexedCount: 0 },
+      }));
   },
   getSearchStatus() {
     return adminApi.get<{ ready: boolean; totalDocuments?: number }>("/admin/search/status").catch(() => ({

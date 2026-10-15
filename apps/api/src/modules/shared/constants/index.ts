@@ -27,6 +27,13 @@ export const VENDOR_SUMMARY = {
   CRON_SCHEDULE: '0 8 * * 1', // every Monday at 08:00
 } as const;
 
+export const UNPAID_ORDER_EXPIRATION = {
+  PENDING_TTL_MINUTES: 30,
+  BATCH_SIZE: 100,
+  CRON_SCHEDULE: '*/5 * * * *', // every 5 minutes
+  LOCK_TTL_MS: 4 * 60 * 1000, // 4 minutes
+} as const;
+
 export const SECURITY = {
   MAX_LOGIN_ATTEMPTS: 5,
   LOCKOUT_DURATION_MINUTES: 30,

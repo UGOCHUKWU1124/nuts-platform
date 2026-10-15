@@ -55,6 +55,21 @@ export class UserListItemResponseDto {
   })
   scheduledPermanentDeleteAt!: Date | null;
 
+  @ApiPropertyOptional({
+    description: 'Identifier of the administrator who suspended the account',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    nullable: true,
+  })
+  deactivatedBy!: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Reason and duration metadata for account deactivation or suspension',
+    example: '[SUSPENSION|until:2026-10-21T18:00:00.000Z] Terms violation',
+    nullable: true,
+  })
+  deactivationReason!: string | null;
+
   @ApiProperty({
     description: 'Timestamp when the user record was created',
     example: '2025-01-15T08:30:00.000Z',

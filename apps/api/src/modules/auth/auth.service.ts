@@ -17,6 +17,8 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { VerifyOtpResponseDto } from './dto/auth-response.dto';
 import { OtpService } from './otp/otp.service';
 import {
   BCRYPT_COST_FACTOR,
@@ -27,6 +29,7 @@ import type { AuthSession } from './types/auth.types';
 import { RefreshSessionService } from './sessions/refresh-session.service';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
+import { parseSuspension } from '@api/modules/users/utils/suspension.util';
 
 @Injectable()
 export class AuthService {
@@ -53,9 +56,15 @@ export class AuthService {
   ): Promise<AuthSession> {
     const email = this.normalizeEmail(dto.email);
 
-    // OTP verification happens before the database transaction because
-    // it is an external/stateful operation and does not need DB rollback.
-    await this.otpService.verifyOtp(email, dto.otpCode, 'registration');
+    // If already pre-verified in Step 2, consume verification token.
+    // Otherwise, verify and consume the OTP code directly.
+    const isPreVerified = await this.otpService.consumeVerification(
+      email,
+      'registration',
+    );
+    if (!isPreVerified) {
+      await this.otpService.verifyOtp(email, dto.otpCode, 'registration');
+    }
 
     // Validate the referral code before creating the user.
     // We only keep the IDs required inside the transaction.
@@ -221,11 +230,62 @@ export class AuthService {
 
     if (!user.isActive) {
       if (user.deactivatedBy) {
-        throw new UnauthorizedException(
-          'Your account was suspended by an administrator. Please contact support.',
+        const suspension = parseSuspension(
+          user.deactivationReason,
+          user.deactivatedBy,
         );
+
+        if (suspension.isExpired) {
+          // Automatic unsuspend because the suspension duration has elapsed
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+              isActive: true,
+              deactivatedAt: null,
+              deactivatedBy: null,
+              deactivationReason: null,
+              tokenVersion: { increment: 1 },
+            },
+          });
+
+          this.fireAndForget(
+            this.auditLog.log({
+              action: 'USER_AUTO_UNSUSPEND_EXPIRED',
+              entity: 'User',
+              entityId: user.id,
+              userId: user.id,
+              payload: {
+                reason: suspension.reason,
+                expiredAt: suspension.suspendedUntil?.toISOString() ?? null,
+              },
+              ipAddress,
+              userAgent,
+            }),
+            'auto-unsuspend audit log',
+          );
+        } else {
+          const dateStr = suspension.suspendedUntil
+            ? new Date(suspension.suspendedUntil).toLocaleString('en-US', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })
+            : null;
+
+          const detailMsg = dateStr
+            ? `Your account has been suspended until ${dateStr}. Reason: "${suspension.reason}". Please contact support if you need assistance.`
+            : `Your account has been suspended indefinitely. Reason: "${suspension.reason}". Please contact support if you need assistance.`;
+
+          throw new UnauthorizedException({
+            message: detailMsg,
+            code: 'ACCOUNT_SUSPENDED',
+            reason: suspension.reason,
+            suspendedUntil: suspension.suspendedUntil?.toISOString() ?? null,
+            isIndefinite: suspension.isIndefinite,
+          });
+        }
+      } else {
+        throw new UnauthorizedException('ACCOUNT_DEACTIVATED');
       }
-      throw new UnauthorizedException('ACCOUNT_DEACTIVATED');
     }
 
     this.fireAndForget(
@@ -301,6 +361,26 @@ export class AuthService {
     );
   }
 
+  async logoutAll(
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.refreshSessionService.revokeAllUserSessions(userId);
+
+    this.fireAndForget(
+      this.auditLog.log({
+        action: 'USER_LOGOUT_ALL',
+        entity: 'User',
+        entityId: userId,
+        userId,
+        ipAddress,
+        userAgent,
+      }),
+      'logout-all audit log',
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // OTP
   // ---------------------------------------------------------------------------
@@ -318,6 +398,14 @@ export class AuthService {
     }
 
     await this.otpService.createOtp(email, 'registration');
+  }
+
+  async verifyRegistrationOtp(
+    dto: VerifyOtpDto,
+  ): Promise<VerifyOtpResponseDto> {
+    const email = this.normalizeEmail(dto.email);
+    await this.otpService.verifyRegistrationOtp(email, dto.otpCode);
+    return { verified: true };
   }
 
   async requestPasswordResetOtp(dto: RequestOtpDto): Promise<void> {

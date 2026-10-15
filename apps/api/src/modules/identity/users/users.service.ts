@@ -21,12 +21,18 @@ import {
 import { BCRYPT_COST_FACTOR } from '@api/modules/shared/constants/bcrypt.constants';
 import { DEFAULT_ACCOUNT_DELETION_GRACE_DAYS } from './constants/account-lifecycle.constants';
 
+import { AdminSuspendDto } from './dto/admin-suspend.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { DeactivateAccountResponseDto } from './dto/deactivate-account-response.dto';
 import { QueryUserDto } from './dto/query-user.dto';
+import { SuspendUserResponseDto } from './dto/suspend-user-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserListItemResponseDto } from './dto/user-list-item-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import {
+  calculateSuspensionExpiry,
+  formatSuspensionReason,
+} from './utils/suspension.util';
 
 import { PaginationMetaDto } from '@api/modules/shared/dto/pagination-meta.dto';
 import {
@@ -112,6 +118,8 @@ export class UsersService {
     isActive: true,
     deactivatedAt: true,
     scheduledPermanentDeleteAt: true,
+    deactivatedBy: true,
+    deactivationReason: true,
     createdAt: true,
     updatedAt: true,
   } as const;
@@ -153,7 +161,7 @@ export class UsersService {
     } else if (status === 'INACTIVE') {
       where.isActive = false;
       where.deactivatedBy = null;
-    } else if (status === 'BANNED') {
+    } else if (status === 'BANNED' || status === 'SUSPENDED') {
       where.isActive = false;
       where.deactivatedBy = {
         not: null,
@@ -180,6 +188,12 @@ export class UsersService {
         },
         {
           lastName: {
+            contains: trimmedSearch,
+            mode: 'insensitive',
+          },
+        },
+        {
+          phone: {
             contains: trimmedSearch,
             mode: 'insensitive',
           },
@@ -684,13 +698,20 @@ export class UsersService {
     });
   }
 
-  async adminDeactivate(
+  async adminSuspend(
     adminId: string,
     userId: string,
-    reason: string,
+    dtoOrReason: AdminSuspendDto | string,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<DeactivateAccountResponseDto> {
+  ): Promise<SuspendUserResponseDto> {
+    const reason =
+      typeof dtoOrReason === 'string' ? dtoOrReason : dtoOrReason.reason;
+    const duration =
+      typeof dtoOrReason === 'object' ? dtoOrReason.duration : undefined;
+    const suspendedUntilIso =
+      typeof dtoOrReason === 'object' ? dtoOrReason.suspendedUntil : undefined;
+
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
@@ -709,14 +730,21 @@ export class UsersService {
     }
 
     if (!user.isActive) {
-      throw new BadRequestException('Account is already deactivated');
+      throw new BadRequestException(
+        'Account is already suspended or deactivated',
+      );
     }
 
     if (user.role === ROLE.ADMIN) {
-      throw new ConflictException('Cannot deactivate an admin account');
+      throw new ConflictException('Cannot suspend an admin account');
     }
 
-    const scheduledPermanentDeleteAt = this.computeScheduledDeletionDate();
+    const suspendedUntil = calculateSuspensionExpiry(
+      duration,
+      suspendedUntilIso,
+    );
+    const isIndefinite = !suspendedUntil;
+    const formattedReason = formatSuspensionReason(reason, suspendedUntil);
 
     const updated = await this.prisma.user.updateMany({
       where: {
@@ -726,9 +754,9 @@ export class UsersService {
       data: {
         isActive: false,
         deactivatedAt: new Date(),
-        scheduledPermanentDeleteAt,
+        scheduledPermanentDeleteAt: null,
         deactivatedBy: adminId,
-        deactivationReason: reason,
+        deactivationReason: formattedReason,
         refreshToken: null,
         refreshTokenId: null,
         tokenVersion: { increment: 1 },
@@ -737,47 +765,63 @@ export class UsersService {
 
     if (updated.count !== 1) {
       throw new BadRequestException(
-        'Account state changed before deactivation could be completed',
+        'Account state changed before suspension could be completed',
       );
     }
+
+    // Revoke all active user sessions immediately
+    await this.prisma.userAuthSession.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
 
     await this.invalidateActiveAccountCache(userId);
 
     await this.auditLog.log({
-      action: 'ADMIN_DEACTIVATE_USER',
+      action: 'ADMIN_SUSPEND_USER',
       entity: 'User',
       entityId: userId,
       adminId,
       payload: toAuditPayload({
         reason,
-        changes: {
-          isActive: {
-            old: user.isActive,
-            new: false,
-          },
-          deactivatedBy: {
-            old: user.deactivatedBy ?? null,
-            new: adminId,
-          },
-          deactivationReason: {
-            old: user.deactivationReason ?? null,
-            new: reason,
-          },
-        },
+        duration: duration ?? (isIndefinite ? 'indefinite' : 'custom'),
+        suspendedUntil: suspendedUntil?.toISOString() ?? null,
+        isIndefinite,
       }),
       ipAddress,
       userAgent,
     });
 
-    const graceDays = this.getDeletionGraceDays();
+    const message = suspendedUntil
+      ? `Account suspended until ${suspendedUntil.toUTCString()}. Reason: ${reason}`
+      : `Account suspended indefinitely. Reason: ${reason}`;
 
     return {
-      message: `Account deactivated by admin. Permanent deletion in ${graceDays} days unless reactivated by an admin.`,
-      scheduledPermanentDeleteAt,
+      message,
+      suspendedUntil,
+      isIndefinite,
+      reason,
     };
   }
 
-  async adminReactivate(
+  // Alias for backward compatibility
+  async adminDeactivate(
+    adminId: string,
+    userId: string,
+    dtoOrReason: AdminSuspendDto | string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<any> {
+    return this.adminSuspend(
+      adminId,
+      userId,
+      dtoOrReason,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  async adminUnsuspend(
     userId: string,
     adminId?: string,
     ipAddress?: string,
@@ -804,12 +848,6 @@ export class UsersService {
       throw new BadRequestException('Account is already active');
     }
 
-    if (this.isPastPermanentDeletion(user.scheduledPermanentDeleteAt)) {
-      throw new BadRequestException(
-        'Account is past the scheduled deletion date and can no longer be reactivated',
-      );
-    }
-
     const updatedUser = await this.prisma.user.update({
       where: {
         id: userId,
@@ -828,31 +866,28 @@ export class UsersService {
     await this.invalidateActiveAccountCache(userId);
 
     await this.auditLog.log({
-      action: 'ADMIN_REACTIVATE_USER',
+      action: 'ADMIN_UNSUSPEND_USER',
       entity: 'User',
       entityId: userId,
       adminId,
       payload: toAuditPayload({
-        changes: {
-          isActive: {
-            old: false,
-            new: true,
-          },
-          deactivatedBy: {
-            old: user.deactivatedBy ?? null,
-            new: null,
-          },
-          deactivationReason: {
-            old: user.deactivationReason ?? null,
-            new: null,
-          },
-        },
+        previousReason: user.deactivationReason,
       }),
       ipAddress,
       userAgent,
     });
 
     return this.toResponseDto(updatedUser);
+  }
+
+  // Alias for backward compatibility
+  async adminReactivate(
+    userId: string,
+    adminId?: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<UserResponseDto> {
+    return this.adminUnsuspend(userId, adminId, ipAddress, userAgent);
   }
 
   async permanentRemove(
@@ -918,6 +953,57 @@ export class UsersService {
 
     await this.auditLog.log({
       action: 'ADMIN_PERMANENT_DELETE_USER',
+      entity: 'User',
+      entityId: userId,
+      adminId,
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  async adminSoftDelete(
+    userId: string,
+    adminId?: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, isActive: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === ROLE.ADMIN) {
+      throw new ConflictException('Cannot delete an admin account');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isActive: false,
+        deactivatedAt: new Date(),
+        scheduledPermanentDeleteAt: new Date(),
+        deactivatedBy: adminId ?? 'ADMIN',
+        deactivationReason: 'Account soft-deleted by Administrator',
+        refreshToken: null,
+        refreshTokenId: null,
+        tokenVersion: { increment: 1 },
+      },
+    });
+
+    // Revoke any active sessions
+    await this.prisma.userAuthSession.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    await this.invalidateActiveAccountCache(userId);
+
+    await this.auditLog.log({
+      action: 'ADMIN_SOFT_DELETE_USER',
       entity: 'User',
       entityId: userId,
       adminId,

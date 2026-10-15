@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { existsSync, watch } from 'node:fs';
 import path from 'node:path';
 
@@ -15,9 +15,13 @@ function startServer() {
     return;
   }
 
-  if (child) {
+  if (child && child.pid) {
     try {
-      child.kill('SIGTERM');
+      if (process.platform === 'win32') {
+        execSync(`taskkill /F /T /PID ${child.pid}`, { stdio: 'ignore' });
+      } else {
+        child.kill('SIGTERM');
+      }
     } catch {
       // Child might already be dead
     }

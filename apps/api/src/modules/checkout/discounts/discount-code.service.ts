@@ -721,6 +721,32 @@ export class DiscountCodeService {
     return null;
   }
 
+  async reactivate(
+    id: string,
+    vendorId?: string,
+    isAdmin = false,
+  ): Promise<null> {
+    const discount = await this.prisma.discountCode.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        ...(isAdmin ? {} : { vendorId }),
+      },
+      select: { id: true },
+    });
+
+    if (!discount) {
+      throw new NotFoundException('Discount code not found.');
+    }
+
+    await this.prisma.discountCode.update({
+      where: { id },
+      data: { isActive: true },
+    });
+
+    return null;
+  }
+
   async remove(
     discountCodeId: string,
     vendorId?: string,

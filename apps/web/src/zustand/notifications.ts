@@ -84,7 +84,6 @@ function startNotificationStream(
         });
         if (connected) {
           void get().fetchUnreadCount();
-          void get().fetchNotifications();
         }
       }
     },
@@ -223,8 +222,8 @@ async function consumeNotificationStream(
     retryAttempt++;
     onConnectionChange(false);
     if (!shouldRetryNotificationStream(retryAttempt)) {
-      console.error(
-        `Notification stream stopped after ${retryAttempt} consecutive failures: ${reason}`,
+      console.warn(
+        `Notification stream paused after ${retryAttempt} consecutive connection attempts: ${reason}. Will reconnect automatically when online.`,
       );
       onRetryExhausted();
       return false;
@@ -425,10 +424,9 @@ export const useNotificationsStore = create<NotificationsState>()(
     } catch (error) {
       if (
         requestSequence === listRequestSequence &&
-        !(error instanceof Error && error.name === "CanceledError")
+        !(error instanceof Error && (error.name === "CanceledError" || error.name === "AbortError"))
       ) {
-        console.error("Failed to load notifications", error);
-        toast.error("Failed to load notifications. Please try again.");
+        console.warn("Failed to load notifications in background", error);
       }
     } finally {
       const activeAuth = useAuthStore.getState();
@@ -642,7 +640,15 @@ export const useNotificationsStore = create<NotificationsState>()(
 }),
 {
   name: "nuts_notifications_cache",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        typeof window !== "undefined"
+          ? window.localStorage
+          : {
+              getItem: () => null,
+              setItem: () => {},
+              removeItem: () => {},
+            }
+      ),
       partialize: (state) => ({
         notifications: state.notifications.slice(0, 20),
         unreadCount: state.unreadCount,

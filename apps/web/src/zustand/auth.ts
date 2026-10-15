@@ -17,7 +17,7 @@ import {
   markSessionUnauthenticated,
   setAuthTokens,
 } from "@/api/core/token-storage";
-import type { AuthRole, AuthResponseDto } from "@/api/dto/auth";
+import type { AuthRole, AuthResponseDto, AdminAuthResponseDto } from "@/api/dto/auth";
 import type { VendorAuthSessionDto } from "@/api/dto/vendor";
 import type { ShippingInformation, UserResponseDto } from "@/api/dto/user";
 import axios from "axios";
@@ -164,22 +164,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   setSession: (rawUser, role) => {
-    const userRole = normalizeRole(role) || normalizeRole(rawUser.role);
+    const userRole = normalizeRole(role) || normalizeRole(rawUser.role) || get().role;
     if (!userRole) {
       get().clearSession();
       return;
     }
 
     markSessionAuthenticated(userRole);
-
-    if (typeof localStorage !== "undefined") {
-      try {
-        localStorage.setItem("nuts_session_active", "1");
-        localStorage.setItem("nuts_session_role", userRole);
-      } catch {
-        // Ignore quota/private mode errors
-      }
-    }
 
     const capabilities =
       rawUser.capabilities ??
@@ -209,14 +200,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   clearSession: () => {
     clearAuthTokens();
     markSessionUnauthenticated();
-    if (typeof localStorage !== "undefined") {
-      try {
-        localStorage.removeItem("nuts_session_active");
-        localStorage.removeItem("nuts_session_role");
-      } catch {
-        // Ignore
-      }
-    }
     set({
       user: null,
       role: null,
@@ -232,7 +215,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     set({ status: "hydrating", isLoading: true, isInitialized: false });
     try {
       const { email, password, role } = payload;
-      let responseData: AuthResponseDto | VendorAuthSessionDto;
+      let responseData: AuthResponseDto | VendorAuthSessionDto | AdminAuthResponseDto;
 
       switch (role) {
         case "admin":
@@ -254,7 +237,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
       resetAuthBootstrap();
 
-      const rawUser = "vendor" in responseData ? responseData.vendor : responseData.user;
+      const rawUser =
+        "vendor" in responseData
+          ? responseData.vendor
+          : "admin" in responseData
+            ? responseData.admin
+            : responseData.user;
       if (!rawUser) {
         throw new Error("Authentication response did not include a user profile");
       }
@@ -262,7 +250,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       clearBrowserQueryClient();
       get().setSession(rawUser, role);
 
-      authBroadcast.broadcast({ type: "LOGIN", role });
+      authBroadcast.publish({ type: "LOGIN", role });
     } catch (err) {
       set({
         status: "unauthenticated",
@@ -308,7 +296,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     clearBrowserQueryClient();
 
     get().clearSession();
-    authBroadcast.broadcast({ type: "LOGOUT", role: currentRole });
+    authBroadcast.publish({ type: "LOGOUT", role: currentRole });
 
     if (typeof window !== "undefined" && options?.redirectTo) {
       window.location.assign(safeInternalPath(options.redirectTo, "/"));
@@ -379,29 +367,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         get().setStatus("hydrating");
       }
 
-      // 1. Identify active session role from cookie hint or persistent session marker
-      const candidateRole: AuthRole | null =
-        getAuthSessionRole() ||
-        (typeof localStorage !== "undefined"
-          ? normalizeRole(localStorage.getItem("nuts_session_role"))
-          : null) ||
-        (typeof localStorage !== "undefined" &&
-        localStorage.getItem("nuts_session_active") === "1"
-          ? "user"
-          : null);
-
-      if (!candidateRole) {
-        get().setStatus("unauthenticated");
-        return;
-      }
+      // 1. Identify active session role from in-memory state or default to standard refresh
+      const candidateRole: AuthRole =
+        get().role || getAuthSessionRole() || "user";
 
       // 2. Refresh tokens using HttpOnly refresh_token cookie (re-populates in-memory access token)
       try {
         const refreshResult = await performTokenRefresh(candidateRole);
         if (refreshResult.success && refreshResult.user) {
+          const resolvedRole = refreshResult.role || candidateRole;
           get().setSession(
             refreshResult.user as SessionUserInput,
-            candidateRole,
+            resolvedRole,
           );
           return;
         }
@@ -415,45 +392,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           get().setStatus("unavailable");
           return;
         }
+
+        get().clearSession();
       } catch (err) {
         if (err instanceof AuthRefreshUnavailableError) {
           get().setStatus("unavailable");
           return;
         }
-      }
-
-      // 3. Fallback: try fetching profile with active client
-      try {
-        const res =
-          candidateRole === "admin"
-            ? await adminAuthService.me()
-            : candidateRole === "vendor"
-            ? await vendorAuthService.me()
-            : await authService.me();
-
-        const profile = res.data;
-        if (!profile?.id || !profile?.email) {
-          get().setStatus("unavailable");
-          return;
-        }
-
-        const resolvedRole =
-          normalizeRole((profile as { role?: string }).role) || candidateRole;
-        get().setSession(profile as unknown as SessionUserInput, resolvedRole);
-      } catch (error) {
-        if (error instanceof AuthRefreshUnavailableError) {
-          get().setStatus("unavailable");
-          return;
-        }
-
-        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-        if (status === 401 || status === 403) {
-          get().clearSession();
-          return;
-        }
-
-        console.error("Session hydration failed unexpectedly", error);
-        get().setStatus("unavailable");
+        get().clearSession();
       }
     })();
 

@@ -234,6 +234,8 @@ export function ProductVariantBuilder({
       {/* Hidden file input for variant image upload */}
       <input
         ref={fileInputRef}
+        id="variant-image-file-input"
+        name="variantImageFile"
         type="file"
         accept="image/jpeg,image/png,image/webp,image/jpg"
         className="hidden"
@@ -299,6 +301,9 @@ export function ProductVariantBuilder({
                       {variant.options.map((option, oIdx) => (
                         <div key={oIdx} className="flex items-center gap-2">
                           <Input
+                            id={`variant_${vIdx}_attr_${oIdx}_name`}
+                            name={`variant_${vIdx}_attr_${oIdx}_name`}
+                            aria-label={`Variant ${vIdx + 1} Attribute Name`}
                             placeholder="Attribute (e.g. Size)"
                             value={option.name}
                             onChange={(e) =>
@@ -307,6 +312,9 @@ export function ProductVariantBuilder({
                             className="h-8.5 rounded-lg text-xs w-1/2 bg-card"
                           />
                           <Input
+                            id={`variant_${vIdx}_attr_${oIdx}_val`}
+                            name={`variant_${vIdx}_attr_${oIdx}_val`}
+                            aria-label={`Variant ${vIdx + 1} Attribute Value`}
                             placeholder="Value (e.g. XL, Blue)"
                             value={option.value}
                             onChange={(e) =>
@@ -362,6 +370,9 @@ export function ProductVariantBuilder({
                       Stock Count
                     </Label>
                     <Input
+                      id={`variant_${vIdx}_stock`}
+                      name={`variant_${vIdx}_stock`}
+                      aria-label={`Variant ${vIdx + 1} Stock Count`}
                       type="number"
                       min={0}
                       value={variant.stock}

@@ -16,10 +16,10 @@ export * from './redis.constants';
         const redisUrl = configService.getOrThrow<string>('REDIS_URL');
 
         return new Redis(redisUrl, {
-          maxRetriesPerRequest: 2,
-          enableOfflineQueue: false,
-          connectTimeout: 5000,
-          commandTimeout: 4000,
+          maxRetriesPerRequest: 3,
+          enableOfflineQueue: true,
+          connectTimeout: 10000,
+          commandTimeout: 10000,
           keepAlive: 10000,
           enableReadyCheck: true,
           lazyConnect: false,

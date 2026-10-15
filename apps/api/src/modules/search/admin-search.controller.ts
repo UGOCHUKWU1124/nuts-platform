@@ -1,4 +1,11 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiExtraModels,
@@ -14,8 +21,17 @@ import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { SearchService } from '@api/modules/shared/search/search.service';
 import { QuerySearchDto } from './dto/query-search.dto';
 import { SearchResponseDto, SearchResultDto } from './dto/search-result.dto';
+import {
+  SearchReindexResponseDto,
+  SearchStatusDto,
+} from './dto/search-status.dto';
 
-@ApiExtraModels(SearchResultDto, ApiResponseDto)
+@ApiExtraModels(
+  SearchResultDto,
+  ApiResponseDto,
+  SearchStatusDto,
+  SearchReindexResponseDto,
+)
 @ApiTags('ADMIN - SEARCH')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/search')
@@ -107,5 +123,34 @@ export class AdminSearchController {
         hasPreviousPage: false,
       },
     };
+  }
+
+  @Get('status')
+  @ApiOperation({
+    summary: 'Get search engine status and document metrics',
+    description:
+      'Returns whether the search engine is operational and the total number of indexable documents. Requires ADMIN role.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: SearchStatusDto,
+  })
+  async getStatus(): Promise<SearchStatusDto> {
+    return this.searchService.getSearchStatus();
+  }
+
+  @Post('reindex')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reindex search documents and clear search cache',
+    description:
+      'Purges stale Redis search cache and synchronizes search indices. Requires ADMIN role.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: SearchReindexResponseDto,
+  })
+  async reindex(): Promise<SearchReindexResponseDto> {
+    return this.searchService.reindex();
   }
 }

@@ -102,6 +102,12 @@ export class AdminVendorsService {
         { email: { contains: trimmedSearch, mode: 'insensitive' } },
         { storeName: { contains: trimmedSearch, mode: 'insensitive' } },
         { storeSlug: { contains: trimmedSearch, mode: 'insensitive' } },
+        { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+        { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+        { businessEmail: { contains: trimmedSearch, mode: 'insensitive' } },
+        { businessPhone: { contains: trimmedSearch, mode: 'insensitive' } },
+        { phone: { contains: trimmedSearch, mode: 'insensitive' } },
+        { storeDescription: { contains: trimmedSearch, mode: 'insensitive' } },
       ];
     }
 

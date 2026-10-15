@@ -392,11 +392,6 @@ export function NotificationsManager({
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary text-secondary-foreground">
                       {notificationTypeLabels[notif.type]}
                     </span>
-                    {notif.priority === "URGENT" && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600">
-                        URGENT
-                      </span>
-                    )}
                     <span className="text-xs text-muted-foreground ml-auto sm:ml-0">
                       {formatFullDate(notif.createdAt)}
                     </span>

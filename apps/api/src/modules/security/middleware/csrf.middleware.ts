@@ -28,6 +28,12 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   use(req: Request, res: Response, next: NextFunction) {
+    // 0. Server-to-server webhooks (authenticated via cryptographic HMAC signatures)
+    // MUST bypass CSRF entirely before any browser Origin or cookie checks.
+    if (this.isWebhookPath(req.path)) {
+      return next();
+    }
+
     // Skip CSRF for GET, HEAD, OPTIONS requests (read-only)
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       this.generateAndSetCsrfToken(req, res);
@@ -237,6 +243,14 @@ export class CsrfMiddleware implements NestMiddleware {
    *    users in decoupled cross-site architectures.
    * 3. Custom regex/string exemptions configured at initialization.
    */
+  private isWebhookPath(path: string | undefined): boolean {
+    if (!path) return false;
+    const cleanPath = path.split('?')[0].replace(/\/+$/, '').toLowerCase();
+    return (
+      /\/webhooks?(\/.*)?$/i.test(cleanPath) || cleanPath.includes('/webhook')
+    );
+  }
+
   private isCsrfExempt(path: string | undefined): boolean {
     if (!path) return false;
 
@@ -244,19 +258,31 @@ export class CsrfMiddleware implements NestMiddleware {
     const cleanPath = path.split('?')[0].replace(/\/+$/, '').toLowerCase();
 
     // 1. Webhook endpoints (HMAC signature protected, server-to-server)
-    if (/\/webhooks?$/.test(cleanPath)) {
+    if (this.isWebhookPath(cleanPath)) {
       return true;
     }
 
-    // 2. Authentication lifecycle actions across any API version prefix (/api/v1, /api/v2, etc.)
+    // 2. Authentication lifecycle actions and public pre-registration validation across any API version prefix
     // Origin is already strictly verified above. Requiring a pre-existing CSRF cookie locks out
-    // legitimate users during initial session establishment, token refresh, and logout.
+    // legitimate users during initial session establishment, pre-check validations, token refresh, and logout.
     const isAuthLifecycleAction =
       /\/(auth|vendors\/auth|admin\/auth)\/(login|register|refresh|logout|setup|forgot-password|reset-password|verify-otp|resend-otp|otp|request-otp|register\/otp)($|\/.*)/.test(
         cleanPath,
       );
 
     if (isAuthLifecycleAction) {
+      return true;
+    }
+
+    // 3. Referral code validation (unauthenticated public pre-check during registration)
+    if (/\/(account|users)?\/?referral\/validate($|\/.*)/.test(cleanPath)) {
+      return true;
+    }
+
+    // 4. Account reactivation endpoints (unauthenticated user/vendor restoring account)
+    if (
+      /\/(account|users|vendors\/account)\/reactivate($|\/.*)/.test(cleanPath)
+    ) {
       return true;
     }
 
