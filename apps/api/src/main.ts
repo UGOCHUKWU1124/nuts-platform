@@ -141,6 +141,7 @@ async function bootstrap() {
       filter: (req: Request, res: Response) => {
         if (
           req.headers.accept?.includes('text/event-stream') ||
+          req.path?.includes('notifications/sse/stream') ||
           res
             .getHeader('content-type')
             ?.toString()

@@ -1,4 +1,4 @@
-import { Controller, MessageEvent, Sse } from '@nestjs/common';
+import { Controller, Header, MessageEvent, Sse } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { Observable } from 'rxjs';
@@ -20,6 +20,10 @@ export class NotificationsSseController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Sse()
+  @Header('Content-Type', 'text/event-stream')
+  @Header('Cache-Control', 'no-cache, no-transform')
+  @Header('Connection', 'keep-alive')
+  @Header('X-Accel-Buffering', 'no')
   @ApiOperation({
     summary: 'Real-time Server-Sent Events stream for user notifications',
     description:
