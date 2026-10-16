@@ -278,19 +278,27 @@ export default function AdminOrderDetailPage() {
           {/* Financial Breakdown Card */}
           <Card className="rounded-3xl border-border">
             <CardHeader className="pb-3 border-b border-border/60">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-primary" />
-                Financial Summary
+              <CardTitle className="text-base font-semibold flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  Financial Breakdown
+                </span>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  {order.finalAmount > 0 && order.platformFee > 0
+                    ? Math.round((order.platformFee / order.finalAmount) * 100)
+                    : 15}
+                  % Platform Cut
+                </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 p-5 text-sm">
+            <CardContent className="space-y-3 p-5 text-sm">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span>
+                <span>Gross Order Value</span>
                 <span>{formatPrice(order.totalAmount, currency)}</span>
               </div>
               {order.discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-600">
-                  <span>Discount</span>
+                  <span>Discount Applied</span>
                   <span>-{formatPrice(order.discountAmount, currency)}</span>
                 </div>
               )}
@@ -300,16 +308,63 @@ export default function AdminOrderDetailPage() {
                   <span>-{formatPrice(order.referralDiscountAmount, currency)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-muted-foreground">
-                <span>Platform Commission</span>
-                <span>{formatPrice(order.platformFee, currency)}</span>
-              </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Vendor Payout Amount</span>
-                <span>{formatPrice(order.vendorRevenue, currency)}</span>
-              </div>
+
+              {/* Commission Distribution Box */}
+              {(() => {
+                const final = Number(order.finalAmount || order.totalAmount || 0);
+                const fee =
+                  order.platformFee && order.platformFee > 0
+                    ? Number(order.platformFee)
+                    : Math.round(final * 0.15 * 100) / 100;
+                const vRev =
+                  order.vendorRevenue && order.vendorRevenue > 0
+                    ? Number(order.vendorRevenue)
+                    : Math.round(final * 0.85 * 100) / 100;
+                const feePct = final > 0 ? Math.round((fee / final) * 100) : 15;
+                const vPct = final > 0 ? Math.round((vRev / final) * 100) : 85;
+
+                return (
+                  <div className="rounded-2xl border border-border/60 bg-muted/30 p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        Platform Commission ({feePct}%)
+                      </span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        +{formatPrice(fee, currency)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        Vendor Net Payout ({vPct}%)
+                      </span>
+                      <span className="font-semibold text-foreground font-mono">
+                        {formatPrice(vRev, currency)}
+                      </span>
+                    </div>
+
+                    {/* Split Progress Bar */}
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-secondary flex">
+                      <div
+                        style={{ width: `${feePct}%` }}
+                        className="bg-emerald-500 transition-all duration-300"
+                        title={`Platform Fee: ${feePct}%`}
+                      />
+                      <div
+                        style={{ width: `${vPct}%` }}
+                        className="bg-blue-500 transition-all duration-300"
+                        title={`Vendor Share: ${vPct}%`}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>Platform Retained ({feePct}%)</span>
+                      <span>Vendor Disbursed ({vPct}%)</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="border-t border-border/60 pt-2 flex justify-between font-bold text-base text-foreground">
-                <span>Total Collected</span>
+                <span>Total Settled (Customer Paid)</span>
                 <span>{formatPrice(order.finalAmount, currency)}</span>
               </div>
             </CardContent>

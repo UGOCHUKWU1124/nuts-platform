@@ -2431,6 +2431,19 @@ export class OrdersService {
   private toAdminResponse(
     order: AdminOrderWithRelations,
   ): AdminOrderResponseDto {
+    const itemsTotal =
+      order.orderItems?.reduce(
+        (sum, item) => sum + Number(item.totalPrice),
+        0,
+      ) ?? 0;
+    const effectiveBase =
+      itemsTotal > 0
+        ? itemsTotal
+        : Number(order.finalAmount || order.totalAmount || 0);
+    const vendorRevenue =
+      Math.round(effectiveBase * VENDOR_COMMISSION_RATE * 100) / 100;
+    const platformFee = Math.round((effectiveBase - vendorRevenue) * 100) / 100;
+
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -2450,8 +2463,8 @@ export class OrdersService {
 
       referralCode: order.referralCode ?? null,
 
-      platformFee: 0,
-      vendorRevenue: 0,
+      platformFee,
+      vendorRevenue,
 
       shippingAddress: order.shippingAddress,
 
