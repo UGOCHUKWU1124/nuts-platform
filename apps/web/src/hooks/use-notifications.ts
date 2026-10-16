@@ -1,6 +1,6 @@
 "use client";
 
-import { type AuthRole, useAuthStore } from "@/zustand/auth";
+import { normalizeRole, useAuthStore } from "@/zustand/auth";
 import { useNotificationsStore } from "@/zustand/notifications";
 import { useEffect } from "react";
 
@@ -37,11 +37,11 @@ function useNotificationStreamLifecycle() {
   const user = useAuthStore((s) => s.user);
   const role = useAuthStore((s) => s.role);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const activeRole = (role ?? user?.role ?? "user") as AuthRole;
+  const activeRole = normalizeRole(role ?? user?.role) ?? "user";
   const currentUserId = user?.id ?? null;
   const sessionKey =
     isAuthenticated && currentUserId
-      ? `${activeRole.toLowerCase()}:${currentUserId}`
+      ? `${activeRole}:${currentUserId}`
       : null;
 
   useEffect(() => {

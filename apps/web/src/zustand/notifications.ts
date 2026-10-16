@@ -27,7 +27,7 @@ interface NotificationsState {
     append?: boolean,
     filters?: Pick<ListNotificationsParams, "unreadOnly" | "category" | "type">,
   ) => Promise<void>;
-  fetchUnreadCount: () => Promise<void>;
+  fetchUnreadCount: (force?: boolean) => Promise<void>;
   markAsRead: (id: string, unreadHint?: boolean) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
@@ -83,7 +83,7 @@ function startNotificationStream(
           ...(connected ? { sseRetryExhausted: false } : {}),
         });
         if (connected) {
-          void get().fetchUnreadCount();
+          void get().fetchUnreadCount(true);
         }
       }
     },
@@ -125,27 +125,29 @@ function notificationsApiForCurrentRole() {
 }
 
 function getSseUrl(role: AuthRole): string {
+  const normalized = (role ? String(role).toLowerCase() : "user") as AuthRole;
   const routeByRole: Record<AuthRole, string> = {
     user: "notifications/sse/stream",
     admin: "admin/notifications/sse/stream",
     vendor: "vendors/notifications/sse/stream",
   };
+  const targetRoute = routeByRole[normalized] || routeByRole.user;
   const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "") || "";
 
   if (typeof window !== "undefined") {
     // 1. Direct absolute API URL
     if (apiUrl.startsWith("http")) {
-      return `${apiUrl}/${routeByRole[role]}`;
+      return `${apiUrl}/${targetRoute}`;
     }
     // 2. Direct origin connection when backend URL is configured (Render/Cloud staging/production)
     // Bypasses Next.js node-proxy rewrites which drop or buffer long-lived SSE streams.
     if (backend.startsWith("http")) {
       const cleanPrefix = apiUrl.startsWith("/") ? apiUrl : `/${apiUrl}`;
-      return `${backend}${cleanPrefix}/${routeByRole[role]}`;
+      return `${backend}${cleanPrefix}/${targetRoute}`;
     }
     // 3. Fallback to same-origin relative path for local dev setups
-    return `${apiUrl.startsWith("/") ? apiUrl : `/${apiUrl}`}/${routeByRole[role]}`;
+    return `${apiUrl.startsWith("/") ? apiUrl : `/${apiUrl}`}/${targetRoute}`;
   }
 
   const base = apiUrl.startsWith("http")
@@ -154,7 +156,7 @@ function getSseUrl(role: AuthRole): string {
       ? `${backend}${apiUrl.startsWith("/") ? apiUrl : `/${apiUrl}`}`
       : apiUrl;
 
-  return `${base}/${routeByRole[role]}`;
+  return `${base}/${targetRoute}`;
 }
 
 function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
@@ -465,7 +467,7 @@ export const useNotificationsStore = create<NotificationsState>()(
     }
   },
 
-  fetchUnreadCount: async () => {
+  fetchUnreadCount: async (force = false) => {
     const auth = useAuthStore.getState();
     const userId = auth.user?.id;
     if (!auth.isAuthenticated || !userId) return;
@@ -473,7 +475,7 @@ export const useNotificationsStore = create<NotificationsState>()(
     const activeRole = getActiveNotificationRole();
     const cacheKey = `${activeRole}:${userId}`;
     const fetchedAt = unreadCountCache.get(cacheKey) ?? 0;
-    if (Date.now() - fetchedAt < 60_000) return;
+    if (!force && Date.now() - fetchedAt < 60_000) return;
 
     const pending = unreadCountRequests.get(cacheKey);
     if (pending) return pending;

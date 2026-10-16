@@ -970,11 +970,36 @@ graph TD
    - **Socket Ceiling:** Concurrent SSE connections are throttled to a maximum of 5 per user using Redis counters (with in-memory fallback), responding with `429 Too Many Requests` to prevent socket exhaustion and runaway browser tab leaks.
    - **Revocation on Heartbeat:** Heartbeat pings emit every 15 seconds. On every heartbeat tick, the stream evaluates [`AuthSessionService.isSessionActive()`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/auth/sessions/auth-session.service.ts). If an account is deactivated, suspended, or its session revoked, the stream terminates immediately.
 
-5. **Asynchronous Work Queues & Fail-Safe Delivery:**
-   - High-throughput email deliveries and notification events route through dedicated RabbitMQ topic queues (`q.nuts.emails`, `q.nuts.notifications`).
-   - If the broker is offline or encountering backpressure, [`NotificationListener`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/listeners/notification.listener.ts) safely falls back directly to the circuit-breaker protected `EmailService` and atomic database creation.
-   - Corrupted or unparseable messages in [`NotificationsConsumer`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/consumers/notifications.consumer.ts) throw explicitly, routing immediately to `q.nuts.dlq` through the Dead Letter Exchange (`nuts.dlx`).
-   - Fan-outs across multiple vendors or platform administrators utilize `Promise.allSettled()` with per-recipient error boundaries, preventing single-recipient failures from interrupting the batch.
+5. **Authoritative In-App Persistence & Asynchronous Work Queues:**
+   - **Direct-to-Database Notification Invariant:** Unlike email dispatch which depends on an external SMTP relay, in-app notifications are written directly to PostgreSQL via [`NotificationsService.create()`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.service.ts) inside [`NotificationListener`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/listeners/notification.listener.ts). This eliminates inter-process network hops through RabbitMQ for primary in-app persistence, guaranteeing that domain events (order updates, payments, cancellations) immediately persist to the database with zero risk of silent message loss.
+   - **Dual-Path RabbitMQ Topic Topology:** High-throughput email deliveries and analytics events route through dedicated RabbitMQ topic queues (`q.nuts.emails`, `q.nuts.notifications`). [`RabbitMQService`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/infrastructure/rabbitmq/rabbitmq.service.ts) binds each queue both to its explicit queue name and to topic wildcards (`notification.*`, `email.*`, `order.*`, `payment.*`), eliminating unroutable message drops on topic exchanges when callers dispatch by queue name or routing key.
+   - **Dead Letter Queue (DLQ) Isolation:** Corrupted or unparseable messages in [`NotificationsConsumer`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/consumers/notifications.consumer.ts) route immediately to `q.nuts.dlq` through the Dead Letter Exchange (`nuts.dlx`) with `nack(false, false)` without blocking the consumer queue.
+   - **Batch Settling Boundaries:** Fan-outs across multiple vendors or platform administrators utilize `Promise.allSettled()` with per-recipient error boundaries, preventing single-recipient failures from interrupting the batch.
+
+   > [!NOTE]
+   > **Database Access Pattern: Real-Time SSE vs. PostgreSQL Persistence**
+   >
+   > The web client **never polls or queries PostgreSQL for real-time notifications**. The two responsibilities are strictly decoupled:
+   >
+   > 1. **Real-Time Live Updates (Zero Database Polling):**
+   >    - When a domain event occurs, the backend issues **one single atomic write** to PostgreSQL.
+   >    - Immediately upon write, [`broadcastNotification()`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.service.ts) publishes the payload to Redis Pub/Sub (`nuts:notifications:broadcast`) and pushes it into the server's in-memory SSE subject (`this.sseSubject.next()`).
+   >    - The event is pushed directly down the open HTTP stream (`text/event-stream`) to the user's browser in sub-50ms latency. The browser performs **zero database queries** to receive live alerts.
+   >
+   > 2. **When PostgreSQL is Queried (Standard User-Driven CRUD):**
+   >    PostgreSQL is only accessed on explicit lifecycle or user-initiated actions:
+   >
+   >    | User / Lifecycle Action | Reason PostgreSQL is Queried | Endpoint |
+   >    | :--- | :--- | :--- |
+   >    | **Initial Page Load** | Hydrates initial badge count (e.g. `(3)` on bell) | `GET /api/v1/notifications/user/unread-count` |
+   >    | **Opening Bell Drawer** | Fetches historical paginated notifications | `GET /api/v1/notifications/user` |
+   >    | **Marking as Read** | Mutates status: `read: true, readAt: NOW()` | `PATCH /api/v1/notifications/:id/read` |
+   >    | **Deleting Notification** | Removes record from database | `DELETE /api/v1/notifications/:id` |
+   >
+   > 3. **Why PostgreSQL Persistence is Mandatory:**
+   >    - **Offline History:** If a customer is offline when their order is shipped, the notification is waiting in their inbox upon next login.
+   >    - **State Management:** Tracking read/unread status across devices and sessions.
+   >    - **Deduplication:** Atomic constraints on `dedupeKey` prevent duplicated alerts from retried webhooks or message replays.
 
 6. **Automated Daily Retention Cleanup Cron:**
    - [`NotificationRetentionCron`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/cron/notification-retention/notification-retention.cron.ts) executes daily at midnight (Africa/Lagos) under a distributed Redis mutex lock.
@@ -982,7 +1007,8 @@ graph TD
 
 7. **Frontend Stream Policy & Cache Hydration (`apps/web`):**
    - **Zero Stale Cache on Unauthenticated Loads:** [`use-notifications.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/hooks/use-notifications.ts) purges persisted Zustand notification caches immediately upon unauthenticated mount, preventing sensitive notification leakage across shared browser profiles.
-   - **Stream Reconnection & State Sync:** Reconnecting SSE clients fetch both live unread counts and page-1 notifications, reconciling missed domain events.
+   - **Role Normalization & Route Guarding:** Role resolution defensively runs through `normalizeRole(role ?? user?.role) ?? "user"` across the entire notification lifecycle. In [`notifications.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/notifications.ts), `getSseUrl()` normalizes to lowercase `AuthRole` (`user`, `admin`, `vendor`), preventing route corruption (e.g. `/api/v1/undefined`) when backend JWT payloads return uppercase Prisma enums (`USER`, `ADMIN`).
+   - **Dynamic Counter Re-Hydration:** [`fetchUnreadCount(force)`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/notifications.ts) supports forced cache invalidation. Upon successful SSE handshake (`sseConnected: true`), the client immediately bypasses the 60-second read-through throttle to synchronize the exact unread counter from PostgreSQL.
    - **Finite Failure Gating ([`notification-stream-policy.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/notification-stream-policy.ts)):** Reconnections are bounded to a maximum of 3 attempts (`MAX_NOTIFICATION_STREAM_FAILURES = 3`). Automatic retries trigger on status `429 Too Many Requests` and standard server errors (`status >= 500`), while avoiding retry loops on `502 Bad Gateway`.
 
 8. **Client Presentation & High-Performance Indexing:**
@@ -996,6 +1022,7 @@ graph TD
      - `X-Accel-Buffering: no` — Instructs Render's Envoy router and upstream Nginx proxies to disable downstream response buffering and flush chunks immediately.
      - `Cache-Control: no-cache, no-transform` — Prevents intermediary proxy compression or cache mutation from modifying chunk boundaries.
      - `Connection: keep-alive` & `Content-Type: text/event-stream` — Guarantees continuous half-duplex HTTP streaming.
+   - **Rate-Limiter Exemption:** Decorated with `@SkipThrottle()` so long-lived persistent streaming connections are exempt from the global 100 req/min API rate limiter during reconnections.
    - **Compression Middleware Exemption:** In [`main.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/main.ts), Express compression middleware explicitly bypasses `notifications/sse/stream` routes to prevent gzip buffering of real-time event frames.
    - **Direct Origin Routing (Bypassing Next.js BFF Rewrites):** In [`notifications.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/notifications.ts), `getSseUrl()` automatically resolves directly to `NEXT_PUBLIC_BACKEND_URL` in cloud environments. This prevents long-lived SSE connections from traversing Next.js `rewrites` (which do not support persistent streaming and break when container bridge hostnames like `http://api:3001` are absent on Render).
    - **Redis Pub/Sub Subscriber Resilience:** [`NotificationsService`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.service.ts) attaches an explicit error boundary on the duplicate Redis subscriber client (`subClient.on('error')`), preventing unhandled connection blip crashes while ensuring asynchronous domain events emitted by workers, crons, or background queues instantly bridge to connected web client streams across distributed instances.

@@ -1,5 +1,6 @@
 import { Controller, Header, MessageEvent, Sse } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ROLE } from '@prisma/client';
 import { Observable } from 'rxjs';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
@@ -11,6 +12,7 @@ import { NotificationsService } from '../notifications.service';
 @ApiTags('NOTIFICATIONS - SSE')
 @Roles(ROLE.USER, ROLE.ADMIN, ROLE.VENDOR)
 @BypassResponseInterceptor()
+@SkipThrottle()
 @Controller([
   'notifications/sse/stream',
   'admin/notifications/sse/stream',
