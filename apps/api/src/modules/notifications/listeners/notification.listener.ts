@@ -7,7 +7,7 @@ import {
 } from '@api/modules/infrastructure/mail/email-templates.service';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
-import { RABBITMQ_QUEUES } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RABBITMQ_ROUTING_KEYS } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
 import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
 import { NotificationsService } from '../notifications.service';
 import { DomainEvents } from '@api/modules/shared/events/domain-events';
@@ -46,7 +46,10 @@ export class NotificationListener {
     type?: string;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
-    const published = await this.rabbitmq.publish(RABBITMQ_QUEUES.EMAILS, data);
+    const published = await this.rabbitmq.publish(
+      RABBITMQ_ROUTING_KEYS.EMAIL_DISPATCH,
+      data,
+    );
     if (!published) {
       try {
         await this.emailService.sendEmail({
@@ -78,28 +81,33 @@ export class NotificationListener {
     metadata?: Record<string, unknown>;
     dedupeKey?: string;
   }): Promise<void> {
-    const published = await this.rabbitmq.publish(
-      RABBITMQ_QUEUES.NOTIFICATIONS,
-      data,
-    );
-    if (!published) {
-      try {
-        await this.notificationsService.create({
-          userId: data.userId,
-          role: data.role,
-          type: data.type,
-          title: data.title,
-          message: data.message,
-          priority: data.priority,
-          link: data.link,
-          metadata: data.metadata,
-          dedupeKey: data.dedupeKey,
-        });
-      } catch (error) {
-        this.logger.error(
-          `Failed to persist in-app notification directly for user ${data.userId}: ${getErrorMessage(error)}`,
-        );
-      }
+    // 1. Authoritative direct persistence & instant Redis/SSE cluster broadcast
+    try {
+      await this.notificationsService.create({
+        userId: data.userId,
+        role: data.role,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        priority: data.priority,
+        link: data.link,
+        metadata: data.metadata,
+        dedupeKey: data.dedupeKey,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to persist in-app notification directly for user ${data.userId}: ${getErrorMessage(error)}`,
+      );
+    }
+
+    // 2. Non-blocking asynchronous event broadcast over RabbitMQ
+    try {
+      await this.rabbitmq.publish(
+        RABBITMQ_ROUTING_KEYS.NOTIFICATION_DISPATCH,
+        data,
+      );
+    } catch {
+      // Non-fatal if RabbitMQ live publish is unavailable
     }
   }
 
