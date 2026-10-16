@@ -239,7 +239,10 @@ export class NotificationListener {
               message: `You have received a new sale for order #${payload.orderNumber}.`,
               priority: NotificationPriority.HIGH,
               link: `/vendor/order/${payload.orderId}`,
-              metadata: { orderId: payload.orderId },
+              metadata: {
+                orderId: payload.orderId,
+                orderNumber: payload.orderNumber,
+              },
               dedupeKey: `ORDER_CONFIRMED:${payload.orderId}:VENDOR:${vendor.id}`,
             });
           } catch (vendorErr) {
@@ -267,8 +270,11 @@ export class NotificationListener {
             title: 'New Order Received',
             message: `Order #${payload.orderNumber} placed for ${payload.currency} ${payload.finalAmount || payload.totalAmount}.`,
             priority: NotificationPriority.HIGH,
-            link: `/admin/order`,
-            metadata: { orderId: payload.orderId },
+            link: `/admin/order/${payload.orderId}`,
+            metadata: {
+              orderId: payload.orderId,
+              orderNumber: payload.orderNumber,
+            },
             dedupeKey: `ORDER_PLACED:${payload.orderId}:ADMIN:${admin.id}`,
           }),
         ),
@@ -552,10 +558,11 @@ export class NotificationListener {
             title: 'Payment Confirmed',
             message: `Payment of ${payload.currency} ${payload.amount} confirmed for order #${payload.orderNumber}.`,
             priority: NotificationPriority.MEDIUM,
-            link: `/admin/order`,
+            link: `/admin/order/${payload.orderId}`,
             metadata: {
               paymentId: payload.paymentId,
               orderId: payload.orderId,
+              orderNumber: payload.orderNumber,
             },
             dedupeKey: `PAYMENT_RECEIVED:${payload.paymentId}:ADMIN:${admin.id}`,
           }),
