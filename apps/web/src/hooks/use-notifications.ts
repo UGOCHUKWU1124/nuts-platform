@@ -1,6 +1,6 @@
 "use client";
 
-import { type AuthRole, normalizeRole, useAuthStore } from "@/zustand/auth";
+import { normalizeRole, useAuthStore } from "@/zustand/auth";
 import { useNotificationsStore } from "@/zustand/notifications";
 import { useEffect } from "react";
 

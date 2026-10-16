@@ -7,10 +7,7 @@ import {
 } from '@api/modules/infrastructure/mail/email-templates.service';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
-import {
-  RABBITMQ_QUEUES,
-  RABBITMQ_ROUTING_KEYS,
-} from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
+import { RABBITMQ_ROUTING_KEYS } from '@api/modules/infrastructure/rabbitmq/rabbitmq.constants';
 import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.service';
 import { NotificationsService } from '../notifications.service';
 import { DomainEvents } from '@api/modules/shared/events/domain-events';

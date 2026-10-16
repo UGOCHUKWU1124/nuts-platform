@@ -976,6 +976,31 @@ graph TD
    - **Dead Letter Queue (DLQ) Isolation:** Corrupted or unparseable messages in [`NotificationsConsumer`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/consumers/notifications.consumer.ts) route immediately to `q.nuts.dlq` through the Dead Letter Exchange (`nuts.dlx`) with `nack(false, false)` without blocking the consumer queue.
    - **Batch Settling Boundaries:** Fan-outs across multiple vendors or platform administrators utilize `Promise.allSettled()` with per-recipient error boundaries, preventing single-recipient failures from interrupting the batch.
 
+   > [!NOTE]
+   > **Database Access Pattern: Real-Time SSE vs. PostgreSQL Persistence**
+   >
+   > The web client **never polls or queries PostgreSQL for real-time notifications**. The two responsibilities are strictly decoupled:
+   >
+   > 1. **Real-Time Live Updates (Zero Database Polling):**
+   >    - When a domain event occurs, the backend issues **one single atomic write** to PostgreSQL.
+   >    - Immediately upon write, [`broadcastNotification()`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.service.ts) publishes the payload to Redis Pub/Sub (`nuts:notifications:broadcast`) and pushes it into the server's in-memory SSE subject (`this.sseSubject.next()`).
+   >    - The event is pushed directly down the open HTTP stream (`text/event-stream`) to the user's browser in sub-50ms latency. The browser performs **zero database queries** to receive live alerts.
+   >
+   > 2. **When PostgreSQL is Queried (Standard User-Driven CRUD):**
+   >    PostgreSQL is only accessed on explicit lifecycle or user-initiated actions:
+   >
+   >    | User / Lifecycle Action | Reason PostgreSQL is Queried | Endpoint |
+   >    | :--- | :--- | :--- |
+   >    | **Initial Page Load** | Hydrates initial badge count (e.g. `(3)` on bell) | `GET /api/v1/notifications/user/unread-count` |
+   >    | **Opening Bell Drawer** | Fetches historical paginated notifications | `GET /api/v1/notifications/user` |
+   >    | **Marking as Read** | Mutates status: `read: true, readAt: NOW()` | `PATCH /api/v1/notifications/:id/read` |
+   >    | **Deleting Notification** | Removes record from database | `DELETE /api/v1/notifications/:id` |
+   >
+   > 3. **Why PostgreSQL Persistence is Mandatory:**
+   >    - **Offline History:** If a customer is offline when their order is shipped, the notification is waiting in their inbox upon next login.
+   >    - **State Management:** Tracking read/unread status across devices and sessions.
+   >    - **Deduplication:** Atomic constraints on `dedupeKey` prevent duplicated alerts from retried webhooks or message replays.
+
 6. **Automated Daily Retention Cleanup Cron:**
    - [`NotificationRetentionCron`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/cron/notification-retention/notification-retention.cron.ts) executes daily at midnight (Africa/Lagos) under a distributed Redis mutex lock.
    - Prunes read notifications older than 90 days and unread notifications older than 180 days in bounded batches of 1,000 to prevent database table bloat and query degradation.
