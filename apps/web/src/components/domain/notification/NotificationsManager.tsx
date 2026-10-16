@@ -3,7 +3,10 @@
 import type { AppNotification,NotificationType } from "@/api/notifications";
 import { Button } from "@/component/ui/button";
 import { useNotifications } from "@/hook/use-notifications";
-import { notificationDetailPath } from "@/lib/notification-path";
+import {
+  notificationDetailPath,
+  resolveNotificationTargetUrl,
+} from "@/lib/notification-path";
 import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import {
 AlertTriangle,
@@ -485,18 +488,26 @@ export function NotificationsManager({
                     {notif.message}
                   </p>
 
-                  {notif.actionUrl && (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleAction(notif);
-                      }}
-                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                    >
-                      View details <ExternalLink className="h-3 w-3" />
-                    </button>
-                  )}
+                  {(() => {
+                    const targetUrl = resolveNotificationTargetUrl(notif, role);
+                    if (!targetUrl) return null;
+                    const isOrder = getNotificationCategory(notif) === "orders";
+                    return (
+                      <Link
+                        href={targetUrl}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!notif.isRead) {
+                            void markAsRead(notif.id);
+                          }
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                      >
+                        {isOrder ? "View Order" : "Open Related Page"}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    );
+                  })()}
                 </div>
               </div>
 
