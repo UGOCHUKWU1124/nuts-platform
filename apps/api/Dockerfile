@@ -93,7 +93,9 @@ RUN test -s /app/apps/api/dist/main.js \
   && node -e 'for (const name of Object.keys(require("./package.json").dependencies)) require.resolve(name)'
 COPY apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
 COPY apps/api/docker-migrate.sh ./apps/api/docker-migrate.sh
-RUN chmod +x ./apps/api/docker-entrypoint.sh ./apps/api/docker-migrate.sh
+RUN chmod +x ./apps/api/docker-entrypoint.sh ./apps/api/docker-migrate.sh \
+  && mkdir -p /app/node_modules/.bin \
+  && if [ -f /app/apps/api/node_modules/.bin/prisma ]; then ln -sf /app/apps/api/node_modules/.bin/prisma /app/node_modules/.bin/prisma; fi
 
 # Run as non-root user for container security
 RUN chown -R node:node /app
