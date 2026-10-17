@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import {
 AlertTriangle,
+Bell,
 Check,
 CheckCircle2,
 Copy,
@@ -34,6 +35,7 @@ import { useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { NotificationPreferencesContent } from "@/components/domain/notification/NotificationPreferencesView";
 
 // --- Validation Schemas ---
 
@@ -59,7 +61,7 @@ const passwordSchema = z
 
 type PasswordForm = z.infer<typeof passwordSchema>;
 
-type SettingsTab = "profile" | "appearance" | "referral" | "security" | "danger";
+type SettingsTab = "profile" | "appearance" | "notifications" | "referral" | "security" | "danger";
 
 export default function AccountSettingPage() {
   const qc = useQueryClient();
@@ -280,6 +282,19 @@ export default function AccountSettingPage() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("notifications")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+            activeTab === "notifications"
+              ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs"
+              : "text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900"
+          }`}
+        >
+          <Bell className="h-4 w-4" />
+          <span>Notification Preferences</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("referral")}
           className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
             activeTab === "referral"
@@ -371,6 +386,13 @@ export default function AccountSettingPage() {
               <ThemeSelector showTitle={false} />
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Tab: Notification Preferences */}
+      {activeTab === "notifications" && (
+        <div className="mt-6 max-w-2xl">
+          <NotificationPreferencesContent />
         </div>
       )}
 

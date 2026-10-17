@@ -9,7 +9,6 @@ import {
   shouldRetryNotificationStream,
 } from "@/lib/notification-stream-policy";
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import { toast } from "sonner";
 
 interface NotificationsState {
@@ -71,6 +70,7 @@ function startNotificationStream(
     role,
     controller.signal,
     isCurrent,
+    get,
     (notification) => {
       if (get().addNotification(notification)) {
         showIncomingNotification(notification);
@@ -118,6 +118,26 @@ function showIncomingNotification(notification: AppNotification): void {
         window.location.assign(notificationDetailPath(role, notification.id)),
     },
   });
+
+  if (
+    typeof window !== "undefined" &&
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ) {
+    try {
+      const desktopNotif = new Notification(notification.title || "NUTS Notification", {
+        body: notification.message,
+        icon: "/favicon.svg",
+        tag: notification.id,
+      });
+      desktopNotif.onclick = () => {
+        window.focus();
+        window.location.assign(notificationDetailPath(role, notification.id));
+      };
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function notificationsApiForCurrentRole() {
@@ -186,20 +206,25 @@ function getStreamRetryDelay(attempt: number): number {
 
 function parseSseFrame(
   frame: string,
-  onData: (data: string) => void,
+  onData: (data: string, id?: string) => void,
 ): void {
-  const data = frame
-    .split(/\r\n|\r|\n/)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).replace(/^ /, ""))
-    .join("\n");
-  if (data) onData(data);
+  let id: string | undefined;
+  const dataLines: string[] = [];
+  for (const line of frame.split(/\r\n|\r|\n/)) {
+    if (line.startsWith("id:")) {
+      id = line.slice(3).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).replace(/^ /, ""));
+    }
+  }
+  const data = dataLines.join("\n");
+  if (data) onData(data, id);
 }
 
 async function readSseResponse(
   response: Response,
   signal: AbortSignal,
-  onData: (data: string) => void,
+  onData: (data: string, id?: string) => void,
 ): Promise<void> {
   if (!response.body) throw new Error("SSE response has no readable body");
   const reader = response.body.getReader();
@@ -228,6 +253,7 @@ async function consumeNotificationStream(
   role: AuthRole,
   signal: AbortSignal,
   isCurrent: () => boolean,
+  get: () => NotificationsState,
   onNotification: (notification: AppNotification) => void,
   onConnectionChange: (connected: boolean) => void,
   onRetryExhausted: () => void,
@@ -235,6 +261,7 @@ async function consumeNotificationStream(
   const url = getSseUrl(role);
   let retryAttempt = 0;
   let refreshedAfterUnauthorized = false;
+  let lastSeenEventId: string | null = null;
 
   const retryAfterFailure = async (reason: string): Promise<boolean> => {
     retryAttempt++;
@@ -252,6 +279,11 @@ async function consumeNotificationStream(
 
   while (!signal.aborted && isCurrent()) {
     const headers = new Headers({ Accept: "text/event-stream" });
+    const latestEventId = lastSeenEventId || get().notifications[0]?.id;
+    if (latestEventId) {
+      headers.set("Last-Event-ID", latestEventId);
+    }
+
     let token = getAuthToken(role);
     if (!token && typeof window !== "undefined") {
       const refresh = await performTokenRefresh(role);
@@ -356,15 +388,26 @@ async function consumeNotificationStream(
     onConnectionChange(true);
     const connectedAt = Date.now();
     try {
-      await readSseResponse(response, signal, (data) => {
+      await readSseResponse(response, signal, (data, eventId) => {
         try {
           const parsed: unknown = JSON.parse(data);
           if (!parsed || typeof parsed !== "object") return;
           const value = parsed as Record<string, unknown>;
+
+          // Heartbeat ping and connection handshake frames have no notification body
+          if (value.type === "ping" || value.type === "connected") return;
+
           const notification = (value.notification ?? value) as Partial<AppNotification> & {
             link?: string | null;
           };
           if (typeof notification.id !== "string") return;
+
+          if (eventId) {
+            lastSeenEventId = eventId;
+          } else if (notification.id) {
+            lastSeenEventId = notification.id;
+          }
+
           onNotification({
             ...notification,
             actionUrl: notification.actionUrl ?? notification.link ?? null,
@@ -393,9 +436,7 @@ async function consumeNotificationStream(
   }
 }
 
-export const useNotificationsStore = create<NotificationsState>()(
-  persist(
-    (set, get) => ({
+export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: false,
@@ -661,25 +702,7 @@ export const useNotificationsStore = create<NotificationsState>()(
     streamGeneration++;
     startNotificationStream(globalStreamRole, globalStreamKey, set, get);
   },
-}),
-{
-  name: "nuts_notifications_cache",
-      storage: createJSONStorage(() =>
-        typeof window !== "undefined"
-          ? window.localStorage
-          : {
-              getItem: () => null,
-              setItem: () => {},
-              removeItem: () => {},
-            }
-      ),
-      partialize: (state) => ({
-        notifications: state.notifications.slice(0, 20),
-        unreadCount: state.unreadCount,
-      }),
-    },
-  ),
-);
+}));
 
 function createStreamCleanup(
   sessionKey: string,

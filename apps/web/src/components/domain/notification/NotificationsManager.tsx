@@ -10,6 +10,7 @@ import {
 import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import {
 AlertTriangle,
+ArrowLeft,
 Bell,
 Check,
 CheckCheck,
@@ -18,11 +19,15 @@ DollarSign,
 ExternalLink,
 Info,
 Package,
+Search,
+SlidersHorizontal,
 Trash2,
+X,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
+import { NotificationPreferencesDialog } from "@/components/domain/notification/NotificationPreferencesView";
 
 interface NotificationsManagerProps {
   title?: string;
@@ -164,6 +169,7 @@ export function NotificationsManager({
   const role = normalizeRole(rawRole) ?? "user";
   const [filter, setFilter] = useState<"all" | "unread" | "orders" | "payments" | "system">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const {
     notifications,
     isLoading,
@@ -233,24 +239,37 @@ export function NotificationsManager({
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
-      {/* Top Bar with back link & SSE status */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-6 sm:mb-8">
-        <div>
+    <div className="w-full max-w-5xl mx-auto py-2 sm:py-6 px-1 min-[360px]:px-2 sm:px-4">
+      {/* Top Bar with back link & actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div className="min-w-0 flex-1">
           {backHref && (
             <Link
               href={backHref}
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mb-2 inline-block"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mb-1.5"
             >
-              ← Back to {backLabel || "Overview"}
+              <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+              <span>Back to {backLabel || "Home"}</span>
             </Link>
           )}
-          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-lg min-[360px]:text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-foreground break-words">
             {title}
           </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 leading-relaxed">
             {subtitle}
           </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsPreferencesOpen(true)}
+            className="w-full sm:w-auto gap-2 text-xs h-9 rounded-xl font-medium border-border hover:bg-secondary transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+            <span>Notification Preferences</span>
+          </Button>
         </div>
       </div>
 
@@ -277,30 +296,29 @@ export function NotificationsManager({
       {/* Filter and Search Bar */}
       <div className="space-y-3.5 pb-4 border-b border-border">
         {/* Search Input */}
-        <div className="relative">
+        <div className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-3.5 h-4 w-4 text-muted-foreground/70" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search notifications by keyword, title, order ID..."
-            className="w-full rounded-xl border border-border bg-card px-3.5 py-2 pl-9 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+            className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-10 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-2xs"
           />
-          <span className="absolute left-3 top-2.5 text-muted-foreground">
-            🔍
-          </span>
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+              className="absolute right-3 flex h-6 w-6 items-center justify-center rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+              title="Clear search"
             >
-              Clear
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
         {/* Filter Pills & Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           {/* Category Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 [scrollbar-width:none]">
             <button
@@ -363,13 +381,13 @@ export function NotificationsManager({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
             {unreadItemsCount > 0 && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => markAllAsRead()}
-                className="gap-1.5 text-xs h-8 cursor-pointer"
+                className="gap-1.5 text-xs h-8 cursor-pointer rounded-lg"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 <span>Mark all as read</span>
@@ -380,7 +398,7 @@ export function NotificationsManager({
                 variant="ghost"
                 size="sm"
                 onClick={() => clearAll()}
-                className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-destructive cursor-pointer"
+                className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-destructive cursor-pointer rounded-lg"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 <span>Clear read</span>
@@ -442,77 +460,80 @@ export function NotificationsManager({
                   void handleAction(notif);
                 }
               }}
-              className={`group relative flex flex-col sm:flex-row sm:items-start justify-between gap-4 p-5 rounded-2xl border transition-all ${
+              className={`group relative flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border transition-all cursor-pointer ${
                 !notif.isRead
-                  ? "bg-card border-primary/20 shadow-xs"
-                  : "bg-card/40 border-border/70 hover:border-border"
+                  ? "bg-card border-primary/25 shadow-xs hover:border-primary/50"
+                  : "bg-card/40 border-border/70 hover:border-border hover:bg-card/70"
               }`}
             >
-              <div className="flex items-start gap-4 flex-1 min-w-0">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-secondary/80">
+              <div className="flex items-start gap-2.5 sm:gap-4 flex-1 min-w-0">
+                <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-secondary/80 mt-0.5">
                   {getNotificationIcon(notif.type)}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
                     <span
-                      className={`text-sm font-semibold tracking-tight ${
+                      className={`text-xs min-[360px]:text-sm sm:text-base font-semibold tracking-tight break-words ${
                         !notif.isRead ? "text-foreground" : "text-muted-foreground"
                       }`}
                     >
                       {notif.title}
                     </span>
                     {!notif.isRead && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] min-[360px]:text-[10px] font-bold bg-primary text-primary-foreground">
                         NEW
                       </span>
                     )}
                     {getNotificationCategory(notif) === "payments" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] min-[360px]:text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
                         <CreditCard className="h-2.5 w-2.5" /> Payment
                       </span>
                     ) : getNotificationCategory(notif) === "orders" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] min-[360px]:text-[10px] font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20">
                         <Package className="h-2.5 w-2.5" /> Order
                       </span>
                     ) : null}
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary text-secondary-foreground">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] min-[360px]:text-[10px] font-medium bg-secondary text-secondary-foreground">
                       {notificationTypeLabels[notif.type]}
-                    </span>
-                    <span className="text-xs text-muted-foreground ml-auto sm:ml-0">
-                      {formatFullDate(notif.createdAt)}
                     </span>
                   </div>
 
-                  <p className="text-sm text-muted-foreground leading-relaxed">
+                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed break-words">
                     {notif.message}
                   </p>
 
-                  {(() => {
-                    const targetUrl = resolveNotificationTargetUrl(notif, role);
-                    if (!targetUrl) return null;
-                    const isOrder = getNotificationCategory(notif) === "orders";
-                    return (
-                      <Link
-                        href={targetUrl}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (!notif.isRead) {
-                            void markAsRead(notif.id);
-                          }
-                        }}
-                        className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                      >
-                        {isOrder ? "View Order" : "Open Related Page"}
-                        <ExternalLink className="h-3 w-3" />
-                      </Link>
-                    );
-                  })()}
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] sm:text-xs text-muted-foreground">
+                      {formatFullDate(notif.createdAt)}
+                    </span>
+
+                    {(() => {
+                      const targetUrl = resolveNotificationTargetUrl(notif, role);
+                      if (!targetUrl) return null;
+                      const isOrder = getNotificationCategory(notif) === "orders";
+                      return (
+                        <Link
+                          href={targetUrl}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!notif.isRead) {
+                              void markAsRead(notif.id);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                        >
+                          {isOrder ? "View Order" : "Open Page"}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-1 self-end sm:self-center shrink-0 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-1 self-end sm:self-start shrink-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                 {!notif.isRead && (
                   <Button
                     variant="ghost"
@@ -522,7 +543,7 @@ export function NotificationsManager({
                       void markAsRead(notif.id);
                     }}
                     title="Mark as read"
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-lg"
                   >
                     <Check className="h-4 w-4" />
                   </Button>
@@ -535,7 +556,7 @@ export function NotificationsManager({
                     void deleteNotification(notif.id);
                   }}
                   title="Delete notification"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive rounded-lg"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -564,6 +585,11 @@ export function NotificationsManager({
           </Button>
         </div>
       )}
+
+      <NotificationPreferencesDialog
+        open={isPreferencesOpen}
+        onOpenChange={setIsPreferencesOpen}
+      />
     </div>
   );
 }

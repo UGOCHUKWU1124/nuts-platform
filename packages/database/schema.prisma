@@ -888,6 +888,44 @@ model Notification {
   @@map("notifications")
 }
 
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  role      ROLE     @default(USER)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, role])
+  @@map("push_subscriptions")
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid())
+  userId          String
+  role            ROLE     @default(USER)
+
+  // Channels
+  emailEnabled    Boolean  @default(true)
+  inAppEnabled    Boolean  @default(true)
+  pushEnabled     Boolean  @default(true)
+
+  // Functional Categories
+  orderUpdates    Boolean  @default(true)
+  paymentAlerts   Boolean  @default(true)
+  inventoryAlerts Boolean  @default(true)
+  marketingPromos Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, role])
+  @@map("notification_preferences")
+}
+
 enum OutboxStatus {
   PENDING
   PROCESSING

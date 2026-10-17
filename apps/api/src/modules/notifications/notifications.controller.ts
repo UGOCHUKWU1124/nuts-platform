@@ -7,7 +7,7 @@ import {
   Patch,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
@@ -17,6 +17,7 @@ import { NotificationsService } from './notifications.service';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 
 @ApiTags('NOTIFICATIONS')
+@ApiBearerAuth('JWT-auth')
 @Controller('notifications')
 @Roles(ROLE.USER, ROLE.ADMIN, ROLE.VENDOR)
 export class NotificationsController {
@@ -51,6 +52,20 @@ export class NotificationsController {
     return { count };
   }
 
+  @Patch(['mark-all-read', 'read-all'])
+  @Message('All notifications marked as read successfully')
+  @ApiOperation({ summary: 'Mark all unread notifications as read' })
+  async markAllAsRead(@GetUser() user: AuthenticatedUser) {
+    return this.notificationsService.markAllAsRead(user.id, user.role);
+  }
+
+  @Delete(['clear-all', 'read'])
+  @Message('All read notifications cleared successfully')
+  @ApiOperation({ summary: 'Clear all read notifications' })
+  async clearAll(@GetUser() user: AuthenticatedUser) {
+    return this.notificationsService.clearAll(user.id, user.role);
+  }
+
   @Get(':id')
   @Message('Notification retrieved successfully')
   @ApiOperation({ summary: 'Get a notification for the current user' })
@@ -69,20 +84,6 @@ export class NotificationsController {
     @GetUser() user: AuthenticatedUser,
   ) {
     return this.notificationsService.markAsRead(id, user.id, user.role);
-  }
-
-  @Patch(['mark-all-read', 'read-all'])
-  @Message('All notifications marked as read successfully')
-  @ApiOperation({ summary: 'Mark all unread notifications as read' })
-  async markAllAsRead(@GetUser() user: AuthenticatedUser) {
-    return this.notificationsService.markAllAsRead(user.id, user.role);
-  }
-
-  @Delete(['clear-all', 'read'])
-  @Message('All read notifications cleared successfully')
-  @ApiOperation({ summary: 'Clear all read notifications' })
-  async clearAll(@GetUser() user: AuthenticatedUser) {
-    return this.notificationsService.clearAll(user.id, user.role);
   }
 
   @Delete(':id')

@@ -122,7 +122,6 @@ export interface AuthState {
   clearSession: () => void;
   setStatus: (status: AuthStatus) => void;
   setUser: (user: User | UserResponseDto | null) => void;
-  syncActiveRole?: (targetRole?: AuthRole) => void;
 
   // Auth Operations
   login: (payload: LoginPayload) => Promise<void>;
@@ -148,10 +147,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   isLoading: true,
   isInitialized: false,
 
-  syncActiveRole: () => {
-    // Role is derived directly from the authenticated user profile.
-  },
-
   setStatus: (status) => {
     set((state) => ({
       status,
@@ -171,15 +166,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
 
     markSessionAuthenticated(userRole);
-
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("nuts_active_role", userRole);
-        sessionStorage.setItem("nuts_session_role", userRole);
-      } catch {
-        // Ignore storage exceptions
-      }
-    }
 
     const capabilities =
       rawUser.capabilities ??
@@ -207,14 +193,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   clearSession: () => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.removeItem("nuts_active_role");
-        sessionStorage.removeItem("nuts_session_role");
-      } catch {
-        // Ignore storage exceptions
-      }
-    }
     clearAuthTokens();
     markSessionUnauthenticated();
     set({
@@ -384,14 +362,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         get().setStatus("hydrating");
       }
 
-      // 1. Identify active session role from in-memory state, URL path, cross-tab localStorage, or sessionStorage hint
-      const sessionHint =
-        typeof window !== "undefined"
-          ? normalizeRole(
-              localStorage.getItem("nuts_active_role") ||
-              sessionStorage.getItem("nuts_session_role")
-            )
-          : null;
+      // 1. Identify active session role from in-memory token state or URL path (strictly no storage leaks)
       const pathHint: AuthRole | null =
         typeof window !== "undefined"
           ? window.location.pathname.startsWith("/admin")
@@ -402,7 +373,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           : null;
 
       const candidateRole: AuthRole =
-        get().role || getAuthSessionRole() || pathHint || sessionHint || "user";
+        get().role || getAuthSessionRole() || pathHint || "user";
 
       // 2. Refresh tokens using HttpOnly refresh_token cookie (re-populates in-memory access token)
       try {

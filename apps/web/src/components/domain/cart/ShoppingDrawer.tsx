@@ -14,7 +14,7 @@ import { Button } from "@/component/ui/button";
 import { Dialog,DialogContent,DialogDescription,DialogTitle } from "@/component/ui/dialog";
 import { Input } from "@/component/ui/input";
 import { useCart } from "@/hook/use-cart";
-import { useLocalStorageValue, writeLocalStorageValue } from "../../../hook/use-local-storage-value";
+import { useDiscountStore } from "@/zustand/discount";
 import { useWishlist } from "@/hook/use-wishlist";
 import { queryKey } from "@/lib/query-key";
 import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
@@ -335,20 +335,8 @@ export function ShoppingDrawer() {
   const close = useShoppingDrawerStore((state) => state.close);
   const [discountCode, setDiscountCode] = useState("");
   const [discountPreview, setDiscountPreview] = useState<DiscountPreviewDto | null>(null);
-  const savedDiscount = useLocalStorageValue("nuts_applied_discount");
-  const savedDiscountCode = (() => {
-    if (!savedDiscount) return "";
-    try {
-      const parsed: unknown = JSON.parse(savedDiscount);
-      if (parsed && typeof parsed === "object" && "code" in parsed && typeof parsed.code === "string") {
-        return parsed.code;
-      }
-    } catch {
-      return savedDiscount;
-    }
-    return "";
-  })();
-  const effectiveDiscountCode = discountCode || savedDiscountCode;
+  const { appliedDiscount, setAppliedDiscount, clearDiscount } = useDiscountStore();
+  const effectiveDiscountCode = discountCode || appliedDiscount?.code || "";
   const { items: wishlist, removeItem } = useWishlist();
   const {
     items: cartItems,
@@ -362,15 +350,11 @@ export function ShoppingDrawer() {
     mutationFn: (code: string) => cartService.previewDiscount(code).then((res) => res.data),
     onSuccess: (data) => {
       setDiscountPreview(data);
-      try {
-        writeLocalStorageValue("nuts_applied_discount", JSON.stringify({ code: data.code, amount: data.discountAmount }));
-      } catch {}
+      setAppliedDiscount({ code: data.code, amount: data.discountAmount });
     },
     onError: () => {
       setDiscountPreview(null);
-      try {
-        writeLocalStorageValue("nuts_applied_discount", null);
-      } catch {}
+      clearDiscount();
       toast.error("Discount code could not be applied");
     },
   });
@@ -379,9 +363,7 @@ export function ShoppingDrawer() {
     const code = effectiveDiscountCode.trim();
     if (!code) {
       setDiscountPreview(null);
-      try {
-        writeLocalStorageValue("nuts_applied_discount", null);
-      } catch {}
+      clearDiscount();
       return;
     }
     previewDiscount.mutate(code);
