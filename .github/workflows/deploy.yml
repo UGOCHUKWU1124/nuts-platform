@@ -1,6 +1,10 @@
 name: NUTS - CD 
 
 on:
+  push:
+    branches:
+      - staging
+      - main
   workflow_run:
     workflows: ["CI — Monorepo Quality Gates"]
     branches:
@@ -20,14 +24,14 @@ on:
           - production
 
 concurrency:
-  group: deploy-${{ github.event.workflow_run.head_branch || github.ref }}
+  group: deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   resolve-environment:
     name: Determine Target Environment
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     outputs:
       env_name: ${{ steps.set-env.outputs.env_name }}
       docker_tag: ${{ steps.set-env.outputs.docker_tag }}
