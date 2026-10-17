@@ -15,6 +15,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import {
 AlertTriangle,
+Bell,
 ExternalLink,
 Lock,
 Palette,
@@ -27,6 +28,7 @@ import { useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { NotificationPreferencesContent } from "@/components/domain/notification/NotificationPreferencesView";
 
 const storeSchema = z.object({
   storeName: z.string().min(2, "Store name is required"),
@@ -43,7 +45,7 @@ type StoreFormData = z.infer<typeof storeSchema>;
 export default function VendorSettingPage() {
   const qc = useQueryClient();
   const logout = useAuthStore((state) => state.logout);
-  const [activeTab, setActiveTab] = useState<"store" | "theme" | "danger">("store");
+  const [activeTab, setActiveTab] = useState<"store" | "theme" | "notifications" | "danger">("store");
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
@@ -136,6 +138,19 @@ export default function VendorSettingPage() {
           >
             <Palette className="h-4 w-4" />
             <span>Appearance & Theme</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("notifications")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+              activeTab === "notifications"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            <Bell className="h-4 w-4" />
+            <span>Notification Preferences</span>
           </button>
 
           <button
@@ -279,6 +294,13 @@ export default function VendorSettingPage() {
                 <ThemeSelector showTitle={false} />
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* Tab: Notification Preferences */}
+        {activeTab === "notifications" && (
+          <div className="max-w-2xl">
+            <NotificationPreferencesContent />
           </div>
         )}
 

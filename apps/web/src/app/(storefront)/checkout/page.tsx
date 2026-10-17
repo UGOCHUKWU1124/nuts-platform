@@ -13,6 +13,7 @@ import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
 import { clearClientCart } from "@/lib/cart-cleanup";
 import { formatPrice } from "@/lib/util";
 import { useAuthStore } from "@/zustand/auth";
+import { useDiscountStore } from "@/zustand/discount";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -47,8 +48,8 @@ export default function CheckoutPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [discountCode, setDiscountCode] = useState(() => searchParams.get("code") ?? "");
-  const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number } | null>(null);
+  const { appliedDiscount, setAppliedDiscount, clearDiscount } = useDiscountStore();
+  const [discountCode, setDiscountCode] = useState(() => searchParams.get("code") ?? appliedDiscount?.code ?? "");
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [addressMode, setAddressMode] = useState<"default" | "new">("default");
   const [saveAsDefault, setSaveAsDefault] = useState(false);
@@ -102,40 +103,26 @@ export default function CheckoutPage() {
     }
   }, [defaultAddress, form]);
 
-  // Revalidate a saved discount code against the server before applying it.
+  // Revalidate an applied discount code against the server before applying it.
+  const appliedDiscountCode = appliedDiscount?.code;
   useEffect(() => {
-    let initialCode = searchParams.get("code") ?? "";
-    if (!initialCode) {
-      try {
-        const saved: unknown = JSON.parse(localStorage.getItem("nuts_applied_discount") ?? "null");
-        if (saved && typeof saved === "object" && "code" in saved && typeof saved.code === "string") {
-          initialCode = saved.code;
-        }
-      } catch {}
-    }
-
+    const initialCode = searchParams.get("code") ?? appliedDiscountCode ?? "";
     if (!initialCode) return;
     void cartService
       .previewDiscount(initialCode)
       .then((res) => {
-          setDiscountCode(res.data.code);
-          const discountData = {
-            code: res.data.code,
-            amount: res.data.discountAmount,
-          };
-          setAppliedDiscount(discountData);
-          try {
-            localStorage.setItem("nuts_applied_discount", JSON.stringify(discountData));
-          } catch {}
-          toast.success(`Discount code "${res.data.code}" applied!`);
-        })
+        setDiscountCode(res.data.code);
+        setAppliedDiscount({
+          code: res.data.code,
+          amount: res.data.discountAmount,
+        });
+        toast.success(`Discount code "${res.data.code}" applied!`);
+      })
       .catch(() => {
-          try {
-            localStorage.removeItem("nuts_applied_discount");
-          } catch {}
-        })
+        clearDiscount();
+      })
       .finally(() => setIsApplyingDiscount(false));
-  }, [searchParams]);
+  }, [searchParams, appliedDiscountCode, clearDiscount, setAppliedDiscount]);
 
   const checkoutMutation = useMutation({
     mutationFn: (payload: CheckoutPayload) => orderService.checkout(payload),
@@ -227,16 +214,10 @@ export default function CheckoutPage() {
         amount: res.data.discountAmount,
       };
       setAppliedDiscount(discountData);
-      try {
-        localStorage.setItem("nuts_applied_discount", JSON.stringify(discountData));
-      } catch {}
       toast.success(`Discount code "${res.data.code}" applied!`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, "Invalid or expired discount code"));
-      setAppliedDiscount(null);
-      try {
-        localStorage.removeItem("nuts_applied_discount");
-      } catch {}
+      clearDiscount();
     } finally {
       setIsApplyingDiscount(false);
     }
@@ -244,11 +225,8 @@ export default function CheckoutPage() {
 
   const handleRemoveDiscount = () => {
     if (checkoutMutation.isPending) return;
-    setAppliedDiscount(null);
+    clearDiscount();
     setDiscountCode("");
-    try {
-      localStorage.removeItem("nuts_applied_discount");
-    } catch {}
     toast.info("Discount code removed");
   };
 

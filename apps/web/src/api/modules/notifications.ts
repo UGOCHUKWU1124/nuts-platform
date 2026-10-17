@@ -42,15 +42,48 @@ export interface ListNotificationsParams {
   category?: "orders" | "payments";
 }
 
-export interface CursorPaginationMeta {
-  limit: number;
-  hasNextPage: boolean;
-  nextCursor: string | null;
-}
+import type { CursorPaginationMeta } from "../core/types";
 
 export interface NotificationsListResponse {
   data: AppNotification[];
   meta: CursorPaginationMeta;
+}
+
+export interface NotificationPreferences {
+  id: string;
+  userId: string;
+  role: string;
+  emailEnabled: boolean;
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  orderUpdates: boolean;
+  paymentAlerts: boolean;
+  inventoryAlerts: boolean;
+  marketingPromos: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type UpdateNotificationPreferencesDto = Partial<
+  Pick<
+    NotificationPreferences,
+    | "emailEnabled"
+    | "inAppEnabled"
+    | "pushEnabled"
+    | "orderUpdates"
+    | "paymentAlerts"
+    | "inventoryAlerts"
+    | "marketingPromos"
+  >
+>;
+
+export interface PushSubscriptionDto {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  userAgent?: string;
 }
 
 function createNotificationsApi(client: typeof userApi) {
@@ -93,6 +126,30 @@ function createNotificationsApi(client: typeof userApi) {
 
     clearAll() {
       return client.delete<{ count: number }>("/notifications/clear-all");
+    },
+
+    getVapidKey() {
+      return client.get<{ publicKey: string }>("/notifications/push/vapid-key");
+    },
+
+    subscribePush(dto: PushSubscriptionDto) {
+      return client.post<{ id: string; endpoint: string }>("/notifications/push/subscribe", dto);
+    },
+
+    unsubscribePush(endpoint: string) {
+      return client.post<{ success: boolean }>("/notifications/push/unsubscribe", { endpoint });
+    },
+
+    sendTestPush() {
+      return client.post<{ delivered: number; message: string }>("/notifications/push/test");
+    },
+
+    getPreferences() {
+      return client.get<NotificationPreferences>("/notifications/preferences");
+    },
+
+    updatePreferences(dto: UpdateNotificationPreferencesDto) {
+      return client.patch<NotificationPreferences>("/notifications/preferences", dto);
     },
   };
 }

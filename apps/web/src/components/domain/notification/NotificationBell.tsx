@@ -12,10 +12,12 @@ CreditCard,
 DollarSign,
 Info,
 Package,
+SlidersHorizontal,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
+import { NotificationPreferencesDialog } from "@/components/domain/notification/NotificationPreferencesView";
 
 function getNotificationIcon(type: NotificationType) {
   switch (type) {
@@ -56,6 +58,7 @@ export function NotificationBell({
   placement?: "header" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { user, role, isAuthenticated } = useAuthStore();
@@ -134,13 +137,20 @@ export function NotificationBell({
       </button>
 
       {open && (
-        <div
-          className={`${
-            placement === "bottom"
-              ? "fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-2 right-2 mx-auto w-auto max-w-sm sm:left-auto sm:right-4"
-              : "absolute right-0 mt-2 w-[min(24rem,calc(100vw-1rem))]"
-          } z-50 overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl animate-in fade-in zoom-in-95 duration-150`}
-        >
+        <>
+          {placement !== "bottom" && (
+            <div
+              className="fixed inset-0 z-40 bg-black/20 backdrop-blur-2xs sm:hidden"
+              onClick={() => setOpen(false)}
+            />
+          )}
+          <div
+            className={`${
+              placement === "bottom"
+                ? "fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-2 right-2 mx-auto w-auto max-w-sm sm:left-auto sm:right-4"
+                : "fixed inset-x-2 top-16 mx-auto w-[calc(100vw-1rem)] max-w-sm sm:max-w-md sm:w-96 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2"
+            } z-50 overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl animate-in fade-in zoom-in-95 duration-150`}
+          >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-secondary/30">
             <div className="flex items-center gap-2">
@@ -151,16 +161,29 @@ export function NotificationBell({
                 </span>
               )}
             </div>
-            {unreadCount > 0 && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => markAllAsRead()}
-                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => {
+                  setOpen(false);
+                  setIsPreferencesOpen(true);
+                }}
+                title="Notification Preferences"
+                className="flex items-center p-1 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary cursor-pointer"
               >
-                <CheckCheck className="h-3.5 w-3.5" />
-                Mark all read
+                <SlidersHorizontal className="h-3.5 w-3.5" />
               </button>
-            )}
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => markAllAsRead()}
+                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  Mark all read
+                </button>
+              )}
+            </div>
           </div>
 
           {/* List */}
@@ -233,17 +256,34 @@ export function NotificationBell({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-border p-2 bg-secondary/20">
+          <div className="border-t border-border p-2 bg-secondary/20 flex items-center justify-between gap-2 px-3">
             <Link
               href={allNotificationsHref}
               onClick={() => setOpen(false)}
-              className="flex w-full items-center justify-center rounded-xl py-2 text-xs font-semibold text-primary hover:bg-secondary transition-colors"
+              className="flex-1 text-center rounded-xl py-1.5 text-xs font-semibold text-primary hover:bg-secondary transition-colors"
             >
               View all notifications
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setIsPreferencesOpen(true);
+              }}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-xl hover:bg-secondary transition-colors cursor-pointer shrink-0"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+              <span>Preferences</span>
+            </button>
           </div>
         </div>
+        </>
       )}
+
+      <NotificationPreferencesDialog
+        open={isPreferencesOpen}
+        onOpenChange={setIsPreferencesOpen}
+      />
     </div>
   );
 }

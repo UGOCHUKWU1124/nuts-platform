@@ -109,7 +109,7 @@ export function NotificationDetail({ id }: { id: string }) {
         </p>
         <Button asChild variant="outline" className="mt-6">
           <Link href={backHref}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Notifications
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
           </Link>
         </Button>
       </main>
@@ -151,14 +151,6 @@ export function NotificationDetail({ id }: { id: string }) {
 
   const badgeInfo = getTypeBadge(item.type);
 
-  // Priority color styling
-  const priorityBadge = {
-    URGENT: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
-    HIGH: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30",
-    MEDIUM: "bg-secondary text-secondary-foreground border-border",
-    LOW: "bg-muted text-muted-foreground border-transparent",
-  }[item.priority] || "bg-secondary text-secondary-foreground border-border";
-
   const orderId =
     (item.metadata?.orderId as string | undefined) ??
     (item.metadata?.order_id as string | undefined);
@@ -167,13 +159,6 @@ export function NotificationDetail({ id }: { id: string }) {
     (item.metadata?.paymentId as string | undefined) ??
     (item.metadata?.payment_id as string | undefined);
 
-  const portalLabel =
-    role === "admin"
-      ? "Admin Portal"
-      : role === "vendor"
-        ? "Vendor Portal"
-        : "Storefront Account";
-
   return (
     <main className="mx-auto max-w-3xl px-3 sm:px-6 py-6 sm:py-10 space-y-6">
       {/* Breadcrumb & Navigation */}
@@ -181,7 +166,7 @@ export function NotificationDetail({ id }: { id: string }) {
         <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
           <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
-            Back to {portalLabel} Notifications
+            Back
           </Link>
         </Button>
         <Button
@@ -205,11 +190,6 @@ export function NotificationDetail({ id }: { id: string }) {
             >
               {badgeInfo.icon}
               {badgeInfo.label}
-            </span>
-            <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${priorityBadge}`}
-            >
-              {item.priority} Priority
             </span>
           </div>
 

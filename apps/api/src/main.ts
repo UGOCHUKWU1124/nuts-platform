@@ -128,6 +128,9 @@ async function bootstrap() {
       'x-csrf-token',
       'x-auth-role',
       'x-otp-code',
+      'Last-Event-ID',
+      'last-event-id',
+      'Cache-Control',
     ],
     // Let browser JS read the rotated CSRF token from responses cross-origin.
     exposedHeaders: ['x-csrf-token', 'Server-Timing'],

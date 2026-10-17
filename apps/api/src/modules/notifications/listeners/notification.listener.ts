@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationPriority, NotificationType, ROLE } from '@prisma/client';
 import {
@@ -12,6 +12,10 @@ import { RabbitMQService } from '@api/modules/infrastructure/rabbitmq/rabbitmq.s
 import { NotificationsService } from '../notifications.service';
 import { DomainEvents } from '@api/modules/shared/events/domain-events';
 import { getErrorMessage } from '@api/modules/shared/utils/error-details.util';
+import {
+  NotificationPreferencesService,
+  NotificationCategory,
+} from '../preferences/preferences.service';
 import type {
   OrderCancelledPayload,
   OrderDeliveredPayload,
@@ -32,11 +36,14 @@ export class NotificationListener {
     private readonly emailTemplates: EmailTemplatesService,
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    @Optional()
+    private readonly preferencesService?: NotificationPreferencesService,
   ) {}
 
   /**
    * Dispatches email via RabbitMQ work queue with seamless fallback to direct
    * circuit-breaker protected EmailService if RabbitMQ is offline or backpressured.
+   * Respects user email notification preferences and category opt-outs.
    */
   private async dispatchEmail(data: {
     to: string;
@@ -44,8 +51,26 @@ export class NotificationListener {
     html?: string;
     text?: string;
     type?: string;
+    userId?: string;
+    role?: ROLE;
+    category?: NotificationCategory;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
+    if (data.userId && data.category && this.preferencesService) {
+      const canSend = await this.preferencesService.canSend(
+        data.userId,
+        data.role ?? ROLE.USER,
+        'email',
+        data.category,
+      );
+      if (!canSend) {
+        this.logger.debug(
+          `Skipping email delivery to ${data.to}: opted out of ${data.category}`,
+        );
+        return;
+      }
+    }
+
     const published = await this.rabbitmq.publish(
       RABBITMQ_ROUTING_KEYS.EMAIL_DISPATCH,
       data,
@@ -67,8 +92,8 @@ export class NotificationListener {
   }
 
   /**
-   * Dispatches in-app notification to RabbitMQ, with seamless fallback to direct
-   * notification service persistence & real-time SSE broadcast if RabbitMQ is unavailable.
+   * Dispatches in-app notification to RabbitMQ for single-execution consumer processing.
+   * Seamlessly falls back to direct notificationsService persistence if RabbitMQ is offline.
    */
   private async dispatchNotification(data: {
     userId: string;
@@ -81,33 +106,31 @@ export class NotificationListener {
     metadata?: Record<string, unknown>;
     dedupeKey?: string;
   }): Promise<void> {
-    // 1. Authoritative direct persistence & instant Redis/SSE cluster broadcast
-    try {
-      await this.notificationsService.create({
-        userId: data.userId,
-        role: data.role,
-        type: data.type,
-        title: data.title,
-        message: data.message,
-        priority: data.priority,
-        link: data.link,
-        metadata: data.metadata,
-        dedupeKey: data.dedupeKey,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to persist in-app notification directly for user ${data.userId}: ${getErrorMessage(error)}`,
-      );
-    }
+    // 1. Asynchronous event dispatch over RabbitMQ to NotificationsConsumer
+    const published = await this.rabbitmq.publish(
+      RABBITMQ_ROUTING_KEYS.NOTIFICATION_DISPATCH,
+      data,
+    );
 
-    // 2. Non-blocking asynchronous event broadcast over RabbitMQ
-    try {
-      await this.rabbitmq.publish(
-        RABBITMQ_ROUTING_KEYS.NOTIFICATION_DISPATCH,
-        data,
-      );
-    } catch {
-      // Non-fatal if RabbitMQ live publish is unavailable
+    // 2. Direct persistence & broadcast fallback only if RabbitMQ is unavailable
+    if (!published) {
+      try {
+        await this.notificationsService.create({
+          userId: data.userId,
+          role: data.role,
+          type: data.type,
+          title: data.title,
+          message: data.message,
+          priority: data.priority,
+          link: data.link,
+          metadata: data.metadata,
+          dedupeKey: data.dedupeKey,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Fallback direct notification persistence failed for user ${data.userId}: ${getErrorMessage(error)}`,
+        );
+      }
     }
   }
 
@@ -158,6 +181,9 @@ export class NotificationListener {
       subject: `Order Confirmation - ${payload.orderNumber}`,
       html: customerHtml,
       type: 'order_confirmation',
+      userId: payload.userId,
+      role: ROLE.USER,
+      category: 'orderUpdates',
       metadata: { orderId: payload.orderId },
     });
 
@@ -228,6 +254,9 @@ export class NotificationListener {
               subject: `New Order Received - ${payload.orderNumber}`,
               html: vendorHtml,
               type: 'vendor_new_order',
+              userId: vendor.id,
+              role: ROLE.VENDOR,
+              category: 'orderUpdates',
               metadata: { orderId: payload.orderId, vendorId: vendor.id },
             });
 
@@ -334,6 +363,9 @@ export class NotificationListener {
       subject: `Your Order #${payload.orderNumber} Has Shipped!`,
       html,
       type: 'order_shipped',
+      userId: payload.userId,
+      role: ROLE.USER,
+      category: 'orderUpdates',
       metadata: { orderId: payload.orderId },
     });
 
@@ -398,6 +430,9 @@ export class NotificationListener {
       subject: `Order Delivered - ${payload.orderNumber}`,
       html,
       type: 'order_delivered',
+      userId: payload.userId,
+      role: ROLE.USER,
+      category: 'orderUpdates',
       metadata: { orderId: payload.orderId },
     });
 
@@ -464,6 +499,9 @@ export class NotificationListener {
       subject: `Order #${payload.orderNumber} Cancelled`,
       html,
       type: 'order_cancelled',
+      userId: payload.userId,
+      role: ROLE.USER,
+      category: 'orderUpdates',
       metadata: { orderId: payload.orderId },
     });
 
@@ -527,6 +565,9 @@ export class NotificationListener {
       subject: `Payment Confirmed - Order #${payload.orderNumber}`,
       html,
       type: 'payment_confirmed',
+      userId: payload.userId,
+      role: ROLE.USER,
+      category: 'paymentAlerts',
       metadata: { paymentId: payload.paymentId, orderId: payload.orderId },
     });
 
@@ -591,6 +632,9 @@ export class NotificationListener {
       subject: `Payment Failed - Order #${payload.orderNumber}`,
       html,
       type: 'payment_failed',
+      userId: payload.userId,
+      role: ROLE.USER,
+      category: 'paymentAlerts',
       metadata: { paymentId: payload.paymentId },
     });
 
@@ -629,6 +673,9 @@ export class NotificationListener {
       subject: 'You Earned a Referral Reward!',
       html,
       type: 'referral_reward',
+      userId: payload.referrerId,
+      role: ROLE.USER,
+      category: 'marketingPromos',
       metadata: { referralId: payload.referralId },
     });
 

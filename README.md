@@ -17,6 +17,7 @@
 ## Contents
 
 1. [Summary & Architectural Philosophy](#1-executive-summary--architectural-philosophy)
+   - [The Architect's Field Guide: 8 Core Concepts](#the-architects-field-guide-8-core-engineering-concepts-at-a-glance)
    - [Architectural Trade-offs](#architectural-trade-offs--deep-engineering-concepts)
 2. [Monorepo Architecture & Bounded Contexts](#2-monorepo-architecture--bounded-contexts)
 3. [The Authentication & Authorization Engine](#3-deep-dive-the-authentication--authorization-engine)
@@ -97,6 +98,23 @@ graph TD
     API -->|Assets & Images| Cloudinary[Cloudinary Media CDN]
 ```
 
+### The Architect's Field Guide: 8 Core Engineering Concepts at a Glance
+
+If you are studying, reviewing, or presenting this codebase, these 8 concepts represent the architectural backbone of the entire platform:
+
+| # | Architectural Domain | The Naive Industry Approach | The Failure Mode / Attack Vector | The NUTS Production Solution | Key Implementation Files |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **Monolith vs. Microservices** | Premature microservices with HTTP REST between internal services. | Network serialization latency, 2PC distributed transaction failures, high memory footprint (>500MB). | **Modular Monolith (DDD)**: Typed in-process synchronous calls + Transactional Outbox (RabbitMQ) for async events. | [`apps/api/src/modules`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules) |
+| **2** | **Session & Token Storage** | Storing JWTs or user roles in `localStorage` or `sessionStorage`. | **XSS credential theft** via third-party npm scripts or DOM injection; cross-session privilege pollution. | **Dual-Transport Hybrid OWASP Model**: In-memory JS closure + browser-managed `HttpOnly` cookie; zero `localStorage` tokens/roles. | [`token-storage.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/api/core/token-storage.ts), [`auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/auth.ts) |
+| **3** | **Refresh Token Concurrency** | Instant refresh token invalidation on every refresh request. | **Multi-tab logout storm**: Tab A rotates the token; Tab B sends the old token at the same millisecond and gets logged out. | **RFC 6819 with 15-Second Redis Grace Window**: Atomic CAS in PostgreSQL + 15s Redis cache for multi-tab network retries. | [`refresh-session.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/auth/sessions/refresh-session.service.ts) |
+| **4** | **Real-Time Token Revocation** | In-memory blacklist of revoked JWTs until expiration. | Unbounded $O(N)$ Redis memory leak; or querying the relational database on every single micro-request. | **Redis Security Stamp (`auth:stamp:{role}:{userId}`)**: $O(1)$ stamp check with 60s TTL; instant revocation via `tokenVersion` bump. | [`auth-session.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/auth/sessions/auth-session.service.ts) |
+| **5** | **Flash-Sale Inventory Depletion** | Optimistic locking (`UPDATE products SET stock = stock - 1 WHERE version = v`). | Thundering-herd rollback cascades and checkout deadlocks (`SQLSTATE 40P01`) under high flash-sale contention. | **Deterministic Row-Lock Sorting + Conditional Atomic SQL**: Sort item IDs before locking + `WHERE stock >= :qty RETURNING id`. | [`orders.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/orders/orders.service.ts) |
+| **6** | **Cart & Checkout Lifecycle** | Leaving cart items active until webhook confirms payment success. | **Double-order creation**: User clicks back from Paystack, modifies cart, and checks out again, reserving double inventory. | **Atomic Checkout Cart Consumption**: Cart items consumed inside checkout DB transaction; client cart cleared on gateway redirect. | [`orders.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/orders/orders.service.ts), [`cart-cleanup.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/cart-cleanup.ts) |
+| **7** | **Real-Time Stream Resilience** | Unbounded SSE connections with local client caching. | File descriptor exhaustion, zombie streams on closed tabs, CORS preflight blocks on reconnection headers. | **SSE Registry + Connection Capping + Heartbeat Stamp Check + CORS `Last-Event-ID`**: Bounded to 5 streams/user; in-memory store. | [`notifications.controller.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.controller.ts), [`notifications.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/notifications.ts) |
+| **8** | **Financial Ledger Integrity** | Floating-point numbers (`number` / `FLOAT`) for monetary values. | IEEE 754 rounding errors ($0.1 + 0.2 \ne 0.3$) compounding across multi-vendor split-payments and wallet balances. | **Fixed-Point PostgreSQL `DECIMAL(10, 2)` + `Prisma.Decimal`**: Arbitrary-precision decimal arithmetic across wallets and taxes. | [`schema.prisma`](file:///c:/MY%20PROJECT/NUTS-P/packages/database/schema.prisma), [`orders.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/orders/orders.service.ts) |
+
+---
+
 ### Architectural Trade-offs & Deep Engineering Concepts
 
 Building an enterprise-scale, multi-vendor commerce engine requires navigating critical engineering trade-offs. The following decisions reflect conscious design choices prioritizing data integrity, sub-millisecond execution, and security under resource constraints.
@@ -141,7 +159,7 @@ Building an enterprise-scale, multi-vendor commerce engine requires navigating c
   2. *Runtime Usage Separation:*
      - **Client-Side API Requests (Axios in React runtime):** Axios extracts the in-memory token from its private closure and attaches `Authorization: Bearer <token>`. This provides standard REST API interoperability and automatic CSRF immunity (browsers never attach custom HTTP headers to cross-site `<form>` submissions).
      - **Next.js 16 SSR & Edge Middleware Navigation:** When the user navigates directly to a URL or refreshes, the browser automatically sends the secure `accessToken` cookie. Next.js Edge Middleware and Server Component Layouts ([`server-auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/server-auth.ts)) verify the HMAC-SHA256 signature in < 1ms using Web Crypto API, enforcing route protection on the server before streaming HTML to the client.
-  3. *Zero-Persistence Client Security:* In-memory tokens vanish when the browser tab closes. If an XSS exploit occurs, the attacker cannot read the 7-day `refreshToken` (blocked by browser `HttpOnly` policy), and the short-lived 15-minute `accessToken` cannot be refreshed without access to the protected cookie.
+  3. *Zero-Persistence Client Security & Zero Storage Leakage:* In-memory tokens vanish when the browser tab closes. Synthetic session or role keys (`nuts_active_role`, `nuts_session_role`, `nuts_notifications_cache`, `nuts_applied_discount`, `nuts_cart_snapshot`) are completely prohibited from `localStorage` and `sessionStorage`. Identity, active roles, and authorization capabilities are derived strictly from cryptographically signed JWT payloads (`decodeRoleFromToken`, `getAuthSessionRole()`) and validated against Redis security stamps. If an XSS exploit occurs, the attacker cannot read the 7-day `refreshToken` (blocked by browser `HttpOnly` policy), and the short-lived 15-minute `accessToken` cannot be refreshed without access to the protected cookie.
 
 #### 3. Pessimistic Row-Level Locking (`FOR UPDATE`) vs. Optimistic Locking
 - **The Trade-off:** Optimistic locking (using a `version` column) assumes low contention. Under high-concurrency flash sales (hundreds of shoppers purchasing the last 5 units of a product simultaneously), optimistic locking causes thundering-herd rollback cascades, wasting CPU cycles and failing user checkouts.
@@ -806,6 +824,7 @@ sequenceDiagram
      3. **Heartbeat Loop:** Every 15 seconds, a heartbeat ping (`: heartbeat\n\n`) is dispatched down the wire.
      4. Concurrently, the heartbeat handler inspects the user's active Redis security stamp. If the security stamp was revoked (e.g. user logged out or suspended in another tab), the SSE stream is terminated immediately (`res.end()`).
      5. Express `req.on('close')` listeners guarantee that when a browser closes, the client is unlinked from Redis Pub/Sub listeners, preventing memory leaks.
+     6. **CORS Reconnection Compliance:** Added `Last-Event-ID`, `last-event-id`, and `Cache-Control` to NestJS `allowedHeaders`, fully supporting seamless W3C stream resumption without preflight rejection.
 
 8. **Live Price & Vendor Integrity Revalidation:**
    - Carts might contain items added hours or days prior. `OrdersService` verifies every cart item's price against the authoritative live database price (`item.product.price`) before computing totals. If a vendor changed a price, the cart is re-synchronized to prevent shoppers from checking out with tampered or stale prices.
@@ -817,6 +836,8 @@ sequenceDiagram
 10. **Cart Architecture & Checkout Flow:**
    - **Lean Payload Structure:** Cart operations transport strictly required entity identifiers (`productId`, `variantId`, `quantity`), preventing unneeded payload overhead.
    - **Declarative Route Navigation:** Cart and checkout workflows route through canonical Next.js App Router paths (`/cart`, `/checkout`).
+   - **Pure In-Memory Discount State:** Client promotional coupon state is managed exclusively in memory via [`useDiscountStore`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/discount.ts), completely removing `nuts_applied_discount` from local storage.
+   - **Immediate Client Cart Clearance:** Orders trigger `clearClientCart()` upon successful checkout generation, keeping client cache strictly synchronized with the database where cart rows are consumed within the transaction.
    - **Enterprise Nomenclature:** Promotional input fields utilize standardized `'Discount Code'` labeling across all drawer and page views.
    - **Gateway Handoff Phrasing:** Checkout order submission and drawer reviews route to the Paystack payment gateway under standard enterprise CTAs (`Proceed to Payment` and `Review delivery and proceed to payment`).
 
@@ -1023,6 +1044,30 @@ graph TD
    - **Compression Middleware Exemption:** In [`main.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/main.ts), Express compression middleware explicitly bypasses `notifications/sse/stream` routes to prevent gzip buffering of real-time event frames.
    - **Direct Origin Routing (Bypassing Next.js BFF Rewrites):** In [`notifications.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/notifications.ts), `getSseUrl()` automatically resolves directly to `NEXT_PUBLIC_BACKEND_URL` in cloud environments. This prevents long-lived SSE connections from traversing Next.js `rewrites` (which do not support persistent streaming and break when container bridge hostnames like `http://api:3001` are absent on Render).
    - **Redis Pub/Sub Subscriber Resilience:** [`NotificationsService`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/notifications/notifications.service.ts) attaches an explicit error boundary on the duplicate Redis subscriber client (`subClient.on('error')`), preventing unhandled connection blip crashes while ensuring asynchronous domain events emitted by workers, crons, or background queues instantly bridge to connected web client streams across distributed instances.
+
+10. **Dual-Layer Push Notification Delivery Engine (Native Desktop + VAPID WebPush):**
+    - **VAPID Cryptographic Handshake (RFC 8292):** Implements end-to-end encrypted push notifications using uncompressed P-256 elliptic curve public/private key pairs (`web-push`).
+    - **Layer 1: Native In-Browser Desktop Alerts:** When a user grants notification permissions, incoming SSE events immediately trigger native operating system notifications via the HTML5 `Notification` API. This layer operates independently of Google FCM, providing 100% reliable alert delivery across all browsers (including Brave privacy shields), local development, and enterprise firewall/VPN environments.
+    - **Layer 2: Background WebPush Service Worker (`sw.js`):** Enrolls the client device via `PushManager.subscribe()` with a 24-hour delivery TTL for lock-screen delivery when the web app tab is closed.
+    - **Silent Resilience & Progressive Fallback:** If `PushManager.subscribe()` fails or the remote push gateway is blocked by network shields, the client catches the error silently and gracefully defaults to native desktop alerts without showing disruptive error toasts.
+    - **Automated Dead Subscription Pruning:** When push gateways return HTTP `404 Not Found` or `410 Gone` (indicating expired tokens or browser uninstalls), the backend automatically and asynchronously prunes dead endpoints from `push_subscriptions` to prevent database bloat.
+
+11. **Multi-Tenant Notification Preferences & Granular Channel Opt-Outs:**
+    - **Role-Isolated Preferences (`NotificationPreference`):** Persists user delivery rules with strict compound key isolation (`@@unique([userId, role])`).
+    - **Master Delivery Channels:** Users can independently toggle `inAppEnabled`, `emailEnabled`, and `pushEnabled`.
+    - **Functional Category Governance:** Granular opt-out controls for `orderUpdates`, `paymentAlerts`, `inventoryAlerts`, and `marketingPromos`, evaluated on every dispatch via `NotificationPreferencesService.canSend()`.
+    - **Safety Overrides:** Security and fraud protection alerts (suspicious logins, password changes) bypass preferences and remain permanently active.
+    - **Environment-Gated Test Action:** The "Send Test Alert" button is strictly restricted to development environments (`process.env.NODE_ENV === "development"`), and is automatically tree-shaken and excluded from staging and production builds.
+
+12. **Responsive Multi-Surface Notification Presentation (Vendor, Admin & Storefront):**
+    - **Mobile-Adaptive Bell Dropdown ([NotificationBell.tsx](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/notification/NotificationBell.tsx)):** Employs fixed, centered viewport positioning on mobile screens (`fixed inset-x-2 top-16 mx-auto w-[calc(100vw-1rem)] max-w-sm sm:max-w-md`) with a soft backdrop overlay, preventing horizontal overflow or off-screen clipping, while transitioning to an anchored dropdown (`sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-96`) on desktop.
+    - **Operational Notification Management ([NotificationsManager.tsx](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/notification/NotificationsManager.tsx)):** Unified inbox across Storefront, Vendor Dashboard, and Admin Console featuring responsive typography, category pills, mobile-optimized card padding, and always-visible touch action controls (`opacity-100 sm:opacity-0 group-hover:opacity-100`).
+    - **Responsive Preferences Modal ([NotificationPreferencesView.tsx](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/notification/NotificationPreferencesView.tsx)):** Viewport-constrained modal dialog (`w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl max-h-[85vh]`) with smooth scrolling and responsive toggle switches.
+
+13. **Enterprise Production Scale Roadmap & Operational Best Practices:**
+    - **Data Archival & Table Partitioning:** For high-volume transaction volumes, schedule automated partitioning or monthly retention jobs to prune read notifications older than 90 days (`DELETE FROM notifications WHERE "isRead" = true AND "createdAt" < NOW() - INTERVAL '90 days'`).
+    - **Message Broker Offloading (RabbitMQ / BullMQ):** For broadcast campaigns sent to tens of thousands of recipients simultaneously, dispatch push jobs to worker queues to maintain flat API thread pools.
+    - **Production VAPID Domain Subject:** Ensure `VAPID_SUBJECT` is configured to the official domain mailbox (`mailto:support@nuts-commerce.com`) upon public deployment.
 
 ### Transactional Outbox & Message Failure Handling
 Located in [`apps/api/src/modules/infrastructure/outbox`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/infrastructure/outbox):

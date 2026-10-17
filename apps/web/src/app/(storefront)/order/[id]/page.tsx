@@ -238,7 +238,7 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-border/50 sm:border-0">
-              <p className="text-[11px] sm:text-xs text-muted-foreground">{isPending ? "Amount Due" : "Total Paid Amount"}</p>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">{isPending ? "Amount Due" : "Total Paid"}</p>
               <p className="text-xl sm:text-2xl font-bold text-foreground">{formatPrice(order.finalAmount)}</p>
             </div>
           </div>
@@ -423,7 +423,7 @@ export default function OrderDetailPage() {
                 )}
 
                 <div className="border-t border-border pt-3 flex justify-between text-xs sm:text-sm font-bold">
-                  <span>Total Due</span>
+                  <span>{isPending ? "Total Due" : "Total Paid"}</span>
                   <span className="text-foreground">{formatPrice(order.finalAmount)}</span>
                 </div>
               </CardContent>

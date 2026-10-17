@@ -10,7 +10,7 @@ import { Input } from "@/component/ui/input";
 import { useCart } from "@/hook/use-cart";
 import { formatPrice } from "@/lib/util";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { useLocalStorageValue, writeLocalStorageValue } from "../../../hook/use-local-storage-value";
+import { useDiscountStore } from "@/zustand/discount";
 import {
 ArrowRight,
 Loader2,
@@ -21,7 +21,7 @@ Tag,
 Trash2,
 } from "lucide-react";
 import Link from "@/components/navigation/AppLink";
-import { useMemo,useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 export interface CartPageViewProps {
@@ -32,22 +32,10 @@ export interface CartPageViewProps {
 export function CartPageView({ initialCart, categories }: CartPageViewProps) {
   const { items, cart, isLoading, updateItem, removeItem, clearCart } = useCart(initialCart);
   const [discountCode, setDiscountCode] = useState("");
-  const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number } | null>(null);
+  const { appliedDiscount, setAppliedDiscount, clearDiscount } = useDiscountStore();
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
-  const persistedDiscountValue = useLocalStorageValue("nuts_applied_discount");
-  const persistedDiscount = useMemo(() => {
-    try {
-      const value: unknown = JSON.parse(persistedDiscountValue ?? "null");
-      if (
-        value && typeof value === "object" &&
-        "code" in value && typeof value.code === "string" &&
-        "amount" in value && typeof value.amount === "number"
-      ) return { code: value.code, amount: value.amount };
-    } catch {}
-    return null;
-  }, [persistedDiscountValue]);
-  const effectiveDiscount = appliedDiscount ?? persistedDiscount;
-  const effectiveDiscountCode = discountCode || persistedDiscount?.code || "";
+  const effectiveDiscount = appliedDiscount;
+  const effectiveDiscountCode = discountCode || appliedDiscount?.code || "";
 
   const handleApplyDiscount = async () => {
     if (!effectiveDiscountCode.trim()) return;
@@ -59,27 +47,18 @@ export function CartPageView({ initialCart, categories }: CartPageViewProps) {
         amount: res.data.discountAmount,
       };
       setAppliedDiscount(discountData);
-      try {
-        writeLocalStorageValue("nuts_applied_discount", JSON.stringify(discountData));
-      } catch {}
       toast.success(`Discount code "${res.data.code}" applied!`);
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, "Invalid or expired discount code"));
-      setAppliedDiscount(null);
-      try {
-        writeLocalStorageValue("nuts_applied_discount", null);
-      } catch {}
+      clearDiscount();
     } finally {
       setIsApplyingDiscount(false);
     }
   };
 
   const handleRemoveDiscount = () => {
-    setAppliedDiscount(null);
+    clearDiscount();
     setDiscountCode("");
-    try {
-      writeLocalStorageValue("nuts_applied_discount", null);
-    } catch {}
     toast.info("Discount code removed");
   };
 
