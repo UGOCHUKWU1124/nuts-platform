@@ -5,20 +5,12 @@ PaymentResponseDto,
 } from "@/api/dto/payment";
 
 export const paymentService = {
-  requestOtp(orderId: string) {
-    return userApi.post<{ message?: string }>(
-      "/payment/otp/request",
-      null,
-      { params: { orderId } }
-    );
-  },
-  initialize(orderId: string, otpCode?: string) {
+  initialize(orderId: string) {
     return userApi.post<InitializePaymentResponseDto>(
       "/payment/initialize",
-      otpCode ? { otpCode } : {},
+      null,
       {
         params: { orderId },
-        headers: otpCode ? { "x-otp-code": otpCode } : undefined,
       }
     );
   },

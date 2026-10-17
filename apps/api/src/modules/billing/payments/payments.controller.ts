@@ -30,7 +30,7 @@ import type { Request } from 'express';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { PaymentsService } from './payments.service';
 
-import { RefundPaymentDto, RequestPaymentOtpDto } from './dto';
+import { RefundPaymentDto } from './dto';
 
 import {
   InitializePaymentResponseDto,
@@ -38,8 +38,6 @@ import {
 } from './dto/payment-response.dto';
 
 import { ROLE } from '@prisma/client';
-import { OtpService } from '@api/modules/auth/otp/otp.service';
-import { OtpThrottle } from '@api/modules/shared/decorators/custom-throttler.decorator';
 import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
@@ -48,63 +46,7 @@ import { Roles } from '@api/modules/shared/decorators/role.decorator';
 @ApiBearerAuth('JWT-auth')
 @Controller(['payment', 'payments'])
 export class PaymentsController {
-  constructor(
-    private readonly paymentsService: PaymentsService,
-    private readonly otpService: OtpService,
-  ) {}
-
-  // ---------------------------------------------------------------------------
-  // PAYMENT OTP
-  // ---------------------------------------------------------------------------
-
-  @Post('otp/request')
-  @HttpCode(HttpStatus.OK)
-  @Message('Payment verification code sent to your email')
-  @OtpThrottle()
-  @Roles(ROLE.USER)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Request OTP for payment',
-  })
-  @ApiQuery({
-    name: 'orderId',
-    required: true,
-    type: String,
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-  })
-  async requestPaymentOtp(
-    @GetUser('id') userId: string,
-    @GetUser('email') userEmail: string,
-    @Query()
-    query: RequestPaymentOtpDto,
-  ) {
-    /**
-     * If orderId exists, validate that the payment belongs to the user
-     * before generating the OTP context.
-     */
-    if (query.orderId) {
-      const context = await this.paymentsService.getPaymentOtpContext(
-        userId,
-        query.orderId,
-      );
-
-      await this.otpService.createOtp(userEmail, 'payment', {
-        subject: `Payment Authorization OTP for Order #${context.orderNumber}`,
-        orderDetails: `Order #${context.orderNumber} - ${context.currency} ${context.amount}`,
-      });
-
-      return {
-        message: 'Payment verification code sent to your email.',
-        ...context,
-      };
-    }
-
-    return {
-      message: 'Payment OTP context requires an orderId.',
-    };
-  }
+  constructor(private readonly paymentsService: PaymentsService) {}
 
   // ---------------------------------------------------------------------------
   // INITIALIZE

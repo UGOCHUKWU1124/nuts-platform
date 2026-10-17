@@ -210,7 +210,10 @@ export class CsrfMiddleware implements NestMiddleware {
     const stored = cookies?.[this.csrfCookieName];
     if (!stored) return undefined;
     if (Array.isArray(stored)) {
-      return (typeof stored[0] === 'string' ? stored[0].trim() : undefined) || undefined;
+      return (
+        (typeof stored[0] === 'string' ? stored[0].trim() : undefined) ||
+        undefined
+      );
     }
     if (typeof stored === 'string') {
       const token = stored.split(',')[0]?.trim();

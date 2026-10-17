@@ -5,7 +5,7 @@ export * from './category';
 export * from './discount';
 export * from './notifications';
 export * from './orders';
-export * from './payments';
+export * from './payment';
 export * from './products';
 export * from './referral';
 export * from './review';
