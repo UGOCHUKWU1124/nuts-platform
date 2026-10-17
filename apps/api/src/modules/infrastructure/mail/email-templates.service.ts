@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 // ── Shared Types ──────────────────────────────────────────
 
@@ -117,6 +118,17 @@ export interface LowStockData {
 
 @Injectable()
 export class EmailTemplatesService {
+  private readonly frontendUrl: string;
+
+  constructor(@Optional() private readonly config?: ConfigService) {
+    const origins =
+      this.config?.get<string>('ALLOWED_ORIGINS') ||
+      process.env.ALLOWED_ORIGINS ||
+      '';
+    const primaryOrigin = origins.split(',')[0]?.trim();
+    this.frontendUrl = primaryOrigin ? primaryOrigin.replace(/\/+$/, '') : '';
+  }
+
   // ── Helpers ────────────────────────────────────────────
 
   private formatPrice(currency: string, amount: number): string {
@@ -691,13 +703,21 @@ export class EmailTemplatesService {
 </html>`;
   }
 
-  // ── URL Helpers (overridable in production) ────────────
+  // ── URL Helpers ──────────────────────────────────────────
 
   private getReviewUrl(orderNumber: string): string {
-    return `https://nuts.com/orders/${orderNumber}/review`;
+    return `${this.frontendUrl}/orders/${orderNumber}/review`;
   }
 
   private getCartUrl(): string {
-    return 'https://nuts.com/cart';
+    return `${this.frontendUrl}/cart`;
+  }
+
+  private getOrderUrl(orderNumber: string): string {
+    return `${this.frontendUrl}/order/${orderNumber}`;
+  }
+
+  private getVendorDashboardUrl(): string {
+    return `${this.frontendUrl}/vendor/order`;
   }
 }

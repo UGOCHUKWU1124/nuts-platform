@@ -413,54 +413,6 @@ export class PaymentsService {
     return this.toResponse(payment);
   }
 
-  async getPaymentOtpContext(
-    userId: string,
-    orderId: string,
-  ): Promise<{
-    orderNumber: string;
-    amount: number;
-    currency: string;
-  }> {
-    const payment = await this.prisma.payment.findFirst({
-      where: {
-        orderId,
-        userId,
-      },
-      select: {
-        amount: true,
-        currency: true,
-        order: {
-          select: {
-            orderNumber: true,
-            status: true,
-          },
-        },
-      },
-    });
-
-    if (!payment) {
-      throw new NotFoundException('Payment not found for this order.');
-    }
-
-    if (payment.order.status === OrderStatus.CANCELLED) {
-      throw new BadRequestException(
-        'Cannot request OTP for a cancelled order.',
-      );
-    }
-
-    if (payment.order.status === OrderStatus.REFUNDED) {
-      throw new BadRequestException('Cannot request OTP for a refunded order.');
-    }
-
-    return {
-      orderNumber: payment.order.orderNumber,
-
-      amount: Number(payment.amount),
-
-      currency: payment.currency.toUpperCase(),
-    };
-  }
-
   // ---------------------------------------------------------------------------
   // REFUND
   // ---------------------------------------------------------------------------

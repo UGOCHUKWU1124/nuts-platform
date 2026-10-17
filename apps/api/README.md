@@ -85,10 +85,9 @@ Located in [`src/modules/billing`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/m
 - **Immediate Frontend & Backend Cart Emptying:**
   - Client-side cache purging (`clearClientCart`) empties React Query cart cache and optimistic items the instant checkout or Paystack redirection is triggered.
   - Server-side atomic transaction marks the active cart as `checkedOut = true`, prunes its `cartItem` rows, and clears Redis cache (`user:cart:v3:${userId}`).
-- **Dual Payment Routing & OTP Authorization (`PaymentsController`):**
+- **Direct Paystack Payment Routing (`PaymentsController`):**
   - Mapped via `@Controller(['payment', 'payments'])`.
-  - `POST /payment/otp/request` validates customer order ownership, enforces rate-limiting (`@OtpThrottle()`), and dispatches order-specific authorization codes.
-  - `POST /payment/initialize` verifies authorization tokens via `@OtpRequired()` before initializing Paystack transactions.
+  - `POST /payment/initialize` validates customer order ownership using `ParseUUIDPipe` and initializes the Paystack transaction session, returning gateway authorization URLs. 3DS security and bank OTP challenges are managed directly by Paystack's payment interface.
 - **Cryptographic Paystack Webhook Resilience:**
   - Server-to-server webhook endpoints (`POST /api/v1/payments/webhook` and `/webhooks`) bypass CSRF checks at line 1 of `CsrfMiddleware` before browser origin or cookie validation.
   - Paystack IP filtering middleware (`PaystackIpMiddleware`) validates source IP ranges while honoring trusted reverse proxy forwarded headers.

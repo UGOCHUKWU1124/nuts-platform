@@ -136,6 +136,27 @@ export default function AdminOrderPage() {
       ),
     },
     {
+      key: "platformFee",
+      header: "Platform Cut (15%)",
+      render: (r) => {
+        const gross = Number(r.finalAmount ?? r.totalAmount ?? 0);
+        const fee =
+          r.platformFee && r.platformFee > 0
+            ? r.platformFee
+            : Math.round(gross * 0.15 * 100) / 100;
+        return (
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm text-emerald-600 dark:text-emerald-400 font-mono">
+              +{formatPrice(fee)}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-medium">
+              15% fee
+            </span>
+          </div>
+        );
+      },
+    },
+    {
       key: "createdAt",
       header: "Placed At",
       render: (r) => (

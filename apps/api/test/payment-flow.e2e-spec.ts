@@ -199,10 +199,6 @@ describe('Payment Flow End-to-End (e2e)', () => {
       verifyOtp: jest.fn().mockResolvedValue(true),
       consumeVerification: jest.fn().mockResolvedValue(true),
       sendOtp: jest.fn().mockResolvedValue({ success: true }),
-      requestPaymentOtp: jest.fn().mockResolvedValue({
-        reference: 'otp-ref-1',
-        expiresIn: 600,
-      }),
     };
 
     mockPrisma = {
