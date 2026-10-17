@@ -83,7 +83,7 @@ function startNotificationStream(
           ...(connected ? { sseRetryExhausted: false } : {}),
         });
         if (connected) {
-          void get().fetchUnreadCount(true);
+          void get().fetchUnreadCount(false);
         }
       }
     },
@@ -516,7 +516,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const activeRole = getActiveNotificationRole();
     const cacheKey = `${activeRole}:${userId}`;
     const fetchedAt = unreadCountCache.get(cacheKey) ?? 0;
-    if (!force && Date.now() - fetchedAt < 60_000) return;
+    const elapsed = Date.now() - fetchedAt;
+    if (!force && elapsed < 60_000) return;
+    if (force && elapsed < 5_000) return;
 
     const pending = unreadCountRequests.get(cacheKey);
     if (pending) return pending;

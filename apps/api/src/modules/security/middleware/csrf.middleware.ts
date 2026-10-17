@@ -34,6 +34,12 @@ export class CsrfMiddleware implements NestMiddleware {
       return next();
     }
 
+    // 0.1 Server-Sent Events (SSE) streaming connections are persistent push streams
+    // that never mutate state. They must never set CSRF cookies or churn tokens.
+    if (this.isEventStream(req)) {
+      return next();
+    }
+
     // Skip CSRF for GET, HEAD, OPTIONS requests (read-only)
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       this.generateAndSetCsrfToken(req, res);
@@ -123,7 +129,21 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   private generateAndSetCsrfToken(req: Request, res: Response): void {
+    if (this.isEventStream(req)) {
+      return;
+    }
+
     const existingToken = this.getStoredCsrfToken(req);
+    // If client already has a valid CSRF cookie on read-only requests, do not re-issue Set-Cookie.
+    if (
+      existingToken &&
+      existingToken.length === this.tokenLength * 2 &&
+      ['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+    ) {
+      res.setHeader(this.csrfHeaderName, existingToken);
+      return;
+    }
+
     const token =
       existingToken && existingToken.length === this.tokenLength * 2
         ? existingToken
@@ -314,5 +334,18 @@ export class CsrfMiddleware implements NestMiddleware {
     }
 
     return false;
+  }
+
+  private isEventStream(req: Request): boolean {
+    const accept = req.headers?.accept;
+    if (typeof accept === 'string' && accept.includes('text/event-stream')) {
+      return true;
+    }
+    const path = typeof req.path === 'string' ? req.path.toLowerCase() : '';
+    return (
+      path.includes('/sse/stream') ||
+      path.includes('/notifications/sse') ||
+      path.endsWith('/sse')
+    );
   }
 }

@@ -142,6 +142,7 @@ describe('CsrfMiddleware', () => {
       host: 'nuts-api-staging.onrender.com',
     };
     req.method = 'GET';
+    req.cookies = {};
     const cookieMock = jest.fn();
     res.cookie = cookieMock;
     res.setHeader = jest.fn();
@@ -273,5 +274,43 @@ describe('CsrfMiddleware', () => {
     middleware.use(req as Request, res as Response, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(status).not.toHaveBeenCalled();
+  });
+
+  it('bypasses CSRF cookie generation entirely for SSE stream connections', () => {
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/notifications/sse/stream',
+      configurable: true,
+    });
+    req.method = 'GET';
+    req.headers = { ...req.headers, accept: 'text/event-stream' };
+    req.cookies = {};
+    const cookieMock = jest.fn();
+    const setHeaderMock = jest.fn();
+    res.cookie = cookieMock;
+    res.setHeader = setHeaderMock;
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(cookieMock).not.toHaveBeenCalled();
+    expect(setHeaderMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves existing valid CSRF cookie on read-only GET requests without re-issuing Set-Cookie', () => {
+    const existingToken = 'a'.repeat(64);
+    Object.defineProperty(req, 'path', {
+      value: '/api/v1/products',
+      configurable: true,
+    });
+    req.method = 'GET';
+    req.cookies = { csrf_token: existingToken };
+    const cookieMock = jest.fn();
+    const setHeaderMock = jest.fn();
+    res.cookie = cookieMock;
+    res.setHeader = setHeaderMock;
+
+    middleware.use(req as Request, res as Response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(cookieMock).not.toHaveBeenCalled();
+    expect(setHeaderMock).toHaveBeenCalledWith('x-csrf-token', existingToken);
   });
 });
