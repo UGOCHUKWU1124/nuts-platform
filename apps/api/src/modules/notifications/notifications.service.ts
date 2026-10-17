@@ -38,6 +38,13 @@ import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { AuthSessionService } from '../auth/sessions/auth-session.service';
 import { getErrorMessage } from '@api/modules/shared/utils/error-details.util';
 
+import { randomUUID } from 'node:crypto';
+import { WebPushService } from './push/push.service';
+import {
+  NotificationPreferencesService,
+  NotificationCategory,
+} from './preferences/preferences.service';
+
 export interface CreateNotificationDto {
   userId: string;
   role?: ROLE;
@@ -51,6 +58,7 @@ export interface CreateNotificationDto {
 }
 
 export interface NotificationSseEvent {
+  originInstanceId?: string;
   userId: string;
   role: ROLE;
   notification: Prisma.NotificationGetPayload<Record<string, never>>;
@@ -59,9 +67,30 @@ export interface NotificationSseEvent {
 export const NOTIFICATION_REDIS_CHANNEL = 'nuts:notifications:broadcast';
 export const MAX_CONCURRENT_SSE_CONNECTIONS = 5;
 
+function mapTypeToCategory(type: NotificationType): NotificationCategory {
+  switch (type) {
+    case NotificationType.ORDER_PLACED:
+    case NotificationType.ORDER_CONFIRMED:
+    case NotificationType.ORDER_SHIPPED:
+    case NotificationType.ORDER_DELIVERED:
+    case NotificationType.ORDER_CANCELLED:
+      return 'orderUpdates';
+    case NotificationType.PAYMENT_RECEIVED:
+    case NotificationType.PAYMENT_FAILED:
+    case NotificationType.PAYOUT_PROCESSED:
+      return 'paymentAlerts';
+    case NotificationType.LOW_STOCK_ALERT:
+      return 'inventoryAlerts';
+    case NotificationType.SYSTEM_ANNOUNCEMENT:
+    default:
+      return 'marketingPromos';
+  }
+}
+
 @Injectable()
 export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly instanceId = randomUUID();
   private readonly sseSubject = new Subject<NotificationSseEvent>();
   private subClient: Redis | null = null;
   private readonly inMemoryConnectionCounts = new Map<string, number>();
@@ -70,6 +99,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     @Optional() @Inject(REDIS_CLIENT) private readonly redis?: Redis,
     @Optional() private readonly authSessionService?: AuthSessionService,
+    @Optional() private readonly webPushService?: WebPushService,
+    @Optional()
+    private readonly preferencesService?: NotificationPreferencesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -88,6 +120,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         if (channel !== NOTIFICATION_REDIS_CHANNEL) return;
         try {
           const parsed = JSON.parse(message) as NotificationSseEvent;
+          // Prevent local pod duplicate emission: ignore events published by our own instance
+          if (parsed && parsed.originInstanceId === this.instanceId) {
+            return;
+          }
           if (parsed && parsed.userId && parsed.notification) {
             this.sseSubject.next(parsed);
           }
@@ -99,7 +135,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       });
 
       this.logger.log(
-        'Notification Redis Pub/Sub cluster subscriber connected.',
+        `Notification Redis Pub/Sub subscriber connected [instance: ${this.instanceId}].`,
       );
     } catch (err) {
       this.logger.warn(
@@ -129,7 +165,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     role: ROLE,
     notification: Prisma.NotificationGetPayload<Record<string, never>>,
   ): void {
-    const event: NotificationSseEvent = { userId, role, notification };
+    const event: NotificationSseEvent = {
+      originInstanceId: this.instanceId,
+      userId,
+      role,
+      notification,
+    };
 
     // 1. Emit to local pod subscribers immediately
     this.sseSubject.next(event);
@@ -147,11 +188,116 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Dispatches push notification asynchronously if user preferences permit.
+   */
+  private dispatchPushIfAllowed(
+    dto: CreateNotificationDto,
+    role: ROLE,
+    category: NotificationCategory,
+    notificationId?: string,
+  ): void {
+    if (!this.webPushService) return;
+
+    (async () => {
+      try {
+        if (this.preferencesService) {
+          const canSendPush = await this.preferencesService.canSend(
+            dto.userId,
+            role,
+            'push',
+            category,
+          );
+          if (!canSendPush) return;
+        }
+
+        if (!this.webPushService) return;
+
+        await this.webPushService.sendToUser(dto.userId, role, {
+          title: dto.title,
+          body: dto.message,
+          icon: '/icon-192x192.png',
+          url: dto.link ?? '/',
+          data: {
+            notificationId,
+            type: dto.type,
+            category,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Background WebPush dispatch failed for user ${dto.userId}: ${getErrorMessage(err)}`,
+        );
+      }
+    })().catch(() => undefined);
+  }
+
+  /**
+   * Fetches missed notifications for replay when an SSE client reconnects with Last-Event-ID.
+   */
+  async getReplayNotifications(
+    userId: string,
+    role: ROLE,
+    lastEventId: string,
+  ): Promise<Prisma.NotificationGetPayload<Record<string, never>>[]> {
+    try {
+      const refNotification = await this.prisma.notification.findUnique({
+        where: { id: lastEventId },
+        select: { createdAt: true },
+      });
+
+      if (refNotification) {
+        return await this.prisma.notification.findMany({
+          where: {
+            userId,
+            role,
+            createdAt: { gt: refNotification.createdAt },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 50,
+        });
+      }
+
+      // If reference notification not found, return unread notifications
+      return await this.prisma.notification.findMany({
+        where: {
+          userId,
+          role,
+          isRead: false,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed retrieving SSE replay notifications for ${userId}: ${getErrorMessage(err)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
    * Creates a notification with atomic deduplication.
    * If a notification with the same dedupeKey already exists, returns it without duplicating or re-broadcasting.
    */
   async create(dto: CreateNotificationDto) {
     const role = dto.role ?? ROLE.USER;
+    const category = mapTypeToCategory(dto.type);
+
+    if (this.preferencesService) {
+      const canSendInApp = await this.preferencesService.canSend(
+        dto.userId,
+        role,
+        'inApp',
+        category,
+      );
+      if (!canSendInApp) {
+        this.logger.debug(
+          `Skipping in-app notification for ${dto.userId}: opted out of ${category}`,
+        );
+        this.dispatchPushIfAllowed(dto, role, category);
+        return null;
+      }
+    }
 
     if (dto.dedupeKey) {
       try {
@@ -170,6 +316,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         });
 
         this.broadcastNotification(dto.userId, role, notification);
+        this.dispatchPushIfAllowed(dto, role, category, notification.id);
         return notification;
       } catch (err: unknown) {
         // P2002: Unique constraint violation on dedupeKey -> return existing row safely
@@ -204,6 +351,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.broadcastNotification(dto.userId, role, notification);
+    this.dispatchPushIfAllowed(dto, role, category, notification.id);
     return notification;
   }
 
@@ -223,7 +371,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           r,
         ): r is PromiseFulfilledResult<
           Prisma.NotificationGetPayload<Record<string, never>>
-        > => r.status === 'fulfilled',
+        > => r.status === 'fulfilled' && r.value !== null,
       )
       .map((r) => r.value);
   }
@@ -482,12 +630,13 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * SSE Stream: Emits live notifications for the given userId and role with immediate handshake,
-   * message IDs, heartbeats, and real-time security revocation checks.
+   * message IDs, zero-cost heartbeats, and offline event replay via Last-Event-ID.
    */
   subscribeToUserStream(
     userId: string,
     role: ROLE = ROLE.USER,
     sessionId?: string,
+    lastEventId?: string,
   ): Observable<MessageEvent> {
     if (!this.tryAcquireConnectionSlot(userId, role)) {
       throw new HttpException(
@@ -513,29 +662,23 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       sub.complete();
     });
 
-    // 15-second heartbeat ping with security stamp revocation check
+    // Replay missed notifications if client reconnected with Last-Event-ID
+    const replay$ = lastEventId
+      ? from(this.getReplayNotifications(userId, role, lastEventId)).pipe(
+          switchMap((items) => from(items)),
+          map((item) => ({
+            id: item.id,
+            data: item,
+          })),
+        )
+      : new Observable<MessageEvent>((sub) => sub.complete());
+
+    // 15-second zero-cost heartbeat ping frame (no database query storm)
     const heartbeat$ = interval(15_000).pipe(
-      switchMap(() => {
-        if (!this.authSessionService) {
-          return [{ data: { type: 'ping' } }];
-        }
-        return from(
-          this.authSessionService
-            .isSessionActive(userId, role, sessionId)
-            .then((isActive) => {
-              if (!isActive) {
-                throw new HttpException(
-                  'Authentication session revoked',
-                  HttpStatus.UNAUTHORIZED,
-                );
-              }
-              return { data: { type: 'ping' } };
-            }),
-        );
-      }),
+      map(() => ({ data: { type: 'ping' } })),
     );
 
-    const merged$ = merge(handshake$, notifications$, heartbeat$);
+    const merged$ = merge(handshake$, replay$, notifications$, heartbeat$);
 
     return new Observable<MessageEvent>((subscriber) => {
       const sub = merged$.subscribe(subscriber);

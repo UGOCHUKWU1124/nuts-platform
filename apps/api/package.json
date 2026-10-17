@@ -73,7 +73,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sanitize-html": "^2.17.4",
-    "tsconfig-paths": "^4.2.0"
+    "tsconfig-paths": "^4.2.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -81,6 +82,8 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@swc/core": "^1.13.0",
+    "@swc/jest": "^0.2.39",
     "@types/amqplib": "^0.10.8",
     "@types/bcrypt": "^6.0.0",
     "@types/compression": "^1.8.1",
@@ -92,8 +95,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/pdfkit": "^0.17.6",
     "@types/supertest": "^7.0.0",
-    "@swc/core": "^1.13.0",
-    "@swc/jest": "^0.2.39",
+    "@types/web-push": "^3.6.4",
     "@typescript/native": "npm:typescript@^7.0.2",
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
@@ -126,10 +128,18 @@
         {
           "jsc": {
             "target": "es2022",
-            "parser": { "syntax": "typescript", "decorators": true },
-            "transform": { "legacyDecorator": true, "decoratorMetadata": true }
+            "parser": {
+              "syntax": "typescript",
+              "decorators": true
+            },
+            "transform": {
+              "legacyDecorator": true,
+              "decoratorMetadata": true
+            }
           },
-          "module": { "type": "commonjs" }
+          "module": {
+            "type": "commonjs"
+          }
         }
       ]
     },
@@ -139,20 +149,66 @@
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^@api/modules/users/(.*)$": ["<rootDir>/modules/identity/users/$1", "<rootDir>/modules/users/$1"],
-      "^@api/modules/creators/(.*)$": ["<rootDir>/modules/identity/creators/$1", "<rootDir>/modules/creators/$1"],
-      "^@api/modules/admin/(.*)$": ["<rootDir>/modules/identity/admin/$1", "<rootDir>/modules/admin/$1"],
-      "^@api/modules/products/(.*)$": ["<rootDir>/modules/catalog/products/$1", "<rootDir>/modules/products/$1"],
-      "^@api/modules/category/(.*)$": ["<rootDir>/modules/catalog/categories/$1", "<rootDir>/modules/catalog/category/$1", "<rootDir>/modules/category/$1"],
-      "^@api/modules/product-variants/(.*)$": ["<rootDir>/modules/catalog/variants/$1", "<rootDir>/modules/catalog/product-variants/$1", "<rootDir>/modules/product-variants/$1"],
-      "^@api/modules/cart/(.*)$": ["<rootDir>/modules/checkout/cart/$1", "<rootDir>/modules/cart/$1"],
-      "^@api/modules/orders/(.*)$": ["<rootDir>/modules/checkout/orders/$1", "<rootDir>/modules/orders/$1"],
-      "^@api/modules/promotions/(.*)$": ["<rootDir>/modules/checkout/discounts/$1", "<rootDir>/modules/checkout/promotions/$1", "<rootDir>/modules/promotions/$1"],
-      "^@api/modules/payments/(.*)$": ["<rootDir>/modules/billing/payments/$1", "<rootDir>/modules/payments/$1"],
-      "^@api/modules/wallet/(.*)$": ["<rootDir>/modules/billing/wallets/$1", "<rootDir>/modules/billing/wallet/$1", "<rootDir>/modules/wallet/$1"],
-      "^@api/modules/reviews/(.*)$": ["<rootDir>/modules/engagement/reviews/$1", "<rootDir>/modules/reviews/$1"],
-      "^@api/modules/wishlist/(.*)$": ["<rootDir>/modules/engagement/wishlist/$1", "<rootDir>/modules/wishlist/$1"],
-      "^@api/modules/referral/(.*)$": ["<rootDir>/modules/engagement/referral/$1", "<rootDir>/modules/referral/$1"],
+      "^@api/modules/users/(.*)$": [
+        "<rootDir>/modules/identity/users/$1",
+        "<rootDir>/modules/users/$1"
+      ],
+      "^@api/modules/creators/(.*)$": [
+        "<rootDir>/modules/identity/creators/$1",
+        "<rootDir>/modules/creators/$1"
+      ],
+      "^@api/modules/admin/(.*)$": [
+        "<rootDir>/modules/identity/admin/$1",
+        "<rootDir>/modules/admin/$1"
+      ],
+      "^@api/modules/products/(.*)$": [
+        "<rootDir>/modules/catalog/products/$1",
+        "<rootDir>/modules/products/$1"
+      ],
+      "^@api/modules/category/(.*)$": [
+        "<rootDir>/modules/catalog/categories/$1",
+        "<rootDir>/modules/catalog/category/$1",
+        "<rootDir>/modules/category/$1"
+      ],
+      "^@api/modules/product-variants/(.*)$": [
+        "<rootDir>/modules/catalog/variants/$1",
+        "<rootDir>/modules/catalog/product-variants/$1",
+        "<rootDir>/modules/product-variants/$1"
+      ],
+      "^@api/modules/cart/(.*)$": [
+        "<rootDir>/modules/checkout/cart/$1",
+        "<rootDir>/modules/cart/$1"
+      ],
+      "^@api/modules/orders/(.*)$": [
+        "<rootDir>/modules/checkout/orders/$1",
+        "<rootDir>/modules/orders/$1"
+      ],
+      "^@api/modules/promotions/(.*)$": [
+        "<rootDir>/modules/checkout/discounts/$1",
+        "<rootDir>/modules/checkout/promotions/$1",
+        "<rootDir>/modules/promotions/$1"
+      ],
+      "^@api/modules/payments/(.*)$": [
+        "<rootDir>/modules/billing/payments/$1",
+        "<rootDir>/modules/payments/$1"
+      ],
+      "^@api/modules/wallet/(.*)$": [
+        "<rootDir>/modules/billing/wallets/$1",
+        "<rootDir>/modules/billing/wallet/$1",
+        "<rootDir>/modules/wallet/$1"
+      ],
+      "^@api/modules/reviews/(.*)$": [
+        "<rootDir>/modules/engagement/reviews/$1",
+        "<rootDir>/modules/reviews/$1"
+      ],
+      "^@api/modules/wishlist/(.*)$": [
+        "<rootDir>/modules/engagement/wishlist/$1",
+        "<rootDir>/modules/wishlist/$1"
+      ],
+      "^@api/modules/referral/(.*)$": [
+        "<rootDir>/modules/engagement/referral/$1",
+        "<rootDir>/modules/referral/$1"
+      ],
       "^@api/(.*)$": "<rootDir>/$1"
     }
   }

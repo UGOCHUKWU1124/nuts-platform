@@ -34,6 +34,8 @@ export const queryKey = {
   wishlist: ["wishlist"] as const,
   notification: {
     all: ["notification"] as const,
+    preferences: (userId?: string) =>
+      ["notification", "preferences", userId ?? "me"] as const,
     detail: (sessionKey: string, id: string) =>
       ["notification", "detail", sessionKey, id] as const,
   },

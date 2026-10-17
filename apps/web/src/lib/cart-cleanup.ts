@@ -1,12 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryKey } from "@/lib/query-key";
 import { useCartStore } from "@/zustand/cart";
+import { useDiscountStore } from "@/zustand/discount";
 
 /**
  * Enterprise client-side cart cleanup helper.
  *
  * Automatically purges optimistic items, React Query cache, and
- * stored checkout drafts when a shopper transitions to the payment gateway.
+ * in-memory discount state when a shopper transitions to the payment gateway.
  */
 export function clearClientCart(queryClient?: QueryClient): void {
   // 1. Immediately reset React Query cache to an empty cart representation
@@ -38,11 +39,8 @@ export function clearClientCart(queryClient?: QueryClient): void {
     useCartStore.getState().clearOptimisticCart();
   } catch {}
 
-  // 3. Clear applied discount code and transient checkout snapshots
+  // 3. Clear applied discount code from in-memory store
   try {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("nuts_applied_discount");
-      window.localStorage.removeItem("nuts_cart_snapshot");
-    }
+    useDiscountStore.getState().clearDiscount();
   } catch {}
 }

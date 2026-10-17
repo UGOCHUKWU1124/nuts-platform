@@ -1,9 +1,4 @@
-import { NotificationDetail } from "@/component/notification/NotificationDetail";
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "Notification | NUTS-P Marketplace",
-};
+import { redirect } from "next/navigation";
 
 export default async function AccountNotificationDetailPage({
   params,
@@ -11,5 +6,5 @@ export default async function AccountNotificationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <NotificationDetail id={id} />;
+  redirect(`/notifications/${encodeURIComponent(id)}`);
 }

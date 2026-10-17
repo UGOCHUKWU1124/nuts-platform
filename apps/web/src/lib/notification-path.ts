@@ -7,7 +7,7 @@ export function notificationListPath(role?: string | null): string {
       ? "/admin/notifications"
       : normalized === "vendor"
         ? "/vendor/notifications"
-        : "/account/notifications"
+        : "/notifications"
   );
 }
 
