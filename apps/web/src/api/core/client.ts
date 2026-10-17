@@ -64,8 +64,8 @@ export const getApiBaseUrl = (): string => {
 const axiosConfig = {
   baseURL: getApiBaseUrl(),
   withCredentials: true,
-  xsrfCookieName: "csrf_token",
-  xsrfHeaderName: "x-csrf-token",
+  // Note: x-csrf-token header is managed deterministically in our request interceptor
+  // to avoid Axios adding duplicate/comma-joined headers on mutating requests.
 } as const;
 
 const axiosInstance = axios.create(axiosConfig);

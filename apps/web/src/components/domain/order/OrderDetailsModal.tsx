@@ -246,15 +246,27 @@ export function OrderDetailsModal({
               </div>
             )}
             {order.platformFee !== undefined && (
-              <div className="flex justify-between text-neutral-400 text-xs">
-                <span>Marketplace Platform Fee</span>
-                <span>{formatPrice(order.platformFee)}</span>
+              <div className="flex justify-between text-neutral-500 dark:text-neutral-400 text-xs">
+                <span>Platform Commission (15%)</span>
+                <span className="font-medium text-emerald-600 dark:text-emerald-400 font-mono">
+                  {formatPrice(
+                    order.platformFee > 0
+                      ? order.platformFee
+                      : Math.round(order.finalAmount * 0.15 * 100) / 100,
+                  )}
+                </span>
               </div>
             )}
             {order.vendorRevenue !== undefined && (
-              <div className="flex justify-between text-neutral-400 text-xs">
-                <span>Vendor Net Revenue</span>
-                <span>{formatPrice(order.vendorRevenue)}</span>
+              <div className="flex justify-between text-neutral-500 dark:text-neutral-400 text-xs">
+                <span>Vendor Net Payout (85%)</span>
+                <span className="font-medium font-mono text-neutral-900 dark:text-white">
+                  {formatPrice(
+                    order.vendorRevenue > 0
+                      ? order.vendorRevenue
+                      : Math.round(order.finalAmount * 0.85 * 100) / 100,
+                  )}
+                </span>
               </div>
             )}
             <div className="border-t border-neutral-200 dark:border-neutral-800 pt-2 flex justify-between font-semibold text-sm text-neutral-900 dark:text-white">

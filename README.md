@@ -886,12 +886,9 @@ Located in [`apps/api/src/modules/billing`](file:///c:/MY%20PROJECT/NUTS-P/apps/
 
 5. **Storefront Order Self-Healing Polling & Payment Resumption ([`PaymentsController`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/billing/payments/payments.controller.ts)):**
    - **Active Order Polling & Self-Healing:** The storefront order detail view ([`apps/web/src/app/(storefront)/order/[id]/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(storefront)/order/[id]/page.tsx)) polls every 3 seconds while `order.status === 'PENDING'`, and executes a silent background verification against Paystack. If the customer completed payment on Paystack and closed the browser before callback redirection, the order detail page settles payment immediately on load.
-   - **Order Ownership & Context Verification (`POST /payment/otp/request`):**
-     - Accepts `orderId`, validates customer ownership and order eligibility before generating authorization OTP.
-     - Dispatches an order-specific email authorization OTP (`Payment Authorization OTP for Order #${orderNumber} - ${currency} ${amount}`).
-     - Throttled via `@OtpThrottle()` (limit 3 requests per minute) to eliminate brute-force code generation.
-   - **Atomic Payment Initialization (`POST /payment/initialize`):**
-     - Validates order UUID using `ParseUUIDPipe` and verifies OTP authorization token via `@OtpRequired()` before invoking Paystack transaction initialization.
+   - **Direct Gateway Initialization (`POST /payment/initialize`):**
+     - Accepts `orderId` validated using `ParseUUIDPipe` and enforces authenticated customer order ownership.
+     - Employs direct Paystack checkout initialization where 3DS card challenges and bank OTPs are handled securely directly on Paystack's gateway.
      - Returns initialization payload with Paystack authorization URL, access code, and transaction reference.
    - **Client Payment Resumption & Paystack URL Validation:**
      - Order detail views permit instant payment retry for pending orders.
@@ -1237,7 +1234,7 @@ NUTS Platform provides an enterprise-grade OpenAPI 3.0 interactive developer por
   - `POST /api/v1/account/reactivate`: Public self-service account reactivation within 60-day recovery window.
   - `PATCH /api/v1/admin/discounts/:id/reactivate`: Administrator promo coupon reactivation with cache flush.
   - `PATCH /api/v1/vendors/discounts/:id/reactivate`: Merchant store promotion reactivation.
-  - `POST /api/v1/payments/otp/request`: Rate-limited 2FA payment authorization OTP dispatch.
+  - `POST /api/v1/payments/initialize`: Direct Paystack checkout session initialization for customer orders.
   - `POST /api/v1/payments/webhook`: HMAC-SHA512 verified Paystack settlement listener (CSRF exempt).
   - `GET /api/v1/admin/search/status`: Search engine operational health and index diagnostics.
 
@@ -1256,6 +1253,8 @@ In [`apps/web/src/middleware.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/mi
 ### Double-Submit Cookie CSRF Defense
 In [`CsrfMiddleware`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/security/middleware/csrf.middleware.ts) and [`client.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/api/core/client.ts):
 - **Double-Submit Protocol:** Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `x-csrf-token` header matching the server-issued `csrf_token` cookie.
+- **Deterministic Header Injection:** The frontend Axios request interceptor attaches a single, sanitized `x-csrf-token` header while bypassing Axios default auto-injection to prevent duplicate/comma-joined header values.
+- **Token Sanitization & Resilience:** `CsrfMiddleware` gracefully parses comma-separated headers or multi-cookie arrays, extracting the authoritative single 64-character token before timing-safe comparison.
 - **In-Memory Client State:** The frontend Axios client reads the token from the cookie or response header and retains it strictly in memory (closure-scoped), eliminating browser storage persistence.
 - **Cookie Security Configuration:** The `csrf_token` cookie is configured with `HttpOnly: false` (enabling client JavaScript to attach the required `x-csrf-token` request header), `SameSite: Lax`, and `Secure: true`. Under the browser's Same-Origin Policy (SOP), third-party origins cannot read the cookie value, preventing unauthorized cross-origin header forgery.
 - **Origin & Fetch-Site Validation:** Validates `Origin` and `Sec-Fetch-Site` headers against configured allowed CORS origins to reject cross-origin requests.

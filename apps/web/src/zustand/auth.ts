@@ -174,6 +174,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
     if (typeof window !== "undefined") {
       try {
+        localStorage.setItem("nuts_active_role", userRole);
         sessionStorage.setItem("nuts_session_role", userRole);
       } catch {
         // Ignore storage exceptions
@@ -208,6 +209,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   clearSession: () => {
     if (typeof window !== "undefined") {
       try {
+        localStorage.removeItem("nuts_active_role");
         sessionStorage.removeItem("nuts_session_role");
       } catch {
         // Ignore storage exceptions
@@ -382,10 +384,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         get().setStatus("hydrating");
       }
 
-      // 1. Identify active session role from in-memory state, sessionStorage hint, URL path, or default to standard refresh
+      // 1. Identify active session role from in-memory state, URL path, cross-tab localStorage, or sessionStorage hint
       const sessionHint =
         typeof window !== "undefined"
-          ? normalizeRole(sessionStorage.getItem("nuts_session_role"))
+          ? normalizeRole(
+              localStorage.getItem("nuts_active_role") ||
+              sessionStorage.getItem("nuts_session_role")
+            )
           : null;
       const pathHint: AuthRole | null =
         typeof window !== "undefined"
@@ -397,11 +402,25 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           : null;
 
       const candidateRole: AuthRole =
-        get().role || getAuthSessionRole() || sessionHint || pathHint || "user";
+        get().role || getAuthSessionRole() || pathHint || sessionHint || "user";
 
       // 2. Refresh tokens using HttpOnly refresh_token cookie (re-populates in-memory access token)
       try {
-        const refreshResult = await performTokenRefresh(candidateRole);
+        let refreshResult = await performTokenRefresh(candidateRole);
+
+        // Resilience: If candidate role was vendor/admin and failed (e.g. 401/403 due to role mismatch),
+        // try the universal /auth/refresh endpoint before assuming the entire session is dead
+        if (
+          !refreshResult.success &&
+          candidateRole !== "user" &&
+          refreshResult.reason !== "unavailable"
+        ) {
+          const fallbackResult = await performTokenRefresh("user");
+          if (fallbackResult.success) {
+            refreshResult = fallbackResult;
+          }
+        }
+
         if (refreshResult.success && refreshResult.user) {
           const resolvedRole = refreshResult.role || candidateRole;
           get().setSession(

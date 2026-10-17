@@ -86,7 +86,9 @@ apps/web/src/app/
 
 ### 6. Client Security & Network Architecture
 - **In-Memory Token Hygiene ([`token-storage.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/api/core/token-storage.ts)):** JWT access tokens are retained strictly in closure memory, eliminating token exposure in `localStorage`.
-- **Double-Submit CSRF Defense ([`client.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/api/core/client.ts)):** Axios automatically extracts the `csrf_token` cookie and transmits it via `x-csrf-token` headers on mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`).
+- **Multi-Portal Auth Routing & Role Boundaries ([`portal-role.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/portal-role.ts), [`PublicOnlyLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/auth/PublicOnlyLayout.tsx)):** Enforces role-matched redirection across storefront, vendor, and admin auth paths. Users authenticated in one role can navigate to another role's auth page without encountering infinite redirect loops or panel bouncing.
+- **Cross-Tab Session Role Synchronization ([`auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/zustand/auth.ts)):** Synchronizes active portal role state across open browser tabs, supported by silent fallback to the universal `/auth/refresh` endpoint during cold-start cookie hydration.
+- **Deterministic Double-Submit CSRF Defense ([`client.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/api/core/client.ts)):** Request interceptor attaches a single, sanitized `x-csrf-token` header extracted from the `csrf_token` cookie, preventing Axios default duplicate header concatenation.
 - **Web Locks API Mutex:** Refreshes tokens using `navigator.locks.request("nuts_token_refresh_lock")`, collapsing concurrent tab refreshes into a single network flight.
 - **Dynamic Content Security Policy ([`middleware.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/middleware.ts)):** Generates Web Crypto nonces per request, enforcing strict script and style restrictions alongside Paystack, Cloudinary, and Google authentication origins.
 

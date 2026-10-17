@@ -190,10 +190,16 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   private extractCsrfToken(req: Request): string | undefined {
-    const headerToken = req.headers[this.csrfHeaderName];
-    return typeof headerToken === 'string' && headerToken
-      ? headerToken
-      : undefined;
+    const header = req.headers[this.csrfHeaderName];
+    if (!header) return undefined;
+    if (Array.isArray(header)) {
+      return header[0]?.trim() || undefined;
+    }
+    if (typeof header === 'string') {
+      const token = header.split(',')[0]?.trim();
+      return token || undefined;
+    }
+    return undefined;
   }
 
   private getStoredCsrfToken(req: Request): string | undefined {
@@ -201,8 +207,19 @@ export class CsrfMiddleware implements NestMiddleware {
       [key: string]: unknown;
     }
     const cookies = req.cookies as CsrfCookies | undefined;
-    const storedToken = cookies?.[this.csrfCookieName];
-    return typeof storedToken === 'string' ? storedToken : undefined;
+    const stored = cookies?.[this.csrfCookieName];
+    if (!stored) return undefined;
+    if (Array.isArray(stored)) {
+      return (
+        (typeof stored[0] === 'string' ? stored[0].trim() : undefined) ||
+        undefined
+      );
+    }
+    if (typeof stored === 'string') {
+      const token = stored.split(',')[0]?.trim();
+      return token || undefined;
+    }
+    return undefined;
   }
 
   private generateToken(): string {
