@@ -91,6 +91,7 @@ services:
       <<: *api-env
       NODE_ENV: ${NODE_ENV:-production}
       SWAGGER_ENABLED: "${SWAGGER_ENABLED:-false}"
+      AUTO_MIGRATE: "false"
     depends_on:
       api-migrate:
         condition: service_completed_successfully
