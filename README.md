@@ -1256,6 +1256,8 @@ In [`apps/web/src/middleware.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/mi
 ### Double-Submit Cookie CSRF Defense
 In [`CsrfMiddleware`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/security/middleware/csrf.middleware.ts) and [`client.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/api/core/client.ts):
 - **Double-Submit Protocol:** Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `x-csrf-token` header matching the server-issued `csrf_token` cookie.
+- **Deterministic Header Injection:** The frontend Axios request interceptor attaches a single, sanitized `x-csrf-token` header while bypassing Axios default auto-injection to prevent duplicate/comma-joined header values.
+- **Token Sanitization & Resilience:** `CsrfMiddleware` gracefully parses comma-separated headers or multi-cookie arrays, extracting the authoritative single 64-character token before timing-safe comparison.
 - **In-Memory Client State:** The frontend Axios client reads the token from the cookie or response header and retains it strictly in memory (closure-scoped), eliminating browser storage persistence.
 - **Cookie Security Configuration:** The `csrf_token` cookie is configured with `HttpOnly: false` (enabling client JavaScript to attach the required `x-csrf-token` request header), `SameSite: Lax`, and `Secure: true`. Under the browser's Same-Origin Policy (SOP), third-party origins cannot read the cookie value, preventing unauthorized cross-origin header forgery.
 - **Origin & Fetch-Site Validation:** Validates `Origin` and `Sec-Fetch-Site` headers against configured allowed CORS origins to reject cross-origin requests.
