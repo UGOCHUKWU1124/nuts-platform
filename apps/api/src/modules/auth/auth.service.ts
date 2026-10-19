@@ -94,6 +94,7 @@ export class AuthService {
             firstName: dto.firstName,
             lastName: dto.lastName,
             phone: dto.phone,
+            isEmailVerified: true,
           },
           select: USER_AUTH_SELECT,
         });

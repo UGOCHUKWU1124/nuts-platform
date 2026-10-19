@@ -35,6 +35,19 @@ export class UserListItemResponseDto {
   phone!: string | null;
 
   @ApiProperty({
+    description: 'Indicates whether the account email is verified',
+    example: true,
+  })
+  isEmailVerified!: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Indicates whether the user email address is verified (legacy alias)',
+    example: true,
+  })
+  isVerified?: boolean;
+
+  @ApiProperty({
     description: 'Indicates whether the account is currently active',
     example: true,
   })

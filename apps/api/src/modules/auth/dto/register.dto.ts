@@ -76,6 +76,10 @@ export class RegisterDto {
   @IsOptional()
   @Trim()
   @IsString()
+  @Matches(/^\+[1-9]\d{6,14}$/, {
+    message:
+      'Phone number must include international country code (e.g. +2349064786655)',
+  })
   @MaxLength(30)
   phone?: string;
 

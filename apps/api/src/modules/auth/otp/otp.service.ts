@@ -15,12 +15,17 @@ export type OtpPurpose =
   | 'payment'
   | 'password-reset'
   | 'email-verification'
+  | 'account-deactivation'
+  | 'admin:action'
   | 'vendor:registration'
   | 'vendor:password-reset';
 
 type CreateOtpOptions = {
   subject?: string;
   orderDetails?: string;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
 };
 
 /**
@@ -176,7 +181,7 @@ export class OtpService {
 
         // In development, dispatch email asynchronously in background so developer gets instant ~50ms response
         void this.emailService
-          .sendOtpEmail(normalizedEmail, otp, options)
+          .sendOtpEmail(normalizedEmail, otp, { ...options, purpose })
           .catch((error) => {
             this.logger.warn(
               `[DEV] Background email delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
@@ -186,7 +191,10 @@ export class OtpService {
         return;
       }
 
-      await this.emailService.sendOtpEmail(normalizedEmail, otp, options);
+      await this.emailService.sendOtpEmail(normalizedEmail, otp, {
+        ...options,
+        purpose,
+      });
     } catch (error) {
       const isDevelopment =
         this.configService.get<string>('NODE_ENV') !== 'production';

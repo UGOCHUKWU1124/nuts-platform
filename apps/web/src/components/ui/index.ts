@@ -10,3 +10,5 @@ export { Label } from "./label";
 export { Skeleton } from "./skeleton";
 export { Toaster } from "./sonner";
 export { Textarea } from "./textarea";
+export { SegmentedOtpInput } from "./SegmentedOtpInput";
+

@@ -46,8 +46,11 @@ Located in [`src/modules/auth`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modu
 - **Redis Security Stamp Revocation:** Sub-millisecond session validation via cached security stamps (`auth:stamp:{role}:{userId}`), enabling immediate cluster-wide revocation upon logout, password reset, or admin suspension.
 - **Compile-Time Safe Selects:** Centralized Prisma projections (`auth.selects.ts`) enforcing compile-time exclusion of password hashes from API responses.
 - **Timing-Safe Cryptographic Defense:** Enforces bcrypt (cost factor 12) with fake-hash comparison (`UNKNOWN_ACCOUNT_PASSWORD_HASH`) against non-existent accounts to eliminate timing-based user enumeration.
-- **Account Lifecycle & Dual Route Compatibility:**
+- **Account Lifecycle & Verification Alignment:**
   - `UsersController` is exposed via dual routes `@Controller(['account', 'users'])`.
+  - Stored `isEmailVerified` boolean on PostgreSQL `users` table (`@default(true)`), backfilling all existing verified registrations.
+  - Returns both `isEmailVerified` and legacy alias `isVerified` on all user profile DTOs for complete backward compatibility.
+  - Enforces international E.164 phone number formatting (`/^\+[1-9]\d{6,14}$/`) across all incoming registration, address, and profile payloads.
   - Sensitive operations require two-factor OTP authorization (`@OtpRequired()`).
   - Account deactivation (`PATCH /account/deactivate`) and deletion (`DELETE /account/delete`) immediately clear auth cookies at the HTTP boundary.
   - Public account reactivation (`POST /account/reactivate`) allows restore within a 60-day grace period.

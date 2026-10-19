@@ -7,6 +7,7 @@ export const USER_AUTH_SELECT = {
   lastName: true,
   role: true,
   tokenVersion: true,
+  isEmailVerified: true,
 } as const satisfies Prisma.UserSelect;
 
 export const USER_LOGIN_SELECT = {

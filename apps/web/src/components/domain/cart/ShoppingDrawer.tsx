@@ -170,7 +170,14 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
   });
   const defaultAddress = user?.shippingInformation; const selectedAddress = useAlternative ? alternative : defaultAddress; const alternativeComplete = Object.values(alternative).every(Boolean); const payable = discountPreview?.totalAmount ?? total;
   const checkout = useMutation({
-    mutationFn: () => { if (!selectedAddress) throw new Error("Select a delivery address"); const { fullName, phone, street, city, state, country } = selectedAddress; return orderService.checkout({ shippingAddress: { fullName, phone, street, city, state, country }, ...(discountCode.trim() ? { discountCode: discountCode.trim() } : {}) } as CheckoutPayload); },
+    mutationFn: () => {
+      if (!selectedAddress) throw new Error("Select a delivery address");
+      const { fullName, phone, street, city, state, country } = selectedAddress;
+      if (!/^\+[1-9]\d{6,14}$/.test(phone.trim())) {
+        throw new Error("Phone number must include international country code (e.g. +2349064786655)");
+      }
+      return orderService.checkout({ shippingAddress: { fullName, phone: phone.trim(), street, city, state, country }, ...(discountCode.trim() ? { discountCode: discountCode.trim() } : {}) } as CheckoutPayload);
+    },
     onSuccess: async ({ data: order }) => {
       try {
         clearClientCart(queryClient);
@@ -251,7 +258,7 @@ function CheckoutPanel({ total, discountCode, discountPreview }: { total: number
                 id="shipping-phone"
                 name="phone"
                 aria-label="Phone number"
-                placeholder="Phone number"
+                placeholder="Phone number (e.g. +2349064786655)"
                 value={alternative.phone}
                 onChange={(e) => setField("phone", e.target.value)}
               />

@@ -519,9 +519,25 @@ The platform enforces a strict separation between consumer self-service lifecycl
    - Strictly labeled in the back-office UI as **"Delete User Account"** (eliminating internal technical jargon like "soft delete").
 
 ### Verification & Identity Lifecycle: Strict Numeric OTP & Referral Engine
+- **Unified 6-Box Segmented OTP Component ([`SegmentedOtpInput.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/ui/SegmentedOtpInput.tsx)):**
+  - Standardized across all verification surfaces (Customer Registration, Merchant Onboarding, Password Recovery, Account Deactivation, and Back-Office Admin Actions).
+  - Features 6 discrete visual cells with animated pulsing focus carets, full keyboard navigation (Backspace auto-rewind, Arrow keys, automatic forward advancing), clipboard paste auto-splitting, and native mobile virtual numeric keyboard overlay.
+- **Context-Aware Domain Email Copywriting ([`EmailService.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/infrastructure/mail/email.service.ts)):**
+  - Completely eliminates generic or misaligned email headers. OTP emails automatically tailor subject lines, eyebrow badges, titles, and body descriptions to the explicit security purpose (`account-deactivation`, `admin:action`, `password-reset`, `vendor:password-reset`, `vendor:registration`, `payment`, `registration`).
+- **Two-Phase Confirmation & Cooldown Account Deactivation ([`account/setting/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(storefront)/account/setting/page.tsx)):**
+  - Replaces premature OTP dispatches with an explicit **Deactivate Account** trigger opening a warning confirmation dialog detailing the 60-day recovery grace period.
+  - Upon user confirmation, dispatches an `account-deactivation` OTP, immediately transitions to the segmented OTP verification dialog, and initiates an automatic 60-second resend countdown timer.
 - **Strict 6-Digit Numeric OTP Validation (`VerifyOtpDto` & `OtpService`):**
-  - Password reset and email confirmation flows enforce strict regex-validated, 6-digit numeric payloads (`/^\d{6}$/`).
-  - Rate-limited generation and verification windows backed by Redis defend against automated code brute-forcing.
+  - Enforces strict regex-validated, 6-digit numeric payloads (`/^\d{6}$/`) cryptographically hashed with server-side pepper and stored with Redis TTLs.
+  - Rate-limited generation and verification windows backed by Redis atomic multi-exec defend against code brute-forcing.
+- **Email Verification State Alignment (`isEmailVerified`):**
+  - Stored directly on the database `User` entity (`isEmailVerified Boolean @default(true)` with index `users_isEmailVerified_idx`).
+  - Automatically backfilled for all existing registered accounts via dedicated migration `20261019200000_add_user_is_email_verified` (as registration in NUTS platform strictly requires passing OTP email verification).
+  - Explicitly set `isEmailVerified: true` upon user registration in `auth.service.ts`.
+  - Exposed across all profile and user query DTOs (`UserResponseDto`, `UserProfileDto`, `UserListItemResponseDto`, `AdminUserResponseDto`) with both `isEmailVerified` and legacy alias `isVerified` for zero-breakage backwards compatibility.
+- **International E.164 Phone Number Standards:**
+  - Globally enforced international E.164 standard (`/^\+[1-9]\d{6,14}$/`) across all backend API DTOs (`RegisterDto`, `ShippingAddressDto`, `UpdateUserDto`, `CreateVendorDto`, `UpdateVendorDto`) and client-side Zod validation schemas (`register`, `account/setting`, `checkout`, `ShoppingDrawer`, `vendor/setting`).
+  - Rejects ambiguous local-only phone numbers and provides user-friendly guidance (e.g. `Phone number must include international country code (e.g. +2349064786655)`).
 - **Pre-Registration Referral Verification (`referralService`):**
   - Client-side registration forms perform live pre-checks against `/api/v1/account/referral/validate`.
   - Normalizes codes to uppercase, validates referrer account presence, and rejects self-referral attempts before account creation.
@@ -1694,6 +1710,31 @@ The dedicated payment integration suite verifies the full order settlement lifec
 4. **Phase 4: Payment Gateway Initialization:** Initializes Paystack transaction (`POST /api/v1/payment/initialize`), securing transaction authorization URL and reference.
 5. **Phase 5: Asynchronous Webhook Settlement (Callback Bypass):** Simulates customer paying on Paystack and bypassing or closing the redirect callback URL. Delivers cryptographically signed HMAC-SHA512 webhook payload (`POST /api/v1/payments/webhook`) bypassing CSRF checks. Even if Paystack GET verification times out, authoritative webhook settlement advances payment to `SUCCESS`, order to `PROCESSING`, records status history, credits vendor wallet (85%), and emits transactional outbox events.
 6. **Phase 6: Storefront Verification & Cart Emptiness:** Confirms order state (`GET /api/v1/orders/:id`), payment verification (`GET /api/v1/payments/verify/:reference`), and asserts 0 items remain in the active cart (`GET /api/v1/cart`).
+
+### CI/CD Pipeline Architecture & Branch Protection Governance
+
+The repository implements strict GitOps and GitHub Actions quality gates:
+
+```mermaid
+graph LR
+    Feature[feature/*, refactor/*, fix/*, chore/*] -->|PR Only| Dev[development]
+    Dev -->|PR Only / CI Gates| Staging[staging]
+    Staging -->|PR Only / CI Gates| Main[main]
+    Hotfix[hotfix/*] -->|Emergency PR| Staging
+    Hotfix -->|Emergency PR| Main
+```
+
+- **Branch Flow Enforcement (`enforce-source-branch.yml`):**
+  - **Pull Request Only:** Direct commits to `main`, `staging`, and `development` are blocked by branch protection rules.
+  - **Target `development`:** Only feature, refactor, fix, chore, docs, or test branches (`^(feature|refactor|fix|chore|docs|test)/`) may target `development`. Reverse merges from `main` or `staging` back into `development` are blocked via `assert-development-source`.
+  - **Target `staging`:** Only `development` or emergency `hotfix/*` branches are permitted to open pull requests into `staging`.
+  - **Target `main`:** Only `staging` or emergency `hotfix/*` branches are permitted to open pull requests into `main`.
+- **Quality Gate Monorepo Checks (`ci.yml`):**
+  - Runs parallelized jobs for API linting, Web linting, API unit tests, TypeScript typechecking (`typecheck:api` and `typecheck:web`), and production bundle builds (`build:api` and `build:web`).
+  - Employs dynamic environment variables configured via GitHub repository secrets and variables (e.g. `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_API_URL`) avoiding fragile hardcoded hostnames.
+- **Continuous Deployment Pipeline (`deploy.yml`):**
+  - Triggers strictly on pull request merges into `staging` or `main` (avoiding redundant execution on push triggers).
+  - Automatically executes production database migrations (`npm run db:deploy`) against the target environment before deploying containerized services.
 
 ---
 

@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { Trim } from '../decorators/string-trim.decorator';
 
 export class ShippingAddressDto {
@@ -9,10 +15,18 @@ export class ShippingAddressDto {
   @MaxLength(100)
   fullName!: string;
 
-  @ApiProperty({ description: 'Phone number for delivery contact' })
+  @ApiProperty({
+    description:
+      'Phone number for delivery contact in E.164 international format',
+    example: '+2349064786655',
+  })
   @Trim()
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\+[1-9]\d{6,14}$/, {
+    message:
+      'Phone number must include international country code (e.g. +2349064786655)',
+  })
   @MaxLength(30)
   phone!: string;
 
