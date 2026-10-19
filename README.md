@@ -531,9 +531,9 @@ The platform enforces a strict separation between consumer self-service lifecycl
   - Enforces strict regex-validated, 6-digit numeric payloads (`/^\d{6}$/`) cryptographically hashed with server-side pepper and stored with Redis TTLs.
   - Rate-limited generation and verification windows backed by Redis atomic multi-exec defend against code brute-forcing.
 - **Email Verification State Alignment (`isEmailVerified`):**
-  - Stored directly on the database `User` entity (`isEmailVerified Boolean @default(true)` with index `users_isEmailVerified_idx`).
-  - Automatically backfilled for all existing registered accounts via dedicated migration `20261019200000_add_user_is_email_verified` (as registration in NUTS platform strictly requires passing OTP email verification).
-  - Explicitly set `isEmailVerified: true` upon user registration in `auth.service.ts`.
+  - Stored directly on the database `User` entity (`isEmailVerified Boolean @default(false)` with index `users_isEmailVerified_idx`), enforcing a strict zero-trust default of `false` for all new incoming accounts.
+  - Automatically backfilled to `true` for all existing registered accounts via dedicated migration `20261019200000_add_user_is_email_verified` (since prior registrations strictly passed OTP verification), before switching future column defaults to `false`.
+  - Explicitly set `isEmailVerified: true` upon user registration in `auth.service.ts` only after cryptographic OTP confirmation succeeds.
   - Exposed across all profile and user query DTOs (`UserResponseDto`, `UserProfileDto`, `UserListItemResponseDto`, `AdminUserResponseDto`) with both `isEmailVerified` and legacy alias `isVerified` for zero-breakage backwards compatibility.
 - **International E.164 Phone Number Standards:**
   - Globally enforced international E.164 standard (`/^\+[1-9]\d{6,14}$/`) across all backend API DTOs (`RegisterDto`, `ShippingAddressDto`, `UpdateUserDto`, `CreateVendorDto`, `UpdateVendorDto`) and client-side Zod validation schemas (`register`, `account/setting`, `checkout`, `ShoppingDrawer`, `vendor/setting`).
