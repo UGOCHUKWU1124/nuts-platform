@@ -56,6 +56,7 @@ export class UsersService {
     firstName: true,
     lastName: true,
     phone: true,
+    isEmailVerified: true,
     createdAt: true,
     shippingAddresses: {
       where: {
@@ -81,6 +82,7 @@ export class UsersService {
     firstName: true,
     lastName: true,
     phone: true,
+    isEmailVerified: true,
     isActive: true,
     deactivatedAt: true,
     scheduledPermanentDeleteAt: true,
@@ -115,6 +117,7 @@ export class UsersService {
     firstName: true,
     lastName: true,
     phone: true,
+    isEmailVerified: true,
     isActive: true,
     deactivatedAt: true,
     scheduledPermanentDeleteAt: true,
@@ -415,6 +418,7 @@ export class UsersService {
     firstName: string | null;
     lastName: string | null;
     phone: string | null;
+    isEmailVerified?: boolean | null;
     createdAt: Date;
     shippingAddresses: Array<{
       id: string;
@@ -429,6 +433,7 @@ export class UsersService {
     referralCode?: { code: string } | null;
   }): UserResponseDto {
     const defaultAddress = user.shippingAddresses[0] ?? null;
+    const verified = user.isEmailVerified ?? true;
 
     return {
       id: user.id,
@@ -436,7 +441,8 @@ export class UsersService {
       firstName: user.firstName,
       lastName: user.lastName,
       phoneNumber: user.phone,
-      isVerified: false,
+      isEmailVerified: verified,
+      isVerified: verified,
       createdAt: user.createdAt,
       referralCode: user.referralCode?.code ?? null,
       shippingInformation: defaultAddress

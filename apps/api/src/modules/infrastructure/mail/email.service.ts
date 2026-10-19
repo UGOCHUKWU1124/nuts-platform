@@ -47,7 +47,7 @@ export class EmailService implements OnModuleInit {
   }
 
   /**
-   * Sends an OTP/verification email.
+   * Sends an OTP/verification email tailored to the specific purpose.
    */
   async sendOtpEmail(
     to: string,
@@ -55,11 +55,25 @@ export class EmailService implements OnModuleInit {
     options?: {
       subject?: string;
       orderDetails?: string;
+      eyebrow?: string;
+      title?: string;
+      description?: string;
+      purpose?: string;
     },
   ): Promise<void> {
-    const subject = options?.subject ?? 'Your verification code';
+    const copy = this.getOtpCopyByPurpose(options?.purpose);
+    const subject = options?.subject || copy.subject;
+    const eyebrow = options?.eyebrow || copy.eyebrow;
+    const title = options?.title || copy.title;
+    const description = options?.description || copy.description;
 
-    const html = this.buildOtpHtml(otp, options?.orderDetails);
+    const html = this.buildOtpHtml({
+      otp,
+      eyebrow,
+      title,
+      description,
+      orderDetails: options?.orderDetails,
+    });
 
     await this.sendEmail({
       to,
@@ -68,7 +82,9 @@ export class EmailService implements OnModuleInit {
     });
 
     // Do not log OTPs or unnecessary recipient information.
-    this.logger.log('OTP email sent successfully');
+    this.logger.log(
+      `OTP email sent successfully (purpose: ${options?.purpose || 'default'})`,
+    );
   }
 
   /**
@@ -279,38 +295,121 @@ export class EmailService implements OnModuleInit {
     return `${normalizedCurrency} ${Number(amount).toFixed(2)}`;
   }
 
-  private buildOtpHtml(otp: string, orderDetails?: string): string {
-    const safeOtp = this.escapeHtml(otp);
+  /**
+   * Returns domain-tailored email copywriting matching the exact security context.
+   */
+  private getOtpCopyByPurpose(purpose?: string): {
+    eyebrow: string;
+    title: string;
+    description: string;
+    subject: string;
+  } {
+    switch (purpose) {
+      case 'account-deactivation':
+        return {
+          eyebrow: 'Account Security Alert',
+          title: 'Confirm Account Deactivation',
+          description:
+            'You recently requested to deactivate your NUTS account. If this was intentional, use the verification code below to authorize this action. You have a 60-day grace period to sign back in before permanent deletion:',
+          subject: 'NUTS — Account Deactivation Verification Code',
+        };
+      case 'admin:action':
+        return {
+          eyebrow: 'Admin Security Authorization',
+          title: 'Authorize Admin Action',
+          description:
+            'A sensitive administrative operation has been requested on the NUTS platform. Use the verification code below to authorize this operation:',
+          subject: 'NUTS — Admin Security Action Verification Code',
+        };
+      case 'password-reset':
+        return {
+          eyebrow: 'Account Security',
+          title: 'Reset Your Password',
+          description:
+            'We received a request to reset the password for your NUTS account. Use the verification code below to complete your password reset:',
+          subject: 'NUTS — Password Reset Verification Code',
+        };
+      case 'vendor:password-reset':
+        return {
+          eyebrow: 'Merchant Security',
+          title: 'Reset Merchant Password',
+          description:
+            'A password reset request was initiated for your NUTS Merchant account. Use the verification code below to establish a new password:',
+          subject: 'NUTS — Merchant Password Reset Verification Code',
+        };
+      case 'vendor:registration':
+        return {
+          eyebrow: 'Merchant Partner Verification',
+          title: 'Verify Your Merchant Account',
+          description:
+            'Thank you for partnering with NUTS. Please verify your merchant email address using the code below to activate your vendor dashboard:',
+          subject: 'NUTS — Verify your Merchant Account',
+        };
+      case 'payment':
+        return {
+          eyebrow: 'Payment Authorization',
+          title: 'Authorize Checkout Payment',
+          description:
+            'A verification code is required to authorize your order payment on NUTS. Use the code below to complete your checkout:',
+          subject: 'NUTS — Payment Authorization Code',
+        };
+      case 'email-verification':
+        return {
+          eyebrow: 'Email Verification',
+          title: 'Verify Your Email Address',
+          description:
+            'Please verify that this is your email address for your NUTS account. Use the code below to proceed:',
+          subject: 'NUTS — Email Verification Code',
+        };
+      case 'registration':
+      default:
+        return {
+          eyebrow: 'Account Verification',
+          title: 'Verify Your NUTS Account',
+          description:
+            'Welcome to NUTS! Please enter the 6-digit verification code below to confirm your email and activate your account:',
+          subject: 'NUTS — Verify your email address',
+        };
+    }
+  }
 
-    const detailsHtml = orderDetails
+  private buildOtpHtml(params: {
+    otp: string;
+    eyebrow: string;
+    title: string;
+    description: string;
+    orderDetails?: string;
+  }): string {
+    const safeOtp = this.escapeHtml(params.otp);
+    const safeEyebrow = this.escapeHtml(params.eyebrow);
+    const safeTitle = this.escapeHtml(params.title);
+    const safeDescription = this.escapeHtml(params.description);
+
+    const detailsHtml = params.orderDetails
       ? `
         <div class="details-box">
-          <p>${this.escapeHtml(orderDetails)}</p>
+          <p>${this.escapeHtml(params.orderDetails)}</p>
         </div>
       `
       : '';
 
     return this.wrapHtml(`
       <div class="email-header">
-        <p class="eyebrow">Secure login</p>
-        <h1>Verify your NUTS login</h1>
+        <p class="eyebrow">${safeEyebrow}</p>
+        <h1>${safeTitle}</h1>
       </div>
 
       <div class="email-body">
         ${detailsHtml}
 
-        <p>
-          Use the code below to continue.
-          It will expire in 10 minutes.
-        </p>
+        <p>${safeDescription}</p>
 
         <div class="otp-box">
           <span>${safeOtp}</span>
         </div>
 
         <p>
-          If you did not request this verification,
-          simply ignore this email.
+          This verification code will expire in 10 minutes. If you did not request this verification, please disregard this email or contact security support if you suspect unauthorized activity.
         </p>
       </div>
     `);

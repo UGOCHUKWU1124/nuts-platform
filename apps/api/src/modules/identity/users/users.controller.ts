@@ -191,9 +191,7 @@ export class UsersController {
     @GetUser('id') userId: string,
   ): Promise<{ message: string }> {
     const user = await this.usersService.findOne(userId);
-    await this.otpService.createOtp(user.email, 'registration', {
-      subject: 'NUTS Account Action Verification Code',
-    });
+    await this.otpService.createOtp(user.email, 'account-deactivation');
     return { message: 'Verification code sent to your email' };
   }
 
@@ -205,7 +203,7 @@ export class UsersController {
    */
   @Patch('deactivate')
   @Roles(ROLE.USER)
-  @OtpRequired()
+  @OtpRequired('account-deactivation')
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
   @Message('Account deactivated successfully')

@@ -161,29 +161,16 @@ export function NotificationBell({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
               <button
                 type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setIsPreferencesOpen(true);
-                }}
-                title="Notification Preferences"
-                className="flex items-center p-1 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary cursor-pointer"
+                onClick={() => markAllAsRead()}
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer"
               >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <CheckCheck className="h-3.5 w-3.5" />
+                Mark all read
               </button>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => markAllAsRead()}
-                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                >
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  Mark all read
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
           {/* List */}

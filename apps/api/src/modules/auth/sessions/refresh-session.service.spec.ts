@@ -12,6 +12,7 @@ describe('RefreshSessionService user sessions', () => {
     lastName: 'User',
     role: ROLE.USER,
     tokenVersion: 2,
+    isEmailVerified: true,
   };
 
   let service: RefreshSessionService;

@@ -10,6 +10,9 @@ import {
 } from "@/lib/notification-stream-policy";
 import { create } from "zustand";
 import { toast } from "sonner";
+import { getQueryClient } from "@/lib/query-client";
+import { queryKey } from "@/lib/query-key";
+import type { NotificationPreferences } from "@/api/notifications";
 
 interface NotificationsState {
   notifications: AppNotification[];
@@ -109,17 +112,38 @@ function getNotificationSessionKey(): string {
 
 function showIncomingNotification(notification: AppNotification): void {
   const role = getActiveNotificationRole();
+  const auth = useAuthStore.getState();
+  const userId = auth.user?.id ?? "me";
 
-  toast(notification.title, {
-    description: notification.message,
-    action: {
-      label: "View notifications",
-      onClick: () =>
-        window.location.assign(notificationDetailPath(role, notification.id)),
-    },
-  });
+  let inAppEnabled = true;
+  let pushEnabled = true;
+
+  try {
+    const qc = getQueryClient();
+    const prefs = qc.getQueryData<NotificationPreferences>(
+      queryKey.notification.preferences(userId),
+    );
+    if (prefs) {
+      if (prefs.inAppEnabled === false) inAppEnabled = false;
+      if (prefs.pushEnabled === false) pushEnabled = false;
+    }
+  } catch {
+    // If cache lookup unavailable, use defaults
+  }
+
+  if (inAppEnabled) {
+    toast(notification.title, {
+      description: notification.message,
+      action: {
+        label: "View notifications",
+        onClick: () =>
+          window.location.assign(notificationDetailPath(role, notification.id)),
+      },
+    });
+  }
 
   if (
+    pushEnabled &&
     typeof window !== "undefined" &&
     "Notification" in window &&
     Notification.permission === "granted"

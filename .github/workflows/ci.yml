@@ -1,4 +1,4 @@
-name: NUTS - CI 
+name: NUTS - CI
 
 on:
   push:
@@ -155,5 +155,5 @@ jobs:
       - name: Build Web Application
         run: npm run build:web
         env:
-          NEXT_PUBLIC_BACKEND_URL: 'https://api.nuts-commerce.com'
-          NEXT_PUBLIC_API_URL: '/api/v1'
+          NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}

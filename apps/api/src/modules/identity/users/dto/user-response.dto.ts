@@ -38,6 +38,13 @@ export class UserResponseDto {
     description: 'Indicates whether the user email address is verified',
     example: true,
   })
+  isEmailVerified!: boolean;
+
+  @ApiProperty({
+    description:
+      'Indicates whether the user email address is verified (legacy alias)',
+    example: true,
+  })
   isVerified!: boolean;
 
   @ApiProperty({

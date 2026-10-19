@@ -95,6 +95,7 @@ model User {
   refreshTokenId             String?
   tokenVersion               Int       @default(0)
   isActive                   Boolean   @default(true)
+  isEmailVerified            Boolean   @default(true)
   deactivatedAt              DateTime?
   scheduledPermanentDeleteAt DateTime?
   deactivatedBy              String?
@@ -125,6 +126,7 @@ model User {
   authSessions           UserAuthSession[]
 
   @@index([isActive])
+  @@index([isEmailVerified])
   @@index([scheduledPermanentDeleteAt])
   @@index([isActive, createdAt])
   @@map("users")

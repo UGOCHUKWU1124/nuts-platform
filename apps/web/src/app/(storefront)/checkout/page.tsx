@@ -35,7 +35,12 @@ import { z } from "zod";
 
 const addressSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
-  phone: z.string().min(8, "Valid phone number is required"),
+  phone: z
+    .string()
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Phone number must include international country code (e.g. +2349064786655)",
+    ),
   street: z.string().min(4, "Street address is required"),
   city: z.string().min(2, "City is required"),
   state: z.string().min(2, "State is required"),
@@ -583,7 +588,7 @@ export default function CheckoutPage() {
                         <FormInput
                           name="phone"
                           label="Phone Number"
-                          placeholder="08012345678"
+                          placeholder="+2349064786655"
                         />
 
                         <FormInput

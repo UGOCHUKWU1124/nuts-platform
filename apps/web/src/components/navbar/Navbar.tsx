@@ -1,7 +1,6 @@
 "use client";
 
 import {
-Bell,
 ChevronDown,
 Heart,
 LayoutDashboard,
@@ -26,8 +25,7 @@ import { useCart } from "@/hook/use-cart";
 import { useHydrated } from "../../hook/use-hydrated";
 import { useWishlist } from "@/hook/use-wishlist";
 import { usePublicCategories } from "@/hooks/use-public-categories";
-import { useAuthStore, normalizeRole } from "@/zustand/auth";
-import { notificationListPath } from "@/lib/notification-path";
+import { useAuthStore } from "@/zustand/auth";
 import { logoutWithFeedback } from "@/lib/logout";
 
 import { SearchDrawer } from "@/components/search/SearchDrawer";
@@ -46,10 +44,6 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
   const canPurchase = capabilities ? capabilities.canPurchase : !isLoggedIn;
   const canSell = capabilities?.canSell ?? false;
   const canAdminister = capabilities?.canAdminister ?? false;
-  const normalizedRole = normalizeRole(role ?? user?.role);
-  const activeNotificationHref = notificationListPath(
-    canAdminister ? "admin" : canSell ? "vendor" : (normalizedRole ?? "user"),
-  );
 
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
@@ -396,32 +390,15 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                           My Wallet
                         </Link>
                         <Link
-                          href="/wishlist"
-                          onClick={() => setAccountOpen(false)}
-                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                        >
-                          <Heart className="h-4 w-4 text-muted-foreground" />
-                          Saved Wishlist
-                        </Link>
-                        <Link
                           href="/account/setting"
                           onClick={() => setAccountOpen(false)}
                           className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
                         >
                           <Settings className="h-4 w-4 text-muted-foreground" />
-                          Settings & Security
+                          Settings & Preferences
                         </Link>
                       </>
                     )}
-
-                    <Link
-                      href={activeNotificationHref}
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      Notifications
-                    </Link>
                   </div>
 
                   <div className="border-t border-border my-1 pt-1">
