@@ -9,8 +9,9 @@
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-Alpine-DC382D.svg)](https://redis.io/)
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-AMQP-FF6600.svg)](https://www.rabbitmq.com/)
+[![Docker](https://img.shields.io/badge/Docker-Multi--Stage-2496ED.svg)](https://www.docker.com/)
 
-> **NUTS Platform** is a production-grade, multi-vendor enterprise e-commerce system built as a modular monolith adhering to Domain-Driven Design (DDD) principles. It is engineered for high throughput, sub-millisecond edge routing, zero-downtime database migrations, resilient asynchronous messaging, and banking-grade authentication and session security.
+> **NUTS Platform** is a production-grade, multi-vendor enterprise e-commerce system architected with NestJS 11, TypeScript 5.8, PostgreSQL 16, Prisma 7, Redis Alpine, RabbitMQ, and Docker containerization, adhering strictly to Domain-Driven Design (DDD) principles. It is engineered for high throughput, sub-millisecond edge routing, zero-downtime database migrations, resilient asynchronous messaging, and high-grade authentication and session security.
 
 ---
 
@@ -62,6 +63,9 @@
    - [Next.js Standalone Build & Tree-Shaking](#nextjs-standalone-build--tree-shaking)
    - [Response Interceptor Content-Negotiation & Stream Bypassing](#response-interceptor-content-negotiation--stream-bypassing)
    - [Database Connection Governance & Redis High-Availability Tuning](#database-connection-governance--redis-high-availability-tuning-prismaservice--redismodule)
+   - [Cloudinary Global CDN & Edge Content Negotiation Pipeline](#cloudinary-global-cdn--edge-content-negotiation-pipeline)
+   - [Variable Font & Critical Preload Optimization](#variable-font--critical-preload-optimization)
+   - [Deep Dependency Readiness Probes (`/health/ready`)](#deep-dependency-readiness-probes-healthready)
 6. [Security, OpenAPI & Network Hardening](#6-security-openapi--network-hardening)
    - [OpenAPI 3.0 / Swagger Specification & Developer Reference](#openapi-30--swagger-specification--developer-reference)
    - [Dynamic Content-Security-Policy (CSP) & Web Crypto Nonce](#dynamic-content-security-policy-csp--web-crypto-nonce)
@@ -1252,6 +1256,25 @@ Starter cloud instances (such as Render Free/Starter) enforce a hard **512MB RAM
    - **Offline Command Queueing:** Operates with `enableOfflineQueue: true`, buffering incoming cache reads, rate-limiting evaluations, and session queries during temporary connection blips.
    - **Bounded Exponential Retry:** Employs exponential reconnection intervals (`Math.min(times * 200, 3000)`) with `maxRetriesPerRequest: 3`, avoiding server CPU exhaustion during broker restarts.
    - **Network Timeout & Keepalive Ceilings:** Enforces 10,000ms connection, command, and TCP socket keepalive thresholds (`connectTimeout`, `commandTimeout`, `keepAlive`), terminating dead sockets before connection pools deplete.
+   - **Lifecycle Telemetry & Event Observers:** Hooks into `connect`, `ready`, `error`, `reconnecting`, and `close` socket events, streaming real-time Redis health telemetry to application logs without silent failure loops.
+
+### Cloudinary Global CDN & Edge Content Negotiation Pipeline
+Media assets uploaded across the catalog and vendor storefronts are delivered via a high-performance multi-tier CDN architecture:
+- **Akamai & Fastly Edge CDN:** Assets stored under `res.cloudinary.com` route through Cloudinary's multi-CDN infrastructure (`Server-Timing: cld-akam`), edge-caching binary payloads globally with immutable 30-day cache headers (`Cache-Control: public, no-transform, immutable, max-age=2592000`).
+- **Dynamic Content Negotiation (`f_auto,q_auto`):** Cloudinary delivery URLs automatically inject `/f_auto,q_auto/`. The CDN edge inspects incoming client `Accept` headers (`image/avif`, `image/webp`) and device pixel ratios to transform payloads on the fly—slashing image payloads by 70–85% (from ~250KB raw JPEG to ~25KB modern WebP/AVIF) with zero compute load on the backend API or web servers.
+- **Responsive Next.js Image Optimization:** Client storefronts leverage Next.js `<Image>` with configured `remotePatterns` and viewport `sizes`, automatically generating responsive `srcset` slices for mobile, tablet, and desktop viewports.
+
+### Variable Font & Critical Preload Optimization
+- **Next.js Google Fonts (`Inter`):** Inter is configured as a true variable font (`subsets: ["latin"], display: "swap"`) without discrete static weight slices. This prevents browser preload scanners from downloading unused font subsets and eliminates Chromium preload mismatch warnings.
+- **Viewport-Aware Priority Loading:** Critical image preloading (`priority={true}`) is strictly constrained to above-the-fold hero elements and initial carousel viewports (`priority={index < 2}`), preventing off-screen media from competing with critical script execution during initial page load.
+
+### Deep Dependency Readiness Probes (`/health/ready`)
+The NUTS API implements a two-tier health monitoring pattern:
+- **Liveness Probe (`GET /api/v1/health`):** Fast, non-blocking check that confirms the Node.js process event loop is active.
+- **Readiness Probe (`GET /api/v1/health/ready`):** Deep dependency diagnostic probe that concurrently verifies:
+  1. **PostgreSQL Database:** Executes `SELECT 1` via Prisma.
+  2. **Redis Distributed Cache:** Executes a live `PING` roundtrip command and records latency (`redisLatencyMs`).
+  - Returns `HTTP 200 OK` with detailed status breakdown (`{ status: "ok", database: "connected", redis: "connected", redisLatencyMs: 2 }`) or `HTTP 503 Service Unavailable` if either dependency becomes degraded or unreachable.
 
 ## 6. Security, OpenAPI & Network Hardening
 

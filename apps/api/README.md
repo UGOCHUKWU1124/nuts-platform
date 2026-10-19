@@ -6,18 +6,20 @@
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-Alpine-DC382D.svg)](https://redis.io/)
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-AMQP-FF6600.svg)](https://www.rabbitmq.com/)
+[![Docker](https://img.shields.io/badge/Docker-Multi--Stage-2496ED.svg)](https://www.docker.com/)
 
-> **`apps/api`** is the core REST API and asynchronous event processing service of the NUTS Platform. Engineered as a modular monolith adhering to Domain-Driven Design (DDD) principles, it provides high-throughput transaction processing, banking-grade IAM security, real-time Server-Sent Events (SSE), and fault-tolerant message handling.
+> **`apps/api`** is the core REST API and asynchronous event processing service of the NUTS Platform. Architected with NestJS 11, TypeScript 5.8, PostgreSQL 16, Prisma 7, Redis Alpine, RabbitMQ, and Docker containerization, adhering strictly to Domain-Driven Design (DDD) principles, it provides high-throughput transaction processing, banking-grade IAM security, real-time Server-Sent Events (SSE), and fault-tolerant message handling.
 
 ---
 
 ## Core Framework & Infrastructure Architecture
 
 - **Modular Monolith Framework:** NestJS 11 on Node.js with TypeScript and RxJS stream pipelines.
+- **Containerization & Deployment:** Multi-stage Docker production images with Alpine Linux minimal runtime base, non-root user execution, and standalone dependency isolation.
 - **Data Persistence & ORM:** PostgreSQL 16 managed via Prisma 7 with native pg adapter (`@prisma/adapter-pg`).
-- **Distributed Cache & State:** Redis Alpine via `ioredis` with clustered pub/sub event broadcasting, Redlock distributed locking, and `enableOfflineQueue: true`.
+- **Distributed Cache & State:** Redis Alpine via `ioredis` with clustered pub/sub event broadcasting, Redlock distributed locking, `enableOfflineQueue: true`, active connection lifecycle telemetry (`connect`, `ready`, `error`, `reconnecting`), and deep `/health/ready` latency ping probes.
 - **Asynchronous Messaging Broker:** RabbitMQ 3 (AMQP) topic exchanges with dedicated queues, consumer workers, and dead-letter exchanges (`nuts.dlx` / `q.nuts.dlq`).
-- **Media Asset Pipeline:** Cloudinary media CDN integration for multi-image uploads and responsive asset transformations.
+- **Media Asset Pipeline & CDN Delivery:** Cloudinary Media Management backed by Akamai Edge CDN, automatically transforming and delivering assets via `f_auto,q_auto` (serving AVIF and WebP with zero CPU overhead on origin servers).
 - **Transactional Communications:** Brevo HTTPS transactional email delivery with template variable hydration and circuit-breaker fail-safe delivery.
 
 ---

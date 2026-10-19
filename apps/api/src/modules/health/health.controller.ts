@@ -1,13 +1,27 @@
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Inject,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
+import { REDIS_CLIENT } from '@api/modules/infrastructure/redis/redis.constants';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
+import Redis from 'ioredis';
 
 @ApiTags('HEALTH')
 @Public()
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(HealthController.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(REDIS_CLIENT) private readonly redis?: Redis,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -21,28 +35,68 @@ export class HealthController {
 
   @Get('ready')
   @ApiOperation({
-    summary: 'Readiness check (database)',
+    summary: 'Readiness check (database & cache)',
     description:
-      'Readiness probe that verifies the database connection is healthy.',
+      'Readiness probe that verifies database and Redis connections are healthy.',
   })
   @ApiResponse({
     status: 503,
-    description: 'Database connection failed',
+    description: 'Readiness check failed',
   })
   async readiness(): Promise<{
     status: string;
     database: string;
+    redis: string;
+    redisLatencyMs?: number;
     timestamp: string;
   }> {
+    let dbStatus = 'connected';
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-    } catch {
-      throw new ServiceUnavailableException('Database readiness check failed.');
+    } catch (err: unknown) {
+      dbStatus = 'disconnected';
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Database readiness check failed: ${msg}`);
+    }
+
+    let redisStatus = 'connected';
+    let redisLatencyMs: number | undefined;
+
+    if (this.redis) {
+      try {
+        const start = Date.now();
+        const pong = await this.redis.ping();
+        redisLatencyMs = Date.now() - start;
+        if (pong !== 'PONG') {
+          redisStatus = 'degraded';
+        }
+      } catch (err: unknown) {
+        redisStatus = 'disconnected';
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Redis readiness check failed: ${msg}`);
+      }
+    } else {
+      redisStatus = 'disabled';
+    }
+
+    if (
+      dbStatus !== 'connected' ||
+      (redisStatus !== 'connected' && redisStatus !== 'disabled')
+    ) {
+      throw new ServiceUnavailableException({
+        status: 'error',
+        database: dbStatus,
+        redis: redisStatus,
+        redisLatencyMs,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     return {
       status: 'ok',
-      database: 'connected',
+      database: dbStatus,
+      redis: redisStatus,
+      redisLatencyMs,
       timestamp: new Date().toISOString(),
     };
   }

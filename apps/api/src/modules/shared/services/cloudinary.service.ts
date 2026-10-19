@@ -128,8 +128,16 @@ export class CloudinaryService {
             return;
           }
 
+          const rawUrl = result.secure_url;
+          const optimizedUrl =
+            isSvg || !rawUrl.includes('/upload/')
+              ? rawUrl
+              : rawUrl.includes('/upload/f_auto,q_auto/')
+                ? rawUrl
+                : rawUrl.replace('/upload/', '/upload/f_auto,q_auto/');
+
           resolve({
-            url: result.secure_url,
+            url: optimizedUrl,
             publicId: result.public_id,
             width: result.width ?? 0,
             height: result.height ?? 0,
