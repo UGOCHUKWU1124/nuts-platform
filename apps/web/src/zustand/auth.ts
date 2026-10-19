@@ -53,6 +53,7 @@ export type User = {
   storeName?: string;
   storeSlug?: string;
   storeLogoUrl?: string | null;
+  isEmailVerified?: boolean;
   isVerified?: boolean;
   isActive?: boolean;
   isApproved?: boolean;

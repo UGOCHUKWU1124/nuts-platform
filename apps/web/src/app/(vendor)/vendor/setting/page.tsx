@@ -33,7 +33,12 @@ import { NotificationPreferencesContent } from "@/components/domain/notification
 const storeSchema = z.object({
   storeName: z.string().min(2, "Store name is required"),
   storeDescription: z.string().min(5, "Store description is required"),
-  businessPhone: z.string().min(6, "Valid business phone is required"),
+  businessPhone: z
+    .string()
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Phone number must include international country code (e.g. +2349064786655)",
+    ),
   businessEmail: z.string().email("Valid business email is required"),
   firstName: z.string().max(100).optional().or(z.literal("")),
   lastName: z.string().max(100).optional().or(z.literal("")),
@@ -259,7 +264,7 @@ export default function VendorSettingPage() {
                         <FormInput
                           name="businessPhone"
                           label="Customer Inquiries Phone"
-                          placeholder="+234..."
+                          placeholder="+2349064786655"
                         />
                       </div>
 

@@ -8,6 +8,7 @@ import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
 import { FormTextarea } from "@/component/form/FormTextarea";
 import { Button } from "@/component/ui/button";
+import { SegmentedOtpInput } from "@/component/ui/SegmentedOtpInput";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosError } from "axios";
 import {
@@ -48,7 +49,12 @@ const registerSchema = z
     referralCode: z.string().optional(),
     shippingAddress: z.object({
       fullName: z.string().min(1, "Recipient full name is required"),
-      phone: z.string().min(10, "Valid phone number is required"),
+      phone: z
+        .string()
+        .regex(
+          /^\+[1-9]\d{6,14}$/,
+          "Phone number must include international country code (e.g. +2349064786655)",
+        ),
       street: z.string().min(3, "Street address is required"),
       city: z.string().min(2, "City is required"),
       state: z.string().min(2, "State is required"),
@@ -466,68 +472,15 @@ export default function RegisterPage() {
                   </div>
 
                   {/* 6-box segmented OTP display */}
-                  <div className="max-w-xs mx-auto space-y-2">
-                    <div className="relative group">
-                      <input
-                        id="otp-digit-input"
-                        name="otpCode"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        autoFocus
-                        value={otpCode || ""}
-                        onChange={(e) => {
-                          const clean = e.target.value.replace(/\D/g, "").slice(0, 6);
-                          setValue("otpCode", clean, { shouldValidate: true });
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
-                        aria-label="6-Digit Verification Code"
-                      />
-                      <div className="flex items-center justify-between gap-2">
-                        {[0, 1, 2, 3, 4, 5].map((index) => {
-                          const char = (otpCode || "")[index];
-                          const isFocused =
-                            (otpCode || "").length === index ||
-                            ((otpCode || "").length === 6 && index === 5);
-                          return (
-                            <div
-                              key={index}
-                              className={`flex h-13 w-11 sm:h-14 sm:w-12 items-center justify-center rounded-2xl border text-xl sm:text-2xl font-bold font-mono transition-all select-none ${
-                                char
-                                  ? "border-primary bg-primary/5 text-foreground shadow-xs ring-1 ring-primary/20"
-                                  : isFocused
-                                    ? "border-primary ring-2 ring-primary/30 bg-card text-foreground"
-                                    : "border-border/80 bg-muted/20 text-muted-foreground"
-                              }`}
-                            >
-                              {char ||
-                                (isFocused ? (
-                                  <span className="animate-pulse text-primary font-normal text-xl leading-none">
-                                    |
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground/30 text-xs">
-                                    •
-                                  </span>
-                                ))}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {errors.otpCode?.message && (
-                      <p className="text-xs font-semibold text-rose-500 pt-1 tracking-normal">
-                        {errors.otpCode.message}
-                      </p>
-                    )}
-
-                    <p className="text-[11px] text-muted-foreground tracking-normal">
-                      Click or tap the boxes above to type or paste your 6-digit code.
-                    </p>
-                  </div>
+                  <SegmentedOtpInput
+                    id="otp-digit-input"
+                    value={otpCode || ""}
+                    onChange={(clean) => {
+                      setValue("otpCode", clean, { shouldValidate: true });
+                    }}
+                    error={errors.otpCode?.message}
+                    autoFocus
+                  />
 
                   {/* Resend & Edit Email Controls */}
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-xs pt-1">

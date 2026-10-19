@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -25,6 +26,10 @@ export class UpdateVendorDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
+  @Matches(/^\+[1-9]\d{6,14}$/, {
+    message:
+      'Phone number must include international country code (e.g. +2349064786655)',
+  })
   businessPhone?: string;
 
   @ApiPropertyOptional()
@@ -47,6 +52,10 @@ export class UpdateVendorDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
+  @Matches(/^\+[1-9]\d{6,14}$/, {
+    message:
+      'Phone number must include international country code (e.g. +2349064786655)',
+  })
   phone?: string;
 
   @ApiPropertyOptional()

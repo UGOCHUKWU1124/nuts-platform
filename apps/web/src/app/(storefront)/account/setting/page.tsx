@@ -42,7 +42,12 @@ import { NotificationPreferencesContent } from "@/components/domain/notification
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  phone: z.string().min(6, "Valid phone number is required"),
+  phone: z
+    .string()
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Phone number must include international country code (e.g. +2349064786655)",
+    ),
   email: z.string().email("Valid email is required"),
 });
 
@@ -72,7 +77,8 @@ export default function AccountSettingPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Deactivate OTP Dialog State
+  // Deactivate Account Dialog State
+  const [isConfirmDeactivateOpen, setIsConfirmDeactivateOpen] = useState(false);
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
   const [isRequestingOtp, setIsRequestingOtp] = useState(false);
 
@@ -176,12 +182,13 @@ export default function AccountSettingPage() {
   });
 
   // Deactivate Account Handlers
-  const handleInitiateDeactivation = async () => {
+  const handleConfirmDeactivation = async () => {
     try {
       setIsRequestingOtp(true);
       await userService.requestDeactivateOtp();
-      toast.success("A 6-digit verification code has been sent to your email.");
+      setIsConfirmDeactivateOpen(false);
       setIsDeactivateOpen(true);
+      toast.success("A 6-digit verification code has been sent to your email.");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Failed to send verification code."));
     } finally {
@@ -354,7 +361,7 @@ export default function AccountSettingPage() {
                     <FormInput name="lastName" label="Last Name" placeholder="e.g. Doe" />
                   </div>
                   <FormInput name="email" label="Email Address" type="email" placeholder="name@domain.com" />
-                  <FormInput name="phone" label="Primary Phone Number" placeholder="+234..." />
+                  <FormInput name="phone" label="Primary Phone Number" placeholder="+2349064786655" />
 
                   <div className="pt-2">
                     <Button
@@ -613,10 +620,10 @@ export default function AccountSettingPage() {
                 type="button"
                 variant="outline"
                 disabled={isRequestingOtp}
-                onClick={handleInitiateDeactivation}
+                onClick={() => setIsConfirmDeactivateOpen(true)}
                 className="rounded-xl border-amber-300 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-300 text-xs font-semibold"
               >
-                {isRequestingOtp ? "Sending OTP..." : "Request Deactivation OTP"}
+                Deactivate Account
               </Button>
             </CardContent>
           </Card>
@@ -655,16 +662,30 @@ export default function AccountSettingPage() {
         </div>
       )}
 
-      {/* Otp Dialog for Deactivation */}
+      {/* Step 1: Confirmation Card Popup before sending OTP */}
+      <ConfirmDialog
+        open={isConfirmDeactivateOpen}
+        onOpenChange={setIsConfirmDeactivateOpen}
+        title="Are you sure you want to deactivate your account?"
+        description="Deactivating your account will temporarily disable your profile and log you out of all active sessions. You will have a 60-day grace period to sign back in and reactivate before permanent deletion. If you proceed, a 6-digit verification code will be sent to your email."
+        confirmText="Yes, Deactivate"
+        cancelText="Cancel"
+        variant="warning"
+        isLoading={isRequestingOtp}
+        onConfirm={handleConfirmDeactivation}
+      />
+
+      {/* Step 2: Otp Dialog for Deactivation with countdown timer */}
       <OtpPromptDialog
         open={isDeactivateOpen}
         onOpenChange={setIsDeactivateOpen}
         title="Confirm Account Deactivation"
         description="Enter the 6-digit security verification code sent to your email to deactivate your account."
         codeLabel="Verification Code"
-        codeSubtitle="Sent to your email"
+        codeSubtitle="Check your inbox"
         confirmText="Confirm Deactivation"
         isLoading={deactivateMutation.isPending}
+        initialCooldown={60}
         onRequestOtp={async () => {
           await userService.requestDeactivateOtp();
           toast.success("Verification code resent to your email.");

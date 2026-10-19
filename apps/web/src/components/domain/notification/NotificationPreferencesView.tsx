@@ -202,17 +202,18 @@ export function NotificationPreferencesContent() {
               ) : (
                 <SwitchToggle
                   id="push-toggle"
-                  checked={Boolean(prefs.pushEnabled && isSubscribed)}
+                  checked={Boolean(prefs.pushEnabled)}
                   disabled={isUpdating || isPushLoading}
                   onChange={async (checked) => {
+                    updatePreferences({ pushEnabled: checked });
                     if (checked) {
-                      const success = await subscribePush();
-                      if (success) {
-                        updatePreferences({ pushEnabled: true });
+                      if (isPushSupported && !isSubscribed) {
+                        await subscribePush();
                       }
                     } else {
-                      await unsubscribePush();
-                      updatePreferences({ pushEnabled: false });
+                      if (isSubscribed) {
+                        await unsubscribePush();
+                      }
                     }
                   }}
                 />

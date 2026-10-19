@@ -8,6 +8,7 @@ VerifyOtpResponseDto
 import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
 import { Button } from "@/component/ui/button";
+import { SegmentedOtpInput } from "@/component/ui/SegmentedOtpInput";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosError } from "axios";
 import { RefreshCw,Send,Store } from "lucide-react";
@@ -47,10 +48,12 @@ export default function VendorRegisterPage() {
   const {
     handleSubmit,
     trigger,
-    formState: { isSubmitting },
+    setValue,
+    formState: { isSubmitting, errors },
   } = methods;
 
   const currentEmail = useWatch({ control: methods.control, name: "email" });
+  const currentOtp = useWatch({ control: methods.control, name: "otpCode" });
 
   useEffect(() => {
     if (resendTimer > 0) {
@@ -170,15 +173,22 @@ export default function VendorRegisterPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <FormInput
-                name="otpCode"
-                label="6-Digit Verification Code"
-                placeholder="123456"
-                className="font-mono tracking-widest text-center"
+            <div className="space-y-2">
+              <label
+                htmlFor="vendor-otp-input"
+                className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 block uppercase tracking-wider"
+              >
+                6-Digit Verification Code
+              </label>
+              <SegmentedOtpInput
+                id="vendor-otp-input"
+                value={currentOtp || ""}
+                onChange={(clean) => setValue("otpCode", clean, { shouldValidate: true })}
+                error={errors.otpCode?.message}
+                disabled={isSubmitting}
               />
               {otpSent && (
-                <p className="text-xs text-emerald-600 font-medium">
+                <p className="text-xs text-emerald-600 font-medium text-center">
                   ✓ Verification code sent to {currentEmail}
                 </p>
               )}

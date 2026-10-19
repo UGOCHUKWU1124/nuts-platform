@@ -76,9 +76,7 @@ export class AdminUsersController {
     if (!adminEmail) {
       throw new UnauthorizedException('Admin email not found in session token');
     }
-    await this.otpService.createOtp(adminEmail, 'registration', {
-      subject: 'NUTS Admin Security Action Verification Code',
-    });
+    await this.otpService.createOtp(adminEmail, 'admin:action');
     return { message: 'Security verification code sent to your admin email' };
   }
 
@@ -138,7 +136,7 @@ export class AdminUsersController {
 
   // SUSPEND USER (ADMIN)
   @Patch([':id/suspend', ':id/deactivate'])
-  @OtpRequired()
+  @OtpRequired('admin:action')
   @Message('User account suspended successfully')
   @ApiOperation({
     summary: 'Suspend user account (admin)',
@@ -172,7 +170,7 @@ export class AdminUsersController {
 
   // UNSUSPEND / RESTORE USER (ADMIN)
   @Patch([':id/unsuspend', ':id/reactivate'])
-  @OtpRequired()
+  @OtpRequired('admin:action')
   @HttpCode(HttpStatus.OK)
   @Message('User account unsuspended successfully')
   @ApiOperation({
@@ -197,7 +195,7 @@ export class AdminUsersController {
 
   // DELETE USER (ADMIN)
   @Delete(':id')
-  @OtpRequired()
+  @OtpRequired('admin:action')
   @HttpCode(HttpStatus.OK)
   @Message('User account deleted successfully')
   @ApiOperation({
