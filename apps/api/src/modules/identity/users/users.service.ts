@@ -433,7 +433,7 @@ export class UsersService {
     referralCode?: { code: string } | null;
   }): UserResponseDto {
     const defaultAddress = user.shippingAddresses[0] ?? null;
-    const verified = user.isEmailVerified ?? true;
+    const verified = user.isEmailVerified ?? false;
 
     return {
       id: user.id,

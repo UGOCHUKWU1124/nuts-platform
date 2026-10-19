@@ -95,7 +95,7 @@ model User {
   refreshTokenId             String?
   tokenVersion               Int       @default(0)
   isActive                   Boolean   @default(true)
-  isEmailVerified            Boolean   @default(true)
+  isEmailVerified            Boolean   @default(false)
   deactivatedAt              DateTime?
   scheduledPermanentDeleteAt DateTime?
   deactivatedBy              String?

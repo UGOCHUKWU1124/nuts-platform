@@ -48,7 +48,7 @@ Located in [`src/modules/auth`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modu
 - **Timing-Safe Cryptographic Defense:** Enforces bcrypt (cost factor 12) with fake-hash comparison (`UNKNOWN_ACCOUNT_PASSWORD_HASH`) against non-existent accounts to eliminate timing-based user enumeration.
 - **Account Lifecycle & Verification Alignment:**
   - `UsersController` is exposed via dual routes `@Controller(['account', 'users'])`.
-  - Stored `isEmailVerified` boolean on PostgreSQL `users` table (`@default(true)`), backfilling all existing verified registrations.
+  - Stored `isEmailVerified` boolean on PostgreSQL `users` table (`@default(false)` zero-trust default), backfilling all existing verified registrations to `true`.
   - Returns both `isEmailVerified` and legacy alias `isVerified` on all user profile DTOs for complete backward compatibility.
   - Enforces international E.164 phone number formatting (`/^\+[1-9]\d{6,14}$/`) across all incoming registration, address, and profile payloads.
   - Sensitive operations require two-factor OTP authorization (`@OtpRequired()`).
