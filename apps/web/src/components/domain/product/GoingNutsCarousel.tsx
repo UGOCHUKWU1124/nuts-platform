@@ -70,7 +70,7 @@ export function GoingNutsCarousel({ initialProducts }: GoingNutsCarouselProps) {
                 product={product}
                 addedFrom="CATEGORY_PAGE"
                 size="lg"
-                priority={index < 4}
+                priority={index < 2}
               />
             </div>
           ))
