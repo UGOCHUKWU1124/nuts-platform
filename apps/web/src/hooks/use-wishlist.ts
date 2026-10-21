@@ -44,13 +44,16 @@ const mapServerItem = (item: WishlistResponseDto): WishlistViewItem => ({
 export function useWishlist(initialData?: WishlistResponseDto[]) {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const canPurchase = useAuthStore((state) => state.capabilities?.canPurchase ?? false);
+  const isCustomerSession = isAuthenticated && canPurchase;
   const guestItems = useWishlistStore((state) => state.items);
 
-  // Fetch wishlist from server for all authenticated users
+  // Vendor and admin sessions browse the storefront as guests; wishlist
+  // endpoints are customer-only.
   const { data: serverItems, isLoading, error } = useQuery<WishlistResponseDto[]>({
     queryKey: queryKey.wishlist,
     queryFn: async () => (await wishlistService.list()).data,
-    enabled: isAuthenticated,
+    enabled: isCustomerSession,
     initialData: initialData ?? undefined,
     staleTime: 1000 * 60 * 15,
     refetchOnMount: false,
@@ -60,20 +63,20 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
 
   // Show error if fetch fails (inside effect, not during render)
   useEffect(() => {
-    if (error) {
+    if (isCustomerSession && error) {
       toast.error("Failed to load wishlist");
     }
-  }, [error]);
+  }, [error, isCustomerSession]);
 
   // Map server items to view items, or use guest items for unauthenticated users
-  const items: WishlistViewItem[] = isAuthenticated
+  const items: WishlistViewItem[] = isCustomerSession
     ? (serverItems ?? []).map(mapServerItem)
     : guestItems;
 
   // Check if a product is in the wishlist
   const isInWishlist = useCallback(
     (productId: string, variantId?: string) => {
-      if (isAuthenticated) {
+      if (isCustomerSession) {
         return (serverItems ?? []).some(
           (item) =>
             item.productId === productId &&
@@ -86,7 +89,7 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
           (!variantId || !item.variantId || item.variantId === variantId)
       );
     },
-    [guestItems, isAuthenticated, serverItems]
+    [guestItems, isCustomerSession, serverItems]
   );
 
   // Remove item mutation - simple and clean
@@ -98,22 +101,50 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       productId: string;
       variantId?: string;
     }) => {
-      if (!isAuthenticated) {
+      if (!isCustomerSession) {
         useWishlistStore.getState().removeItem(productId, variantId);
         return;
       }
       await wishlistService.remove(productId, variantId);
     },
+    onMutate: async ({ productId, variantId }) => {
+      if (!isCustomerSession) return undefined;
+
+      await queryClient.cancelQueries({ queryKey: queryKey.wishlist });
+      const previous = queryClient.getQueryData<WishlistResponseDto[]>(queryKey.wishlist);
+      if (previous) {
+        const exactVariantExists = variantId
+          ? previous.some((item) => item.productId === productId && item.variantId === variantId)
+          : false;
+        queryClient.setQueryData<WishlistResponseDto[]>(
+          queryKey.wishlist,
+          previous.filter((item) =>
+            item.productId !== productId ||
+            (exactVariantExists && item.variantId !== variantId)
+          )
+        );
+      }
+      return { previous };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
       toast.info("Removed from wishlist");
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey.wishlist, context.previous);
+      } else if (context && isCustomerSession) {
+        queryClient.removeQueries({ queryKey: queryKey.wishlist, exact: true });
+      }
       toast.error(
         typeof error === "object" && error !== null && "message" in error
           ? String((error as { message: unknown }).message)
           : "Unable to remove item"
       );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (isCustomerSession && context?.previous === undefined) {
+        void queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
+      }
     },
   });
 
@@ -129,20 +160,19 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       shouldAdd: boolean;
     }) => {
       // Handle guest users with local store
-      if (!isAuthenticated) {
+      if (!isCustomerSession) {
         useWishlistStore.getState().toggleItem(product, variantId);
-        return shouldAdd;
+        return null;
       }
 
       if (shouldAdd) {
-        await wishlistService.add(product.id, variantId);
-        return true;
+        return (await wishlistService.add(product.id, variantId)).data;
       }
       await wishlistService.remove(product.id, variantId);
-      return false;
+      return null;
     },
     onMutate: async ({ product, variantId, shouldAdd }) => {
-      if (!isAuthenticated) return undefined;
+      if (!isCustomerSession) return undefined;
 
       await queryClient.cancelQueries({ queryKey: queryKey.wishlist });
       const previous = queryClient.getQueryData<WishlistResponseDto[]>(queryKey.wishlist);
@@ -187,14 +217,26 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
           : "Unable to update wishlist"
       );
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
+    onSuccess: (addedItem, variables, context) => {
+      if (!isCustomerSession) return;
+      if (context?.previous === undefined) {
+        void queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
+        return;
+      }
+      if (variables.shouldAdd && addedItem) {
+        queryClient.setQueryData<WishlistResponseDto[]>(
+          queryKey.wishlist,
+          (current) => current
+            ? [addedItem, ...current.filter((item) => item.productId !== variables.product.id)]
+            : current
+        );
+      }
     },
   });
 
   // Simple clear wishlist
   const clearWishlist = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!isCustomerSession) {
       useWishlistStore.getState().clearWishlist();
       return;
     }
@@ -206,7 +248,7 @@ export function useWishlist(initialData?: WishlistResponseDto[]) {
       )
     );
     queryClient.invalidateQueries({ queryKey: queryKey.wishlist });
-  }, [isAuthenticated, serverItems, queryClient]);
+  }, [isCustomerSession, serverItems, queryClient]);
 
   return {
     items,

@@ -61,7 +61,7 @@ export function GoingNutsCarousel({ initialProducts }: GoingNutsCarouselProps) {
             No products available at the moment.
           </div>
         ) : (
-          products.map((product: ProductCardDto) => (
+          products.map((product: ProductCardDto, index: number) => (
             <div
               key={product.id}
               className="w-[230px] sm:w-[270px] shrink-0 snap-start"
@@ -70,6 +70,7 @@ export function GoingNutsCarousel({ initialProducts }: GoingNutsCarouselProps) {
                 product={product}
                 addedFrom="CATEGORY_PAGE"
                 size="lg"
+                priority={index < 2}
               />
             </div>
           ))

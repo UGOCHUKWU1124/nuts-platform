@@ -1,19 +1,33 @@
-name: CD — Multi-Environment Deployment
+name: NUTS - CD
 
 on:
-  push:
+  workflow_run:
+    workflows: ["NUTS - CI"]
     branches:
-      - development
+      - staging
       - main
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Target Environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   resolve-environment:
     name: Determine Target Environment
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     outputs:
       env_name: ${{ steps.set-env.outputs.env_name }}
       docker_tag: ${{ steps.set-env.outputs.docker_tag }}
@@ -23,16 +37,17 @@ jobs:
         run: |
           image_repository="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           echo "image_repository=$image_repository" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          TARGET_BRANCH="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          if [ "$TARGET_BRANCH" = "main" ] || [ "${{ inputs.target_env }}" = "production" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
             echo "docker_tag=latest" >> $GITHUB_OUTPUT
           else
-            echo "env_name=development" >> $GITHUB_OUTPUT
-            echo "docker_tag=dev" >> $GITHUB_OUTPUT
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+            echo "docker_tag=staging" >> $GITHUB_OUTPUT
           fi
 
   deploy:
-    name: Build & Deploy to ${{ needs.resolve-environment.outputs.env_name }}
+    name: Build & Publish Images to ${{ needs.resolve-environment.outputs.env_name }}
     needs: resolve-environment
     runs-on: ubuntu-latest
     permissions:
@@ -40,27 +55,11 @@ jobs:
       packages: write
     environment:
       name: ${{ needs.resolve-environment.outputs.env_name }}
-    env:
-      HAS_DATABASE_URL: ${{ secrets.DATABASE_URL != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run Prisma Database Migrations
-        run: npx prisma migrate deploy --schema=packages/database/schema.prisma
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        if: ${{ env.HAS_DATABASE_URL == 'true' }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -81,7 +80,7 @@ jobs:
           push: true
           tags: |
             ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ needs.resolve-environment.outputs.docker_tag }}
-            ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ github.sha }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/api:${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Build & Push Web Client Container Image
         uses: docker/build-push-action@v5
@@ -91,8 +90,8 @@ jobs:
           target: runner
           push: true
           build-args: |
-            NEXT_PUBLIC_BACKEND_URL=${{ vars.NEXT_PUBLIC_BACKEND_URL || 'https://api.nuts-commerce.com' }}
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || '/api/v1' }}
+            NEXT_PUBLIC_BACKEND_URL=${{ vars.NEXT_PUBLIC_BACKEND_URL }}
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
           tags: |
             ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ needs.resolve-environment.outputs.docker_tag }}
-            ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ github.sha }}
+            ${{ needs.resolve-environment.outputs.image_repository }}/web:${{ github.event.workflow_run.head_sha || github.sha }}

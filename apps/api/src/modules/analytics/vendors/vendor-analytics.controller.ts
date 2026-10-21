@@ -1,20 +1,12 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { VendorJwtAuthGuard } from '@api/modules/identity/vendors/guards/vendor-auth.guard';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
@@ -24,8 +16,7 @@ import { VendorAnalyticsService } from './vendor-analytics.service';
 
 @ApiTags('VENDOR - ANALYTICS')
 @Controller(['vendors/analytics', 'dashboard/analytics'])
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 export class VendorAnalyticsController {
   constructor(private readonly analyticsService: VendorAnalyticsService) {}
 

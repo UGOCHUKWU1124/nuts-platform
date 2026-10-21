@@ -47,7 +47,7 @@ Table as TableIcon,
 Trash2,
 XCircle
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { toast } from "sonner";
 
 interface FlatAdminCategory {
@@ -124,14 +124,23 @@ export default function AdminCategoryPage() {
   const [newParentId, setNewParentId] = useState<string>("none");
   const [archiveTarget, setArchiveTarget] = useState<FlatAdminCategory | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FlatAdminCategory | null>(null);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<{ id: string; name: string } | null>(null);
+  const [statusToggleTarget, setStatusToggleTarget] = useState<{
+    id: string;
+    name: string;
+    activate: boolean;
+  } | null>(null);
   const [viewMode, setViewMode] = useState<"tree" | "table">("tree");
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const qc = useQueryClient();
 
-  const { data: rawTree, isLoading } = useQuery({
+  const { data: rawTree, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.admin.category, "includeArchived"],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await adminCategoryService.get({ includeArchived: true });
       return res.data;
@@ -159,6 +168,7 @@ export default function AdminCategoryPage() {
 
   const refreshCategories = () => {
     qc.invalidateQueries({ queryKey: queryKey.admin.category });
+    qc.invalidateQueries({ queryKey: queryKey.category.list() });
   };
 
   const purgeCacheMutation = useMutation({
@@ -166,6 +176,7 @@ export default function AdminCategoryPage() {
     onSuccess: (res) => {
       toast.success(res?.data?.message || "Category cache successfully invalidated");
       refreshCategories();
+      setShowPurgeConfirm(false);
     },
     onError: () => toast.error("Failed to clear category cache"),
   });
@@ -245,6 +256,7 @@ export default function AdminCategoryPage() {
     onSuccess: () => {
       toast.success("Category status updated!");
       refreshCategories();
+      setStatusToggleTarget(null);
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update status")),
   });
@@ -264,6 +276,7 @@ export default function AdminCategoryPage() {
     onSuccess: () => {
       toast.success("Category successfully restored!");
       refreshCategories();
+      setRestoreTarget(null);
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to restore category")),
   });
@@ -381,6 +394,40 @@ export default function AdminCategoryPage() {
       return matchesSearch && matchesStatus;
     });
   }, [flatCategories, search, statusFilter]);
+
+  const filteredTree = useMemo(() => {
+    if (!rawTree) return [];
+    const term = search.trim().toLowerCase();
+    if (!term && statusFilter === "ALL") return rawTree;
+
+    function filterNodes(nodes: CategoryResponseDto[]): CategoryResponseDto[] {
+      const kept: CategoryResponseDto[] = [];
+      for (const node of nodes) {
+        const children = node.children || node.subCategories || [];
+        const filteredChildren = filterNodes(children);
+
+        const matchesSearch =
+          !term ||
+          `${node.name} ${node.slug} ${node.path || ""}`.toLowerCase().includes(term);
+
+        const nodeStatus = node.status || (node.isActive ? "ACTIVE" : "INACTIVE");
+        const matchesStatus =
+          statusFilter === "ALL" || nodeStatus === statusFilter;
+
+        if ((matchesSearch && matchesStatus) || filteredChildren.length > 0) {
+          kept.push({
+            ...node,
+            children: filteredChildren,
+            subCategories: filteredChildren,
+          });
+        }
+      }
+      return kept;
+    }
+
+    return filterNodes(rawTree);
+  }, [rawTree, search, statusFilter]);
+
 
   const columns: Column<FlatAdminCategory>[] = [
     {
@@ -512,7 +559,7 @@ export default function AdminCategoryPage() {
               variant="ghost"
               size="sm"
               title="Restore archived category"
-              onClick={() => restoreMutation.mutate(r.id)}
+              onClick={() => setRestoreTarget({ id: r.id, name: r.name })}
               className="h-8 w-8 p-0 rounded-lg text-emerald-500 hover:text-emerald-600"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -529,8 +576,9 @@ export default function AdminCategoryPage() {
                     : "text-emerald-500 hover:text-emerald-600"
                 }`}
                 onClick={() =>
-                  toggleStatusMutation.mutate({
+                  setStatusToggleTarget({
                     id: r.id,
+                    name: r.name,
                     activate: r.status !== "ACTIVE",
                   })
                 }
@@ -570,7 +618,8 @@ export default function AdminCategoryPage() {
 
   // Recursive Tree Node Renderer
   const renderTreeNode = (node: CategoryResponseDto, depth = 0) => {
-    const isExpanded = expandedNodes[node.id] ?? depth < 1;
+    const isSearchActive = Boolean(search.trim() || statusFilter !== "ALL");
+    const isExpanded = isSearchActive || (expandedNodes[node.id] ?? depth < 1);
     const children = node.children || node.subCategories || [];
     const hasChildren = children.length > 0;
     const isArchived = node.status === "ARCHIVED";
@@ -682,24 +731,50 @@ export default function AdminCategoryPage() {
                 variant="ghost"
                 size="sm"
                 title="Restore category"
-                onClick={() => restoreMutation.mutate(node.id)}
+                onClick={() => setRestoreTarget({ id: node.id, name: node.name })}
                 className="h-7 w-7 p-0 rounded-lg text-emerald-500 hover:text-emerald-600"
               >
                 <RotateCcw className="h-3 w-3" />
               </Button>
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                title="Archive category"
-                onClick={() => {
-                  const flat = flatCategories.find((c) => c.id === node.id);
-                  if (flat) setArchiveTarget(flat);
-                }}
-                className="h-7 w-7 p-0 rounded-lg text-amber-500 hover:text-amber-600"
-              >
-                <Archive className="h-3 w-3" />
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title={node.status === "ACTIVE" ? "Deactivate category" : "Activate category"}
+                  className={`h-7 w-7 p-0 rounded-lg ${
+                    node.status === "ACTIVE"
+                      ? "text-amber-500 hover:text-amber-600"
+                      : "text-emerald-500 hover:text-emerald-600"
+                  }`}
+                  onClick={() =>
+                    setStatusToggleTarget({
+                      id: node.id,
+                      name: node.name,
+                      activate: node.status !== "ACTIVE",
+                    })
+                  }
+                >
+                  {node.status === "ACTIVE" ? (
+                    <XCircle className="h-3 w-3" />
+                  ) : (
+                    <CheckCircle2 className="h-3 w-3" />
+                  )}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title="Archive category"
+                  onClick={() => {
+                    const flat = flatCategories.find((c) => c.id === node.id);
+                    if (flat) setArchiveTarget(flat);
+                  }}
+                  className="h-7 w-7 p-0 rounded-lg text-amber-500 hover:text-amber-600"
+                >
+                  <Archive className="h-3 w-3" />
+                </Button>
+              </>
             )}
 
             <Button
@@ -740,7 +815,7 @@ export default function AdminCategoryPage() {
             variant="outline"
             size="sm"
             disabled={purgeCacheMutation.isPending}
-            onClick={() => purgeCacheMutation.mutate()}
+            onClick={() => setShowPurgeConfirm(true)}
             className="gap-2 rounded-xl text-xs font-semibold h-10 border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-900"
           >
             <RefreshCw
@@ -767,6 +842,9 @@ export default function AdminCategoryPage() {
           <div className="relative flex-1 max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
+              id="admin-category-search-input"
+              name="categorySearch"
+              aria-label="Search categories"
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -776,6 +854,9 @@ export default function AdminCategoryPage() {
           </div>
 
           <select
+            id="admin-category-status-filter"
+            name="statusFilter"
+            aria-label="Filter by category status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="h-10 rounded-xl border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs cursor-pointer"
@@ -844,6 +925,7 @@ export default function AdminCategoryPage() {
           columns={columns}
           data={filteredFlatCategories}
           isLoading={isLoading}
+          isFetching={isFetching}
           emptyMessage="No category taxonomy nodes found matching your filters."
         />
       ) : (
@@ -863,12 +945,14 @@ export default function AdminCategoryPage() {
               <div className="py-12 text-center text-xs text-neutral-400 animate-pulse">
                 Loading category hierarchy...
               </div>
-            ) : !rawTree || rawTree.length === 0 ? (
+            ) : !filteredTree || filteredTree.length === 0 ? (
               <div className="py-12 text-center text-xs text-neutral-400">
-                No categories found. Create a root category to begin organizing your marketplace.
+                {rawTree && rawTree.length > 0
+                  ? "No categories matched your search or status filter."
+                  : "No categories found. Create a root category to begin organizing your marketplace."}
               </div>
             ) : (
-              rawTree.map((root) => renderTreeNode(root, 0))
+              filteredTree.map((root) => renderTreeNode(root, 0))
             )}
           </div>
         </div>
@@ -1019,6 +1103,9 @@ export default function AdminCategoryPage() {
             <div className="space-y-1">
               <label className="font-semibold text-foreground">Select New Parent Node:</label>
               <select
+                id="category-new-parent-select"
+                name="newParentId"
+                aria-label="Select new parent node"
                 value={newParentId}
                 onChange={(e) => setNewParentId(e.target.value)}
                 className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
@@ -1233,6 +1320,62 @@ export default function AdminCategoryPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* CONFIRM PURGE REDIS CACHE DIALOG */}
+      <ConfirmDialog
+        open={showPurgeConfirm}
+        onOpenChange={setShowPurgeConfirm}
+        title="Purge Category Cache"
+        description="Are you sure you want to invalidate all cached category hierarchies in Redis? The system will reload fresh canonical trees from the primary database on the next query."
+        confirmText="Purge Cache"
+        variant="warning"
+        isLoading={purgeCacheMutation.isPending}
+        onConfirm={() => purgeCacheMutation.mutate()}
+      />
+
+      {/* CONFIRM RESTORE CATEGORY DIALOG */}
+      <ConfirmDialog
+        open={Boolean(restoreTarget)}
+        onOpenChange={(v) => !v && setRestoreTarget(null)}
+        title="Restore Category"
+        description={
+          <>
+            Are you sure you want to restore archived category <strong>&quot;{restoreTarget?.name}&quot;</strong>? It will return to active taxonomy and become available for product assignments.
+          </>
+        }
+        confirmText="Restore Category"
+        variant="default"
+        isLoading={restoreMutation.isPending}
+        onConfirm={() => restoreTarget && restoreMutation.mutate(restoreTarget.id)}
+      />
+
+      {/* CONFIRM TOGGLE CATEGORY STATUS DIALOG */}
+      <ConfirmDialog
+        open={Boolean(statusToggleTarget)}
+        onOpenChange={(v) => !v && setStatusToggleTarget(null)}
+        title={statusToggleTarget?.activate ? "Activate Category" : "Deactivate Category"}
+        description={
+          statusToggleTarget?.activate ? (
+            <>
+              Are you sure you want to activate category <strong>&quot;{statusToggleTarget?.name}&quot;</strong>? It will become visible in marketplace navigation menus.
+            </>
+          ) : (
+            <>
+              Are you sure you want to deactivate category <strong>&quot;{statusToggleTarget?.name}&quot;</strong>? It will be hidden from customer navigation and storefront browsing.
+            </>
+          )
+        }
+        confirmText={statusToggleTarget?.activate ? "Activate Category" : "Deactivate Category"}
+        variant={statusToggleTarget?.activate ? "default" : "warning"}
+        isLoading={toggleStatusMutation.isPending}
+        onConfirm={() =>
+          statusToggleTarget &&
+          toggleStatusMutation.mutate({
+            id: statusToggleTarget.id,
+            activate: statusToggleTarget.activate,
+          })
+        }
+      />
     </div>
   );
 }

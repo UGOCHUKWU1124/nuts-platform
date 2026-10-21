@@ -13,6 +13,7 @@ import { AdminAnalyticsSummaryDto } from './dto/admin-analytics-summary.dto';
 
 const ANALYTICS_CACHE_PREFIX = 'admin:analytics:summary:';
 const ANALYTICS_CACHE_TTL = 900; // 15 minutes (increased from 5 minutes for better performance)
+const ANALYTICS_DETAIL_CACHE_PREFIX = 'admin:analytics:detail:';
 
 @Injectable()
 export class AdminAnalyticsService {
@@ -111,29 +112,49 @@ export class AdminAnalyticsService {
     query: AdminAnalyticsQueryDto,
   ): Promise<AdminAnalyticsSummaryDto['topProducts']> {
     const top = query.top ?? 10;
-    return this.products.getTopProducts(top);
+    return this.cacheService.wrapWithLock(
+      `${ANALYTICS_DETAIL_CACHE_PREFIX}top-products:${top}`,
+      ANALYTICS_CACHE_TTL,
+      () => this.products.getTopProducts(top),
+    );
   }
 
   async getTopVendors(
     query: AdminAnalyticsQueryDto,
   ): Promise<AdminAnalyticsSummaryDto['topVendors']> {
     const top = query.top ?? 10;
-    return this.products.getTopVendors(top);
+    return this.cacheService.wrapWithLock(
+      `${ANALYTICS_DETAIL_CACHE_PREFIX}top-vendors:${top}`,
+      ANALYTICS_CACHE_TTL,
+      () => this.products.getTopVendors(top),
+    );
   }
 
   async getTopCategories(
     query: AdminAnalyticsQueryDto,
   ): Promise<AdminAnalyticsSummaryDto['topCategories']> {
     const top = query.top ?? 10;
-    return this.products.getTopCategories(top);
+    return this.cacheService.wrapWithLock(
+      `${ANALYTICS_DETAIL_CACHE_PREFIX}top-categories:${top}`,
+      ANALYTICS_CACHE_TTL,
+      () => this.products.getTopCategories(top),
+    );
   }
 
   async getPaymentAnalytics(): Promise<AdminAnalyticsSummaryDto['payments']> {
-    return this.promotions.getPaymentAnalytics();
+    return this.cacheService.wrapWithLock(
+      `${ANALYTICS_DETAIL_CACHE_PREFIX}payments`,
+      ANALYTICS_CACHE_TTL,
+      () => this.promotions.getPaymentAnalytics(),
+    );
   }
 
   async getDiscountAnalytics(): Promise<AdminAnalyticsSummaryDto['discounts']> {
-    return this.promotions.getDiscountAnalytics();
+    return this.cacheService.wrapWithLock(
+      `${ANALYTICS_DETAIL_CACHE_PREFIX}discounts`,
+      ANALYTICS_CACHE_TTL,
+      () => this.promotions.getDiscountAnalytics(),
+    );
   }
 
   async getReferralAnalytics(): Promise<AdminAnalyticsSummaryDto['referrals']> {

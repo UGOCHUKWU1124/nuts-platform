@@ -18,7 +18,6 @@ export enum Environment {
   Development = 'development',
   Production = 'production',
   Staging = 'staging',
-  Preview = 'preview',
   Test = 'test',
 }
 
@@ -196,7 +195,7 @@ export class EnvironmentVariables {
   @IsOptional()
   DEFAULT_CURRENCY = 'ngn';
 
-  // ─── Mail / SMTP ─────────────────────────────────────────────────────────────
+  // ─── Email delivery ──────────────────────────────────────────────────────────
 
   @IsString()
   @IsOptional()
@@ -204,29 +203,7 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  SMTP_HOST?: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  @IsOptional()
-  SMTP_PORT?: number;
-
-  @IsString()
-  @IsOptional()
-  SMTP_SERVICE?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_USER?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_PASS?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_SECURE?: string;
+  BREVO_API_KEY?: string;
 
   // ─── OTP ─────────────────────────────────────────────────────────────────────
 
@@ -335,10 +312,7 @@ const PROD_REQUIRED: Array<keyof EnvironmentVariables> = [
   'PAYSTACK_CALLBACK_URL',
   'ADMIN_SETUP_SECRET',
   'EMAIL_FROM',
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_USER',
-  'SMTP_PASS',
+  'BREVO_API_KEY',
   'ALLOWED_ORIGINS',
   'REDIS_URL',
   'JWT_ISSUER',
@@ -352,7 +326,7 @@ const PROD_SECRET_KEYS: Array<keyof EnvironmentVariables> = [
   'ADMIN_SETUP_SECRET',
   'OTP_PEPPER',
   'PAYSTACK_SECRET_KEY',
-  'SMTP_PASS',
+  'BREVO_API_KEY',
 ];
 
 const PLACEHOLDER_SECRET_PATTERN =
@@ -383,15 +357,12 @@ function isProductionHttpsUrl(value: string, requireOrigin = false): boolean {
       host === '127.0.0.1' ||
       host === '::1' ||
       isIP(host) !== 0;
-    const isTunnel =
-      /\.(?:ngrok(?:-free)?\.(?:io|app|dev)|trycloudflare\.com)$/i.test(host);
     return (
       url.protocol === 'https:' &&
       !isLocal &&
-      !isTunnel &&
       !url.username &&
       !url.password &&
-      (!requireOrigin || (url.origin === value && url.pathname === '/'))
+      (!requireOrigin || url.origin === value.trim().replace(/\/+$/, ''))
     );
   } catch {
     return false;
@@ -445,17 +416,24 @@ export function validateEnv(config: Record<string, unknown>) {
       );
     }
 
-    if (!isProductionHttpsUrl(validated.BASE_URL)) {
-      throw new Error('BASE_URL must be a public HTTPS URL in production.');
-    }
+    const isLivePaystack =
+      validated.PAYSTACK_SECRET_KEY?.startsWith('sk_live_');
 
-    if (
-      !validated.PAYSTACK_CALLBACK_URL ||
-      !isProductionHttpsUrl(validated.PAYSTACK_CALLBACK_URL)
-    ) {
-      throw new Error(
-        'PAYSTACK_CALLBACK_URL must be a public HTTPS URL in production.',
-      );
+    if (validated.PAYSTACK_CALLBACK_URL) {
+      try {
+        new URL(validated.PAYSTACK_CALLBACK_URL);
+      } catch {
+        throw new Error('PAYSTACK_CALLBACK_URL must be a valid URL.');
+      }
+
+      if (
+        isLivePaystack &&
+        !isProductionHttpsUrl(validated.PAYSTACK_CALLBACK_URL)
+      ) {
+        throw new Error(
+          'PAYSTACK_CALLBACK_URL must be a public HTTPS URL in production.',
+        );
+      }
     }
 
     const databaseSslMode = (() => {
@@ -492,9 +470,12 @@ export function validateEnv(config: Record<string, unknown>) {
       }
     }
 
-    if (!validated.PAYSTACK_SECRET_KEY?.startsWith('sk_live_')) {
+    if (
+      !validated.PAYSTACK_SECRET_KEY?.startsWith('sk_live_') &&
+      !validated.PAYSTACK_SECRET_KEY?.startsWith('sk_test_')
+    ) {
       throw new Error(
-        'PAYSTACK_SECRET_KEY must be a live Paystack key in production.',
+        'PAYSTACK_SECRET_KEY must start with sk_test_ or sk_live_.',
       );
     }
 

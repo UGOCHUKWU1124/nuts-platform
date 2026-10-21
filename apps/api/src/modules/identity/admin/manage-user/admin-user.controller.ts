@@ -11,13 +11,12 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
-  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -34,28 +33,52 @@ import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { OtpRequired } from '@api/modules/shared/decorators/otp-required.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import {
   extractIpAddress,
   extractUserAgent,
 } from '@api/modules/shared/utils/request.util';
-import { AdminDeactivateDto } from '@api/modules/users/dto/admin-deactivate.dto';
-import { DeactivateAccountResponseDto } from '@api/modules/users/dto/deactivate-account-response.dto';
+import { AdminSuspendDto } from '@api/modules/users/dto/admin-suspend.dto';
 import { QueryUserDto } from '@api/modules/users/dto/query-user.dto';
+import { SuspendUserResponseDto } from '@api/modules/users/dto/suspend-user-response.dto';
 import { UserListItemResponseDto } from '@api/modules/users/dto/user-list-item-response.dto';
 import { UserResponseDto } from '@api/modules/users/dto/user-response.dto';
 import { UsersService } from '@api/modules/users/users.service';
+import { OtpService } from '@api/modules/auth/otp/otp.service';
 
 @Roles(ROLE.ADMIN)
-@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags('ADMIN - USERS')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/users')
 export class AdminUsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly otpService: OtpService,
+  ) {}
+
+  // REQUEST OTP FOR ADMIN ACTIONS
+  @Post(['request-otp', 'otp/request'])
+  @HttpCode(HttpStatus.OK)
+  @Message('Security verification code sent to your admin email')
+  @ApiOperation({
+    summary: 'Request OTP for admin user actions',
+    description:
+      'Sends a 2FA OTP code to the logged-in administrator email for critical actions (suspend/unsuspend/delete).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Security verification code sent to your admin email.',
+  })
+  async requestOtp(
+    @GetUser('email') adminEmail: string,
+  ): Promise<{ message: string }> {
+    if (!adminEmail) {
+      throw new UnauthorizedException('Admin email not found in session token');
+    }
+    await this.otpService.createOtp(adminEmail, 'admin:action');
+    return { message: 'Security verification code sent to your admin email' };
+  }
 
   // GET ALL USERS
   @Get()
@@ -75,14 +98,8 @@ export class AdminUsersController {
   @ApiForbiddenResponse({
     description: 'Forbidden — user does not have ADMIN role.',
   })
-  async findAll(@Query() query: QueryUserDto, @Body() body?: QueryUserDto) {
-    const filters = {
-      ...query,
-      ...(body && typeof body === 'object' && Object.keys(body).length > 0
-        ? body
-        : {}),
-    };
-    return this.usersService.findAll(filters);
+  async findAll(@Query() query: QueryUserDto) {
+    return this.usersService.findAll(query);
   }
 
   @Post('query')
@@ -117,57 +134,58 @@ export class AdminUsersController {
     return this.usersService.findOne(id);
   }
 
-  // DEACTIVATE USER
-  @Patch(':id/deactivate')
-  @OtpRequired()
-  @Message('User deactivated successfully')
+  // SUSPEND USER (ADMIN)
+  @Patch([':id/suspend', ':id/deactivate'])
+  @OtpRequired('admin:action')
+  @Message('User account suspended successfully')
   @ApiOperation({
-    summary: 'Deactivate user account (admin)',
-    description: 'Deactivate a user account with a required reason.',
+    summary: 'Suspend user account (admin)',
+    description:
+      'Suspend a user account with a required administrative reason and optional duration.',
   })
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiBody({ type: AdminDeactivateDto })
+  @ApiBody({ type: AdminSuspendDto })
   @ApiResponse({
     status: 200,
-    type: ApiResponseDto<DeactivateAccountResponseDto>,
+    type: ApiResponseDto<SuspendUserResponseDto>,
   })
   @ApiBadRequestResponse({
-    description: 'Validation error — invalid deactivation reason.',
+    description: 'Validation error — invalid suspension reason or duration.',
   })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  async adminDeactivate(
+  async adminSuspend(
     @GetUser('id') adminId: string,
     @Param('id', ParseUUIDPipe) userId: string,
-    @Body() dto: AdminDeactivateDto,
+    @Body() dto: AdminSuspendDto,
     @Req() req: Request,
-  ): Promise<DeactivateAccountResponseDto> {
-    return this.usersService.adminDeactivate(
+  ): Promise<SuspendUserResponseDto> {
+    return this.usersService.adminSuspend(
       adminId,
       userId,
-      dto.reason,
+      dto,
       extractIpAddress(req),
       extractUserAgent(req),
     );
   }
 
-  // REACTIVATE USER
-  @Patch(':id/reactivate')
-  @OtpRequired()
+  // UNSUSPEND / RESTORE USER (ADMIN)
+  @Patch([':id/unsuspend', ':id/reactivate'])
+  @OtpRequired('admin:action')
   @HttpCode(HttpStatus.OK)
-  @Message('User account reactivated')
+  @Message('User account unsuspended successfully')
   @ApiOperation({
-    summary: 'Reactivate user account (admin)',
-    description: 'Reactivate a previously deactivated user account.',
+    summary: 'Unsuspend / restore user account (admin)',
+    description: 'Unsuspend a previously suspended user account.',
   })
   @ApiParam({ name: 'id', description: 'User ID' })
   @ApiResponse({ status: 200, type: ApiResponseDto<UserResponseDto> })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  async adminReactivate(
+  async adminUnsuspend(
     @GetUser('id') adminId: string,
     @Param('id', ParseUUIDPipe) userId: string,
     @Req() req: Request,
   ): Promise<UserResponseDto> {
-    return this.usersService.adminReactivate(
+    return this.usersService.adminUnsuspend(
       userId,
       adminId,
       extractIpAddress(req),
@@ -175,29 +193,31 @@ export class AdminUsersController {
     );
   }
 
-  // DELETE USER PERMANENTLY
+  // DELETE USER (ADMIN)
   @Delete(':id')
+  @OtpRequired('admin:action')
   @HttpCode(HttpStatus.OK)
-  @Message('User permanently deleted')
+  @Message('User account deleted successfully')
   @ApiOperation({
-    summary: 'Permanently delete user immediately (admin)',
-    description: 'Permanently delete a user account and all associated data.',
+    summary: 'Delete user account (admin)',
+    description:
+      'Deletes a user account with 2FA OTP verification, immediately revoking active sessions while safely preserving relational and financial ledger integrity.',
   })
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiConflictResponse({
-    description: 'User has related records or is admin',
+  @ApiForbiddenResponse({
+    description: 'Forbidden — cannot delete an admin account.',
   })
   @ApiNotFoundResponse({ description: 'User not found.' })
   @ApiOkResponse({
     type: ApiResponseDto<null>,
-    description: 'User permanently deleted',
+    description: 'User account deleted successfully',
   })
-  async permanentDelete(
+  async deleteUser(
     @GetUser('id') adminId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
   ): Promise<null> {
-    await this.usersService.permanentRemove(
+    await this.usersService.adminSoftDelete(
       id,
       adminId,
       extractIpAddress(req),

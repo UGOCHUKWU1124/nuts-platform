@@ -3,6 +3,7 @@
 import { vendorAccountService } from "@/api";
 import { getApiErrorMessage } from "@/api/core/error";
 import { FormInput } from "@/component/form/FormInput";
+import { ImageUpload } from "@/component/form/ImageUpload";
 import { FormTextarea } from "@/component/form/FormTextarea";
 import { ConfirmDialog } from "@/component/modal/ConfirmDialog";
 import { ThemeSelector } from "@/component/theme/ThemeSelector";
@@ -14,6 +15,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import {
 AlertTriangle,
+Bell,
 ExternalLink,
 Lock,
 Palette,
@@ -21,16 +23,22 @@ Save,
 Store,
 Trash2
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { NotificationPreferencesContent } from "@/components/domain/notification/NotificationPreferencesView";
 
 const storeSchema = z.object({
   storeName: z.string().min(2, "Store name is required"),
   storeDescription: z.string().min(5, "Store description is required"),
-  businessPhone: z.string().min(6, "Valid business phone is required"),
+  businessPhone: z
+    .string()
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Phone number must include international country code (e.g. +2349064786655)",
+    ),
   businessEmail: z.string().email("Valid business email is required"),
   firstName: z.string().max(100).optional().or(z.literal("")),
   lastName: z.string().max(100).optional().or(z.literal("")),
@@ -42,12 +50,14 @@ type StoreFormData = z.infer<typeof storeSchema>;
 export default function VendorSettingPage() {
   const qc = useQueryClient();
   const logout = useAuthStore((state) => state.logout);
-  const [activeTab, setActiveTab] = useState<"store" | "theme" | "danger">("store");
+  const [activeTab, setActiveTab] = useState<"store" | "theme" | "notifications" | "danger">("store");
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const { data: vendor, isLoading } = useQuery({
     queryKey: ["vendor", "account"],
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
     queryFn: async () => (await vendorAccountService.getAccount()).data,
   });
 
@@ -80,7 +90,7 @@ export default function VendorSettingPage() {
     onSuccess: async () => {
       setIsDeactivateOpen(false);
       toast.success("Vendor store deactivated");
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to deactivate store")),
@@ -91,7 +101,7 @@ export default function VendorSettingPage() {
     onSuccess: async () => {
       setIsDeleteOpen(false);
       toast.success("Vendor account permanently deleted");
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to delete account")),
@@ -133,6 +143,19 @@ export default function VendorSettingPage() {
           >
             <Palette className="h-4 w-4" />
             <span>Appearance & Theme</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("notifications")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+              activeTab === "notifications"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            <Bell className="h-4 w-4" />
+            <span>Notification Preferences</span>
           </button>
 
           <button
@@ -195,16 +218,19 @@ export default function VendorSettingPage() {
                       onSubmit={methods.handleSubmit((data) => updateMutation.mutate(data))}
                       className="space-y-4"
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-4">
                         <FormInput
                           name="storeName"
                           label="Store Name"
                           placeholder="e.g. Obsidian Leatherworks"
                         />
-                        <FormInput
+                        <ImageUpload
                           name="storeLogoUrl"
-                          label="Store Logo Image URL"
-                          placeholder="https://..."
+                          label="Store Logo Image"
+                          authRole="vendor"
+                          single={true}
+                          maxImages={1}
+                          aspectHint="square (1:1 recommended)"
                         />
                       </div>
 
@@ -238,7 +264,7 @@ export default function VendorSettingPage() {
                         <FormInput
                           name="businessPhone"
                           label="Customer Inquiries Phone"
-                          placeholder="+234..."
+                          placeholder="+2349064786655"
                         />
                       </div>
 
@@ -273,6 +299,13 @@ export default function VendorSettingPage() {
                 <ThemeSelector showTitle={false} />
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* Tab: Notification Preferences */}
+        {activeTab === "notifications" && (
+          <div className="max-w-2xl">
+            <NotificationPreferencesContent />
           </div>
         )}
 

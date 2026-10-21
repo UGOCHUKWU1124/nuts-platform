@@ -6,7 +6,6 @@ import type { AdminUserResponseDto } from "@/api/dto/user";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
 import { PageHeader } from "@/component/common/PageHeader";
 import { DataTable,type Column } from "@/component/data/DataTable";
-import { ConfirmDialog } from "@/component/modal/ConfirmDialog";
 import { OtpPromptDialog } from "@/component/modal/OtpPromptDialog";
 import { Badge } from "@/component/ui/badge";
 import { Button } from "@/component/ui/button";
@@ -23,19 +22,46 @@ import { toast } from "sonner";
 
 type AdminUser = AdminUserResponseDto;
 
+function formatSuspensionInfo(reasonStr: string | null | undefined) {
+  if (!reasonStr) return { text: "Administrative suspension", until: null };
+  const match = reasonStr.match(/^\[SUSPENSION\|until:([^\]]+)\]\s*([\s\S]*)$/);
+  if (match) {
+    const rawUntil = match[1];
+    const cleanReason = match[2] || "Administrative suspension";
+    if (!rawUntil || rawUntil === "indefinite") {
+      return { text: cleanReason, until: "Indefinite" };
+    }
+    const d = new Date(rawUntil);
+    if (!isNaN(d.getTime())) {
+      return {
+        text: cleanReason,
+        until: d.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+    }
+  }
+  return { text: reasonStr, until: "Indefinite" };
+}
+
 export default function AdminUserPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
-  const [deactivateTarget, setDeactivateTarget] = useState<AdminUser | null>(null);
-  const [reactivateTarget, setReactivateTarget] = useState<AdminUser | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
+  const [unsuspendTarget, setUnsuspendTarget] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
   const qc = useQueryClient();
   const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.admin.user, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminUserService.list({
@@ -52,41 +78,44 @@ export default function AdminUserPage() {
     qc.invalidateQueries({ queryKey: queryKey.admin.user });
   };
 
-  const reactivateMutation = useMutation({
+  const unsuspendMutation = useMutation({
     mutationFn: ({ id, otpCode }: { id: string; otpCode: string }) =>
-      adminUserService.reactivate(id, otpCode),
+      adminUserService.unsuspend(id, otpCode),
     onSuccess: () => {
-      toast.success("User account restored and reactivated");
+      toast.success("User account unsuspended and access restored");
       refreshUsers();
-      setReactivateTarget(null);
+      setUnsuspendTarget(null);
     },
     onError: (e) =>
-      toast.error(getApiErrorMessage(e, "Unable to reactivate user")),
+      toast.error(getApiErrorMessage(e, "Unable to unsuspend user")),
   });
 
-  const deactivateMutation = useMutation({
+  const suspendMutation = useMutation({
     mutationFn: ({
       id,
       otpCode,
       reason,
+      duration,
     }: {
       id: string;
       otpCode: string;
       reason: string;
-    }) => adminUserService.deactivate(id, { reason }, otpCode),
+      duration?: string;
+    }) => adminUserService.suspend(id, { reason, duration }, otpCode),
     onSuccess: () => {
-      toast.success("User account deactivated");
+      toast.success("User account suspended");
       refreshUsers();
-      setDeactivateTarget(null);
+      setSuspendTarget(null);
     },
     onError: (e) =>
-      toast.error(getApiErrorMessage(e, "Unable to deactivate user")),
+      toast.error(getApiErrorMessage(e, "Unable to suspend user")),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => adminUserService.delete(id),
+    mutationFn: ({ id, otpCode }: { id: string; otpCode: string }) =>
+      adminUserService.delete(id, otpCode),
     onSuccess: () => {
-      toast.success("User permanently deleted from database");
+      toast.success("User account deleted successfully");
       refreshUsers();
       setDeleteTarget(null);
     },
@@ -124,16 +153,29 @@ export default function AdminUserPage() {
     {
       key: "isActive",
       header: "Account State",
-      render: (r) =>
-        r.isActive ? (
-          <Badge variant="success" className="text-xs font-semibold">
-            Active
-          </Badge>
-        ) : (
-          <Badge variant="destructive" className="text-xs font-semibold">
-            Suspended
-          </Badge>
-        ),
+      render: (r) => {
+        if (r.isActive) {
+          return (
+            <Badge variant="success" className="text-xs font-semibold">
+              Active
+            </Badge>
+          );
+        }
+        const info = formatSuspensionInfo(r.deactivationReason);
+        return (
+          <div className="flex flex-col gap-0.5">
+            <Badge variant="destructive" className="text-xs font-semibold w-fit">
+              Suspended
+            </Badge>
+            <span
+              className="text-[11px] text-muted-foreground truncate max-w-[200px]"
+              title={info.text}
+            >
+              {info.until ? `Until: ${info.until}` : info.text}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "createdAt",
@@ -153,9 +195,9 @@ export default function AdminUserPage() {
             <Button
               variant="ghost"
               size="sm"
-              title="Deactivate account (requires OTP)"
+              title="Suspend user account (requires OTP)"
               className="h-8 w-8 p-0 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-              onClick={() => setDeactivateTarget(r)}
+              onClick={() => setSuspendTarget(r)}
             >
               <Ban className="h-3.5 w-3.5" />
             </Button>
@@ -163,9 +205,9 @@ export default function AdminUserPage() {
             <Button
               variant="ghost"
               size="sm"
-              title="Reactivate account (requires OTP)"
+              title="Unsuspend user account (requires OTP)"
               className="h-8 w-8 p-0 rounded-lg text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-              onClick={() => setReactivateTarget(r)}
+              onClick={() => setUnsuspendTarget(r)}
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
@@ -174,7 +216,7 @@ export default function AdminUserPage() {
           <Button
             variant="ghost"
             size="sm"
-            title="Permanently delete user"
+            title="Delete user account (requires OTP)"
             className="h-8 w-8 p-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
             onClick={() => setDeleteTarget(r)}
           >
@@ -198,7 +240,7 @@ export default function AdminUserPage() {
           setSearch(v);
           setPage(1);
         }}
-        placeholder="Search account email or customer name..."
+        placeholder="Search account email, customer name, or phone..."
         filterValue={status}
         onFilterChange={(v) => {
           setStatus(v);
@@ -206,86 +248,106 @@ export default function AdminUserPage() {
         }}
         filters={[
           { value: "ACTIVE", label: "Active Accounts" },
-          { value: "INACTIVE", label: "Inactive Accounts" },
-          { value: "BANNED", label: "Suspended" },
+          { value: "SUSPENDED", label: "Suspended Accounts" },
         ]}
+        onRefresh={refreshUsers}
+        isLoading={isLoading || isFetching}
       />
 
       <DataTable
         columns={columns}
-        data={data?.data ?? []}
+        data={Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []}
         isLoading={isLoading}
+        isFetching={isFetching}
         emptyMessage="No user accounts matched your search criteria."
         pagination={
           data?.meta
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
+                hasNextPage: data.meta.hasNextPage,
+                hasPrevPage: data.meta.hasPreviousPage,
                 onPageChange: (newPage) => setPage(newPage),
               }
             : undefined
         }
       />
 
-      {/* SECURE DEACTIVATE MODAL (WITH REASON + OTP) */}
+      {/* SECURE SUSPEND MODAL (WITH DURATION + REASON + OTP) */}
       <OtpPromptDialog
-        open={Boolean(deactivateTarget)}
-        onOpenChange={(v) => !v && setDeactivateTarget(null)}
-        title="Deactivate User Account"
-        description={`Suspending "${deactivateTarget?.email}" requires administrative justification and your 2FA security key.`}
+        open={Boolean(suspendTarget)}
+        onOpenChange={(v) => !v && setSuspendTarget(null)}
+        title="Suspend User Account"
+        description={`Suspending "${suspendTarget?.email}" revokes all active sessions and blocks platform access until the suspension duration elapses.`}
+        requireDuration={true}
+        durationLabel="Suspension Period"
         requireReason={true}
-        reasonLabel="Reason for account deactivation"
-        reasonPlaceholder="e.g. Terms violation, requested self-exclusion, security review..."
-        confirmText="Confirm Deactivation"
-        isLoading={deactivateMutation.isPending}
-        onSubmit={({ otpCode, reason }) => {
-          if (deactivateTarget && reason) {
-            deactivateMutation.mutate({
-              id: deactivateTarget.id,
+        reasonLabel="Reason for account suspension"
+        reasonPlaceholder="e.g. Terms of Service violation, security incident, chargeback abuse..."
+        confirmText="Confirm Suspension"
+        isLoading={suspendMutation.isPending}
+        onRequestOtp={async () => {
+          await adminUserService.requestOtp();
+          toast.success("Security verification code sent to your admin email.");
+        }}
+        onSubmit={({ otpCode, reason, duration }) => {
+          if (suspendTarget && reason) {
+            suspendMutation.mutate({
+              id: suspendTarget.id,
               otpCode,
               reason,
+              duration,
             });
           }
         }}
       />
 
-      {/* SECURE REACTIVATE MODAL (WITH OTP) */}
+      {/* SECURE UNSUSPEND MODAL (WITH OTP) */}
       <OtpPromptDialog
-        open={Boolean(reactivateTarget)}
-        onOpenChange={(v) => !v && setReactivateTarget(null)}
-        title="Restore User Account"
-        description={`Reactivating "${reactivateTarget?.email}" requires your administrative 2FA security key to verify clearance.`}
+        open={Boolean(unsuspendTarget)}
+        onOpenChange={(v) => !v && setUnsuspendTarget(null)}
+        title="Unsuspend User Account"
+        description={`Unsuspending "${unsuspendTarget?.email}" restores full platform access. Requires your administrative 2FA security key.`}
         requireReason={false}
-        confirmText="Confirm Reactivation"
-        isLoading={reactivateMutation.isPending}
+        confirmText="Confirm Unsuspension"
+        isLoading={unsuspendMutation.isPending}
+        onRequestOtp={async () => {
+          await adminUserService.requestOtp();
+          toast.success("Security verification code sent to your admin email.");
+        }}
         onSubmit={({ otpCode }) => {
-          if (reactivateTarget) {
-            reactivateMutation.mutate({
-              id: reactivateTarget.id,
+          if (unsuspendTarget) {
+            unsuspendMutation.mutate({
+              id: unsuspendTarget.id,
               otpCode,
             });
           }
         }}
       />
 
-      {/* CONFIRM DELETE DIALOG */}
-      <ConfirmDialog
+      {/* SECURE DELETE MODAL (WITH OTP) */}
+      <OtpPromptDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Permanently Delete User"
-        description={
-          <>
-            Are you sure you want to permanently delete{" "}
-            <strong>&quot;{deleteTarget?.email}&quot;</strong>? This will remove all personal records
-            and cannot be undone.
-          </>
-        }
+        title="Delete User Account"
+        description={`Deleting "${deleteTarget?.email}" will permanently revoke all active sessions and block access. Requires your 2FA security key.`}
+        requireReason={false}
         confirmText="Delete Account"
-        variant="destructive"
         isLoading={deleteMutation.isPending}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onRequestOtp={async () => {
+          await adminUserService.requestOtp();
+          toast.success("Security verification code sent to your admin email.");
+        }}
+        onSubmit={({ otpCode }) => {
+          if (deleteTarget) {
+            deleteMutation.mutate({
+              id: deleteTarget.id,
+              otpCode,
+            });
+          }
+        }}
       />
     </div>
   );

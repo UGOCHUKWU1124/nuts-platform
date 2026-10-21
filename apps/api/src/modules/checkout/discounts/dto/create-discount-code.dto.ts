@@ -149,25 +149,7 @@ export class CreateDiscountCodeDto {
   platformwide?: boolean;
 }
 
-/**
- * Admin discount creation DTO.
- * Admins create platform-wide discount codes by default.
- */
-export class CreateAdminDiscountCodeDto extends CreateDiscountCodeDto {}
-
-/**
- * Vendor discount creation DTO.
- * Vendors create codes scoped to their own store/catalog, optionally restricted to specific products.
- */
-export class CreateVendorDiscountCodeDto extends CreateDiscountCodeDto {
-  @ApiPropertyOptional({
-    description:
-      'Specific product IDs owned by this vendor that this discount applies to. If omitted or empty, applies to all products owned by the vendor.',
-    type: [String],
-    example: ['f47ac10b-58cc-4372-a567-0e02b2c3d479'],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  declare applicableProductIds?: string[];
-}
+export {
+  CreateDiscountCodeDto as CreateAdminDiscountCodeDto,
+  CreateDiscountCodeDto as CreateVendorDiscountCodeDto,
+};

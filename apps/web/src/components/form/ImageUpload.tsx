@@ -1,7 +1,7 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { api } from "@/api/core/client";
+import { adminApi, vendorApi } from "@/api/core/client";
 import { Label } from "@/component/ui/label";
 import { cn } from "@/lib/util";
 import {
@@ -44,6 +44,7 @@ interface ImageUploadProps {
   /** Max images allowed — server hard-caps at 6 */
   maxImages?: number;
   single?: boolean;
+  authRole: "admin" | "vendor";
 }
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -70,7 +71,9 @@ export function ImageUpload({
   aspectHint,
   maxImages = 6,
   single = false,
+  authRole,
 }: ImageUploadProps) {
+  const api = authRole === "admin" ? adminApi : vendorApi;
   const { setValue, watch } = useFormContext();
   const fieldValue = watch(name);
   const uploadedUrls: string[] = Array.isArray(fieldValue)
@@ -245,8 +248,8 @@ export function ImageUpload({
                   
                   <RemoteImage src={url} alt={`Product ${index + 1}`} className="h-full w-full object-cover" />
 
-                  {/* Cover badge on first image */}
-                  {isFirst && (
+                  {/* Cover badge on first image (multi-mode only) */}
+                  {isFirst && !single && (
                     <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-bold shadow-xs flex items-center gap-0.5 z-10">
                       <Star className="h-2.5 w-2.5 fill-current" /> Cover
                     </span>
@@ -254,9 +257,9 @@ export function ImageUpload({
 
                   {/* Dark overlay on hover with actions */}
                   <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5 z-20">
-                    {/* Top row: Set Cover button (if not first) & Delete */}
+                    {/* Top row: Set Cover button (if not first and multi-mode) & Delete */}
                     <div className="flex items-center justify-between w-full">
-                      {!isFirst ? (
+                      {!isFirst && !single ? (
                         <button
                           type="button"
                           onClick={() => setAsCover(index)}
@@ -402,13 +405,13 @@ export function ImageUpload({
         </p>
       )}
 
-      {/* Hidden file input — multiple allowed */}
+      {/* Hidden file input — single or multiple allowed */}
       <input
         ref={inputRef}
         id={`img-upload-${name}`}
         type="file"
         accept="image/jpeg,image/jpg,image/png,image/webp,image/svg+xml"
-        multiple
+        multiple={!single}
         className="hidden"
         onChange={onInputChange}
       />

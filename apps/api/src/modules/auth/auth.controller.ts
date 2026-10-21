@@ -26,14 +26,18 @@ import {
 import { AuthService } from './auth.service';
 import { AuthCookieService } from './cookies/auth-cookie.service';
 
-import { AuthApiResponseDto, AuthResponseDto } from './dto/auth-response.dto';
+import {
+  AuthApiResponseDto,
+  AuthResponseDto,
+  VerifyOtpResponseDto,
+} from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 
 import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 
 import { Message } from '@api/modules/shared/decorators/message.decorator';
@@ -54,12 +58,17 @@ import {
 
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 
-import { ROLE } from '@prisma/client';
-import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
+import { AUTH_REFRESH_COOKIE } from './constants/auth-cookies.constants';
 
-import { AuthCookieRole } from './constants/auth-cookies.constants';
+function getCookieValue(cookies: unknown, name: string): string | undefined {
+  if (typeof cookies !== 'object' || cookies === null || !(name in cookies)) {
+    return undefined;
+  }
+  const value = (cookies as Record<string, unknown>)[name];
+  return typeof value === 'string' ? value : undefined;
+}
 
 @ApiTags('AUTH')
 @Controller('auth')
@@ -69,26 +78,19 @@ export class AuthController {
     private readonly authCookies: AuthCookieService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
-  @Roles(ROLE.USER)
   @Get('me')
   @Message('Current session retrieved successfully')
   @ApiOperation({
-    summary: 'Get the authenticated user',
+    summary: 'Get the authenticated identity profile',
   })
   @ApiOkResponse({
-    description: 'Current authenticated user.',
+    description: 'Current authenticated identity profile.',
   })
   @ApiUnauthorizedResponse({
     description: 'Not authenticated',
   })
-  me(@GetUser() user: AuthenticatedUser) {
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-    };
+  async me(@GetUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user);
   }
 
   @Public()
@@ -121,11 +123,13 @@ export class AuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'user');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -157,11 +161,13 @@ export class AuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'user');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -170,6 +176,7 @@ export class AuthController {
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Message('Tokens refreshed successfully')
   @ApiOperation({
     summary: 'Refresh access token',
     description: 'Rotates the refresh session and issues a new access token.',
@@ -196,27 +203,21 @@ export class AuthController {
      */
     const session = await this.authService.refresh(payload);
 
-    const roleScope: AuthCookieRole =
-      payload.role === ROLE.ADMIN
-        ? 'admin'
-        : payload.role === ROLE.VENDOR
-          ? 'vendor'
-          : 'user';
-
-    this.authCookies.setAuthCookies(res, session.tokens, roleScope);
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
       user: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @Message('Successfully logged out')
+  @Message('Logged out successfully')
   @ApiOperation({
-    summary: 'Log out the current user',
+    summary: 'Log out the current user session',
   })
   @ApiOkResponse({
     description: 'Logged out successfully.',
@@ -230,21 +231,49 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<null> {
+    const refreshToken =
+      getCookieValue(req.cookies as unknown, AUTH_REFRESH_COOKIE) ??
+      getCookieValue(req.cookies as unknown, 'refresh_token');
+
     await this.authService.logout(
       user.id,
       user.role,
+      user.sessionId,
+      refreshToken,
       extractIpAddress(req),
       extractUserAgent(req),
     );
 
-    const roleScope: AuthCookieRole =
-      user.role === ROLE.ADMIN
-        ? 'admin'
-        : user.role === ROLE.VENDOR
-          ? 'vendor'
-          : 'user';
+    this.authCookies.clearAuthCookies(res);
 
-    this.authCookies.clearAuthCookies(res, roleScope);
+    return null;
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @Message('All sessions logged out successfully')
+  @ApiOperation({
+    summary: 'Log out from all devices and invalidate all active sessions',
+  })
+  @ApiOkResponse({
+    description: 'All sessions logged out successfully.',
+    type: ApiResponseDto<null>,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Not authenticated',
+  })
+  async logoutAll(
+    @GetUser() user: AuthenticatedUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<null> {
+    await this.authService.logoutAll(
+      user.id,
+      extractIpAddress(req),
+      extractUserAgent(req),
+    );
+
+    this.authCookies.clearAuthCookies(res);
 
     return null;
   }
@@ -277,6 +306,30 @@ export class AuthController {
   async requestRegistrationOtp(@Body() dto: RequestOtpDto): Promise<null> {
     await this.authService.requestRegistrationOtp(dto);
     return null;
+  }
+
+  @Public()
+  @StrictThrottle()
+  @Post(['otp/verify', 'verify-otp'])
+  @HttpCode(HttpStatus.OK)
+  @Message('Verification code confirmed successfully')
+  @ApiOperation({
+    summary: 'Verify registration OTP code',
+    description:
+      'Validates the 6-digit OTP code before proceeding to shipping address setup and account completion.',
+  })
+  @ApiBody({ type: VerifyOtpDto })
+  @ApiOkResponse({
+    description: 'Verification code confirmed successfully.',
+    type: ApiResponseDto<VerifyOtpResponseDto>,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid or expired OTP code',
+  })
+  async verifyRegistrationOtp(
+    @Body() dto: VerifyOtpDto,
+  ): Promise<VerifyOtpResponseDto> {
+    return this.authService.verifyRegistrationOtp(dto);
   }
 
   @Public()

@@ -14,7 +14,6 @@ import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service
 import { DiscountCodeService } from '@api/modules/promotions/discount-code.service';
 import { UsersService } from '@api/modules/users/users.service';
 
-import { AddedFromDto } from './dto/add-to-cart-quantity.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 import { CartResponseDto } from './dto/cart-response.dto';
@@ -24,7 +23,7 @@ import { GetCartResponseDto } from './dto/responses/get-cart.response';
 import { RemoveCartItemResponseDto } from './dto/responses/remove-cart-item.response';
 import { UpdateCartItemResponseDto } from './dto/responses/update-cart-item.response';
 
-const CART_CACHE_PREFIX = 'user:cart:v3:';
+export const CART_CACHE_PREFIX = 'user:cart:v3:';
 
 /*
  * Cart data is user-specific, so the cache key MUST contain the user ID.
@@ -219,7 +218,6 @@ export class CartService {
     productId: string,
     quantity: number,
     variantId?: string,
-    addedFrom?: AddedFromDto,
   ): Promise<AddToCartResponseDto> {
     await this.usersService.assertActiveAccount(userId);
 
@@ -344,24 +342,6 @@ export class CartService {
             quantity,
             unitPrice,
             totalPrice: unitPrice.mul(quantity),
-          },
-        });
-      }
-
-      /*
-       * `addedFrom` is metadata about how the user reached the cart.
-       * We only update it when supplied by the client.
-       */
-      if (addedFrom) {
-        await tx.cart.update({
-          where: {
-            id: cart.id,
-          },
-          data: {
-            addedFrom: {
-              type: addedFrom.type,
-              ...(addedFrom.path ? { path: addedFrom.path } : {}),
-            },
           },
         });
       }
@@ -648,13 +628,32 @@ export class CartService {
     userId: string,
     prisma: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<CartWithItems> {
+    // 1. Prioritize active cart that contains items, ordered by latest update
     let cart = await prisma.cart.findFirst({
       where: {
         userId,
         checkedOut: false,
+        cartItems: { some: {} },
       },
       include: CART_INCLUDE,
+      orderBy: {
+        updatedAt: 'desc',
+      },
     });
+
+    // 2. If no cart with items exists, find any unchecked-out cart
+    if (!cart) {
+      cart = await prisma.cart.findFirst({
+        where: {
+          userId,
+          checkedOut: false,
+        },
+        include: CART_INCLUDE,
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      });
+    }
 
     if (!cart) {
       /*
@@ -670,6 +669,18 @@ export class CartService {
         },
         include: CART_INCLUDE,
       });
+    } else if (cart.cartItems.length > 0 && prisma === this.prisma) {
+      // Opportunistically purge duplicate empty active carts for this user
+      void this.prisma.cart
+        .deleteMany({
+          where: {
+            userId,
+            checkedOut: false,
+            id: { not: cart.id },
+            cartItems: { none: {} },
+          },
+        })
+        .catch(() => {});
     }
 
     return cart;
@@ -870,8 +881,6 @@ export class CartService {
         totalItemCount,
 
         abandonedCartAlerted: cart.abandonedCartAlerted ?? false,
-
-        addedFrom: cart.addedFrom as Record<string, string> | null | undefined,
 
         createdAt: cart.createdAt,
 

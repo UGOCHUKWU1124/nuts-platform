@@ -21,7 +21,7 @@ type AdminLoginFormData = z.infer<typeof adminLoginSchema>;
 
 function AdminLoginForm() {
   const router = useRouter();
-  const { login } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
 
   const methods = useForm<AdminLoginFormData>({
     resolver: zodResolver(adminLoginSchema),
@@ -50,7 +50,7 @@ function AdminLoginForm() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
           <ShieldCheck className="h-6 w-6" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Admin Portal</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Admin Sign In</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">Sign in to access the admin dashboard</p>
       </div>
 

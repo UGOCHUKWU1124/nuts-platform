@@ -3,35 +3,32 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import type { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import {
-  ADMIN_ACCESS_TOKEN_COOKIE,
-  USER_ACCESS_TOKEN_COOKIE,
-  VENDOR_ACCESS_TOKEN_COOKIE,
-} from '../../constants/auth-cookies.constants';
+import { AUTH_ACCESS_COOKIE } from '../../constants/auth-cookies.constants';
 import { AuthSessionService } from '../../sessions/auth-session.service';
 import type { JwtPayload } from '../../types/jwt-payload.type';
 import { jwtFromCookie } from '../../utils/jwt-cookie.extractor';
 
-function extractContextualAccessToken(req: Request): string | null {
+function extractAccessToken(req: Request): string | null {
   if (!req) return null;
 
-  // 1. Explicit Authorization header takes highest priority
+  // 1. Authorization: Bearer <token> header (Standard API contract)
   const authHeader = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
   if (authHeader) return authHeader;
 
-  const url = (req.originalUrl || req.url || '').toLowerCase();
+  // 2. Standard HttpOnly accessToken cookie
+  const cookieToken =
+    jwtFromCookie(AUTH_ACCESS_COOKIE)(req) ??
+    jwtFromCookie('access_token')(req);
+  if (cookieToken) return cookieToken;
 
-  // 2. Strict cookie isolation based on route namespace:
-  if (url.includes('/admin')) {
-    return jwtFromCookie(ADMIN_ACCESS_TOKEN_COOKIE)(req);
+  // 3. Query parameter (standard for EventSource SSE / WebSocket handshakes where headers cannot be set)
+  const query = req.query;
+  if (typeof query === 'object' && query !== null) {
+    if (typeof query.token === 'string') return query.token;
+    if (typeof query.accessToken === 'string') return query.accessToken;
   }
 
-  if (url.includes('/vendor')) {
-    return jwtFromCookie(VENDOR_ACCESS_TOKEN_COOKIE)(req);
-  }
-
-  // 3. All non-admin/non-vendor routes (storefront, cart, checkout, users) strictly use user cookie
-  return jwtFromCookie(USER_ACCESS_TOKEN_COOKIE)(req);
+  return null;
 }
 
 @Injectable()
@@ -41,7 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly authSessionService: AuthSessionService,
   ) {
     super({
-      jwtFromRequest: extractContextualAccessToken,
+      jwtFromRequest: extractAccessToken,
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
       issuer: config.getOrThrow<string>('JWT_ISSUER'),

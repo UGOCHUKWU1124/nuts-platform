@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 
@@ -15,6 +16,8 @@ import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 
+import { CART_CACHE_PREFIX } from '@api/modules/checkout/cart/cart.service';
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { CircuitBreakerService } from '@api/modules/infrastructure/resiliency/circuit-breaker.service';
@@ -25,7 +28,11 @@ import { generateStatusNote } from '@api/modules/orders/constants/order-status.c
 
 import { DomainEvents } from '@api/modules/shared/events/domain-events';
 
-import type { OrderProcessingPayload } from '@api/modules/shared/events/event-payloads';
+import type {
+  OrderProcessingPayload,
+  PaymentConfirmedPayload,
+  PaymentFailedPayload,
+} from '@api/modules/shared/events/event-payloads';
 
 import { VENDOR_COMMISSION_RATE } from '@api/modules/shared/constants/commission.constants';
 
@@ -69,7 +76,20 @@ export class PaymentsService {
     private readonly walletService: WalletService,
     private readonly eventEmitter: EventEmitter2,
     private readonly circuitBreaker: CircuitBreakerService,
+    @Optional() private readonly cacheService?: CacheService,
   ) {}
+
+  private async invalidateCartCache(userId: string): Promise<void> {
+    if (this.cacheService) {
+      try {
+        await this.cacheService.del(`${CART_CACHE_PREFIX}${userId}`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to invalidate cart cache for user ${userId}: ${(error as Error).message}`,
+        );
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // INITIALIZE PAYMENT
@@ -144,8 +164,6 @@ export class PaymentsService {
       return {
         authorizationUrl: payment.paymentLink,
 
-        authorization_url: payment.paymentLink,
-
         reference: payment.transactionReference,
 
         paymentId: payment.id,
@@ -196,8 +214,6 @@ export class PaymentsService {
           return {
             authorizationUrl: latest.paymentLink,
 
-            authorization_url: latest.paymentLink,
-
             reference: latest.transactionReference,
 
             paymentId: payment.id,
@@ -238,9 +254,18 @@ export class PaymentsService {
       },
     };
 
-    const callbackUrl = this.config
+    const configuredCallback = this.config
       .get<string>('PAYSTACK_CALLBACK_URL')
       ?.trim();
+    const storefrontOrigin = this.config
+      .get<string>('ALLOWED_ORIGINS')
+      ?.split(',')[0]
+      ?.trim();
+    const fallbackCallback = storefrontOrigin
+      ? `${storefrontOrigin.replace(/\/+$/, '')}/order-success`
+      : undefined;
+
+    const callbackUrl = configuredCallback || fallbackCallback;
 
     if (callbackUrl) {
       payload.callback_url = callbackUrl;
@@ -279,8 +304,6 @@ export class PaymentsService {
 
     return {
       authorizationUrl: result.data.authorization_url,
-
-      authorization_url: result.data.authorization_url,
 
       accessCode: result.data.access_code,
 
@@ -344,11 +367,19 @@ export class PaymentsService {
       return;
     }
 
+    const orderIdFromMetadata =
+      (typeof event.data?.metadata?.order_id === 'string'
+        ? event.data.metadata.order_id.trim()
+        : undefined) ||
+      (typeof event.data?.metadata?.orderId === 'string'
+        ? event.data.metadata.orderId.trim()
+        : undefined);
+
     if (
       event.event === 'charge.success' ||
       event.data?.status === PAYSTACK_SUCCESS_STATUS
     ) {
-      await this.confirmPayment(reference);
+      await this.confirmPayment(reference, event.data, orderIdFromMetadata);
 
       return;
     }
@@ -380,54 +411,6 @@ export class PaymentsService {
     }
 
     return this.toResponse(payment);
-  }
-
-  async getPaymentOtpContext(
-    userId: string,
-    orderId: string,
-  ): Promise<{
-    orderNumber: string;
-    amount: number;
-    currency: string;
-  }> {
-    const payment = await this.prisma.payment.findFirst({
-      where: {
-        orderId,
-        userId,
-      },
-      select: {
-        amount: true,
-        currency: true,
-        order: {
-          select: {
-            orderNumber: true,
-            status: true,
-          },
-        },
-      },
-    });
-
-    if (!payment) {
-      throw new NotFoundException('Payment not found for this order.');
-    }
-
-    if (payment.order.status === OrderStatus.CANCELLED) {
-      throw new BadRequestException(
-        'Cannot request OTP for a cancelled order.',
-      );
-    }
-
-    if (payment.order.status === OrderStatus.REFUNDED) {
-      throw new BadRequestException('Cannot request OTP for a refunded order.');
-    }
-
-    return {
-      orderNumber: payment.order.orderNumber,
-
-      amount: Number(payment.amount),
-
-      currency: payment.currency.toUpperCase(),
-    };
   }
 
   // ---------------------------------------------------------------------------
@@ -687,17 +670,26 @@ export class PaymentsService {
 
   private async confirmPayment(
     reference: string,
+    webhookData?: PaystackWebhookEvent['data'],
+    orderIdFallback?: string,
   ): Promise<PaymentResponseDto | null> {
     /**
      * transactionReference is @unique in Prisma.
-     *
-     * Therefore findUnique is the correct lookup.
+     * If not found by reference directly, fallback to orderId if available.
      */
-    const payment = await this.prisma.payment.findUnique({
+    let payment = await this.prisma.payment.findUnique({
       where: {
         transactionReference: reference,
       },
     });
+
+    if (!payment && orderIdFallback) {
+      payment = await this.prisma.payment.findFirst({
+        where: {
+          orderId: orderIdFallback,
+        },
+      });
+    }
 
     if (!payment) {
       return null;
@@ -712,11 +704,37 @@ export class PaymentsService {
     }
 
     /**
-     * Never trust webhook/callback payload amounts directly.
-     *
+     * Never trust unverified payload amounts directly.
      * Ask Paystack to verify the transaction.
+     * If the verification API times out or is unreachable, but we have a cryptographically
+     * verified webhook payload proving charge.success, use that authoritative webhook proof.
      */
-    const verified = await this.paystackVerify(reference);
+    let verified = await this.paystackVerify(reference);
+
+    if (
+      (!verified?.status ||
+        !verified.data ||
+        verified.data.status !== PAYSTACK_SUCCESS_STATUS) &&
+      webhookData &&
+      (webhookData.status === PAYSTACK_SUCCESS_STATUS ||
+        webhookData.status === 'success')
+    ) {
+      this.logger.log(
+        `Paystack verification API returned non-success or timed out; utilizing cryptographically signed webhook data for reference ${reference}.`,
+      );
+      verified = {
+        status: true,
+        message: 'Verified via cryptographically signed webhook payload',
+        data: {
+          id: typeof webhookData.id === 'number' ? webhookData.id : undefined,
+          status: PAYSTACK_SUCCESS_STATUS,
+          reference: webhookData.reference ?? reference,
+          amount: Number(webhookData.amount),
+          currency: webhookData.currency ?? payment.currency,
+          paid_at: webhookData.paid_at ?? new Date().toISOString(),
+        },
+      };
+    }
 
     if (
       !verified?.status ||
@@ -915,18 +933,36 @@ export class PaymentsService {
 
     /**
      * Email and events are outside the transaction.
+     * When payment succeeds and the order moves to PROCESSING,
+     * send the official Order Confirmation email with invoice attached.
      */
-    this.sendPaymentReceiptEmail(updated.id).catch((error) => {
-      this.logger.error(
-        `Failed to send payment receipt for ${updated.id}`,
-        error,
-      );
-    });
-
     if (orderMovedToProcessing) {
+      void this.invalidateCartCache(payment.userId);
+
+      this.sendOrderConfirmationEmail(updated.id).catch((error) => {
+        this.logger.error(
+          `Failed to send order confirmation for ${updated.id}`,
+          error,
+        );
+      });
+
       this.emitOrderProcessingEvent(updated.orderId).catch((error) => {
         this.logger.error(
           `Failed to emit processing event for ${updated.orderId}`,
+          error,
+        );
+      });
+
+      this.emitPaymentConfirmedEvent(updated.id).catch((error) => {
+        this.logger.error(
+          `Failed to emit payment confirmed event for ${updated.id}`,
+          error,
+        );
+      });
+    } else {
+      this.sendPaymentReceiptEmail(updated.id).catch((error) => {
+        this.logger.error(
+          `Failed to send payment receipt for ${updated.id}`,
           error,
         );
       });
@@ -939,18 +975,46 @@ export class PaymentsService {
   // PAYMENT FAILED
   // ---------------------------------------------------------------------------
 
-  private async markPaymentFailed(reference: string): Promise<void> {
-    await this.prisma.payment.updateMany({
+  private async markPaymentFailed(
+    reference: string,
+    reason?: string,
+  ): Promise<void> {
+    const payment = await this.prisma.payment.findFirst({
       where: {
         transactionReference: reference,
-
         status: PaymentStatus.PENDING,
       },
+      include: {
+        user: { select: { email: true, firstName: true } },
+        order: { select: { orderNumber: true } },
+      },
+    });
 
+    if (!payment) return;
+
+    await this.prisma.payment.updateMany({
+      where: {
+        id: payment.id,
+        status: PaymentStatus.PENDING,
+      },
       data: {
         status: PaymentStatus.FAILED,
       },
     });
+
+    if (payment.user && payment.order) {
+      const payload: PaymentFailedPayload = {
+        paymentId: payment.id,
+        orderId: payment.orderId,
+        orderNumber: payment.order.orderNumber,
+        userId: payment.userId,
+        userEmail: payment.user.email,
+        userFirstName: payment.user.firstName,
+        reason,
+      };
+
+      this.eventEmitter.emit(DomainEvents.PAYMENT_FAILED, payload);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1382,6 +1446,48 @@ export class PaymentsService {
     }
   }
 
+  private async emitPaymentConfirmedEvent(paymentId: string): Promise<void> {
+    try {
+      const payment = await this.prisma.payment.findUnique({
+        where: { id: paymentId },
+        include: {
+          user: {
+            select: {
+              email: true,
+              firstName: true,
+            },
+          },
+          order: {
+            select: {
+              orderNumber: true,
+            },
+          },
+        },
+      });
+
+      if (!payment || !payment.user || !payment.order) return;
+
+      const payload: PaymentConfirmedPayload = {
+        paymentId: payment.id,
+        orderId: payment.orderId,
+        orderNumber: payment.order.orderNumber,
+        userId: payment.userId,
+        userEmail: payment.user.email,
+        userFirstName: payment.user.firstName,
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        paymentReference: payment.transactionReference ?? '',
+      };
+
+      this.eventEmitter.emit(DomainEvents.PAYMENT_CONFIRMED, payload);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit PAYMENT_CONFIRMED for ${paymentId}`,
+        error,
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // PAYMENT EMAIL
   // ---------------------------------------------------------------------------
@@ -1467,6 +1573,96 @@ export class PaymentsService {
     } catch (error) {
       this.logger.error(
         `Failed to send payment receipt for ${paymentId}`,
+        error,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ORDER CONFIRMATION EMAIL (SENT ON SUCCESSFUL PAYMENT)
+  // ---------------------------------------------------------------------------
+
+  private async sendOrderConfirmationEmail(paymentId: string): Promise<void> {
+    try {
+      const payment = await this.prisma.payment.findUnique({
+        where: {
+          id: paymentId,
+        },
+
+        include: {
+          user: {
+            select: {
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+
+          order: {
+            select: {
+              orderNumber: true,
+              shippingAddress: true,
+              createdAt: true,
+              totalAmount: true,
+              discountAmount: true,
+              discountCode: true,
+              finalAmount: true,
+
+              orderItems: {
+                include: {
+                  product: {
+                    select: {
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!payment || !payment.user || !payment.order) {
+        return;
+      }
+
+      const items = payment.order.orderItems.map((item) => ({
+        productName: item.product.name,
+
+        quantity: item.quantity,
+
+        price: Number(item.unitPrice),
+      }));
+
+      await this.emailService.sendOrderConfirmation(payment.user.email, {
+        orderNumber: payment.order.orderNumber,
+
+        customerName:
+          `${payment.user.firstName ?? ''} ${
+            payment.user.lastName ?? ''
+          }`.trim() || 'Valued Customer',
+
+        customerEmail: payment.user.email,
+
+        shippingAddress: payment.order.shippingAddress ?? '',
+
+        totalAmount: Number(payment.order.totalAmount),
+
+        discountAmount: Number(payment.order.discountAmount),
+
+        discountCode: payment.order.discountCode,
+
+        finalAmount: Number(payment.order.finalAmount),
+
+        currency: payment.currency,
+
+        createdAt: payment.order.createdAt,
+
+        items,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send order confirmation for ${paymentId}`,
         error,
       );
     }

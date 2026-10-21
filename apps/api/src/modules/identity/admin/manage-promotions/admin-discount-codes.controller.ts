@@ -9,7 +9,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -32,13 +31,10 @@ import {
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - DISCOUNT CODES')
 @Controller('admin/discounts')
 @Roles(ROLE.ADMIN)
-@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('JWT-auth')
 export class AdminDiscountCodesController {
   constructor(private readonly discountCodeService: DiscountCodeService) {}
@@ -100,6 +96,25 @@ export class AdminDiscountCodesController {
   @ApiNotFoundResponse({ description: 'Discount code not found' })
   async deactivate(@Param('id', ParseUUIDPipe) id: string): Promise<null> {
     await this.discountCodeService.deactivate(id, undefined, true);
+    return null;
+  }
+
+  @Patch(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @Message('Discount code reactivated successfully')
+  @ApiOperation({
+    summary: 'Reactivate a discount code',
+    description: 'Set a deactivated discount code back to active status.',
+  })
+  @ApiParam({ name: 'id', description: 'Discount code ID' })
+  @ApiResponse({
+    status: 200,
+    type: ApiResponseDto<null>,
+    description: 'Discount code reactivated',
+  })
+  @ApiNotFoundResponse({ description: 'Discount code not found' })
+  async reactivate(@Param('id', ParseUUIDPipe) id: string): Promise<null> {
+    await this.discountCodeService.reactivate(id, undefined, true);
     return null;
   }
 

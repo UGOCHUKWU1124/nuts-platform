@@ -10,8 +10,9 @@ import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
 import { formatPrice } from "@/lib/util";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { ArrowRight,Heart,ShoppingBag,Trash2 } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, Heart, Shield, ShoppingBag, Store, Trash2 } from "lucide-react";
+import Link from "@/components/navigation/AppLink";
+import { useAuthStore } from "@/zustand/auth";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -26,8 +27,17 @@ export function WishlistPageView({ initialItems, categories }: WishlistPageViewP
   const [isClearOpen, setIsClearOpen] = useState(false);
   const { items, removeItem, clearWishlist, isLoading } = useWishlist(initialItems);
   const { addItem: addToCart } = useCart();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const capabilities = useAuthStore((state) => state.capabilities);
+  const canAdminister = capabilities?.canAdminister ?? false;
+  const canSell = capabilities?.canSell ?? false;
+  const isOperator = isAuthenticated && (canAdminister || canSell);
 
   const handleAddToCart = (item: (typeof items)[0]) => {
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      return;
+    }
     addToCart.mutate(
       {
         productId: item.productId,
@@ -88,7 +98,29 @@ export function WishlistPageView({ initialItems, categories }: WishlistPageViewP
         </div>
 
         {/* Loading State */}
-        {isLoading ? (
+        {isOperator ? (
+          <div className="rounded-3xl border border-border bg-card p-8 sm:p-12 text-center max-w-xl mx-auto my-8 shadow-xs">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-foreground">
+              {canAdminister ? <Shield className="h-7 w-7 text-indigo-500" /> : <Store className="h-7 w-7 text-amber-500" />}
+            </div>
+            <h2 className="mt-4 text-xl font-bold text-foreground">
+              {canAdminister ? "Administrator Session" : "Vendor Session"}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              Storefront wishlists are reserved for customer shopper accounts. Operators cannot maintain customer wishlists.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Button asChild className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-5">
+                <Link href={canAdminister ? "/admin" : "/vendor/analytic"}>
+                  {canAdminister ? "Return to Admin Console" : "Return to Vendor Dashboard"}
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-full px-5 border-border">
+                <Link href="/product">Browse Products</Link>
+              </Button>
+            </div>
+          </div>
+        ) : isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
             {Array.from({ length: 4 }).map((_, i) => (
               <div

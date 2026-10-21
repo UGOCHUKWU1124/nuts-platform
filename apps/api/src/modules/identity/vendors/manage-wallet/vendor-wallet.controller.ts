@@ -1,6 +1,6 @@
 // vendor-wallet.controller.ts
 
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -9,8 +9,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import {
@@ -20,12 +21,10 @@ import {
 import { WalletTransactionResponseDto } from '@api/modules/wallet/dto/wallet-transaction-response.dto';
 import { WalletService } from '@api/modules/wallet/wallet.service';
 import { VendorWalletResponseDto } from '../dto/vendor-wallet-response.dto';
-import { VendorJwtAuthGuard } from '../guards/vendor-auth.guard';
 
 @ApiTags('VENDOR - WALLET')
 @Controller(['vendors/wallet', 'dashboard/wallet'])
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 @ApiBearerAuth('JWT-auth')
 export class VendorWalletController {
   constructor(private readonly walletService: WalletService) {}

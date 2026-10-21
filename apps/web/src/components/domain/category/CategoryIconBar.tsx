@@ -2,7 +2,7 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 
 interface CategoryIconBarProps {
   categories?: CategoryResponseDto[];

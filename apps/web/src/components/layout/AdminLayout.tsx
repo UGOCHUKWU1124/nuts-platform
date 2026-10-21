@@ -1,26 +1,22 @@
 "use client";
 
-import { Button } from "@/component/ui/button";
 import { cn } from "@/lib/util";
-import { useAuthStore } from "@/zustand/auth";
 import {
-BarChart3,
-ChevronRight,
-ExternalLink,
-Layers,
-LogOut,
-Package,
-Settings,
-ShoppingCart,
-Tag,
-UserCheck,
-Users,
-X
+  BarChart3,
+  ChevronRight,
+  Layers,
+  Package,
+  Settings,
+  ShoppingCart,
+  Tag,
+  UserCheck,
+  Users,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
-import { type ReactNode,useState } from "react";
+import { type ReactNode, useState } from "react";
 import { AdminHeader } from "./AdminHeader";
 
 interface NavGroup {
@@ -60,7 +56,6 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {
-  const { logout } = useAuthStore();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -149,37 +144,6 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </div>
           ))}
         </nav>
-
-        {/* Live System Indicator & Sign Out */}
-        <div className="px-4 py-3 border-t border-border bg-card">
-          <div className="flex items-center justify-between text-xs mb-2 px-1">
-            <span className="flex items-center gap-1.5 text-muted-foreground font-medium">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Engine Online
-            </span>
-            <Link
-              href="/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-            >
-              Storefront <ExternalLink className="h-3 w-3" />
-            </Link>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2.5 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors h-10"
-            onClick={() => logout({ redirectTo: "/auth/admin/login" })}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out of Admin
-          </Button>
-        </div>
       </aside>
 
       {/* Main Content Area */}

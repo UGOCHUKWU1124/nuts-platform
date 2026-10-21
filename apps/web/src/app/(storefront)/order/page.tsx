@@ -12,7 +12,7 @@ import { queryKey } from "@/lib/query-key";
 import { formatDate,formatPrice } from "@/lib/util";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight,Package } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 
 export default function OrderPage() {
@@ -21,6 +21,8 @@ export default function OrderPage() {
   const { data, isLoading } = useQuery({
     queryKey: queryKey.order.list({ page, limit: 10 }),
     queryFn: async () => await orderService.list({ page, limit: 10 }),
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   const orders: OrderSummaryDto[] = data?.data ?? [];

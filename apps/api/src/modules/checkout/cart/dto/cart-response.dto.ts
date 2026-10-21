@@ -1,4 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
+import { VariantOptionDto } from '@api/modules/shared/dto/variant-option.dto';
+
+export { VariantOptionDto };
 
 // ─── Shared building blocks for all cart response DTOs ───
 
@@ -30,12 +34,6 @@ export class CartMetadataDto {
   @ApiProperty({ description: 'Abandoned cart alert sent' })
   abandonedCartAlerted!: boolean;
 
-  @ApiPropertyOptional({
-    description: 'Cart origin source',
-    example: { type: 'PRODUCT_PAGE' },
-  })
-  addedFrom?: Record<string, string> | null;
-
   @ApiProperty({ description: 'Created at' })
   createdAt!: Date;
 
@@ -50,13 +48,6 @@ export class ProductAvailabilityDto {
   @ApiProperty() canAddToCart!: boolean;
   @ApiProperty() isAvailable!: boolean;
   @ApiProperty() sku!: string;
-}
-
-export class VariantOptionDto {
-  @ApiProperty({ description: 'Option name (e.g. size, color)' })
-  name!: string;
-  @ApiProperty({ description: 'Option value (e.g. M, Black)' })
-  value!: string;
 }
 
 export class CartItemVariantDto {
@@ -75,11 +66,7 @@ export class CartItemVariantDto {
   @ApiProperty() isDeleted!: boolean;
 }
 
-export class CartItemProductCategoryDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() name!: string;
-  @ApiProperty() slug!: string;
-}
+export { CategoryRefDto as CartItemProductCategoryDto };
 
 export class CartItemProductDto {
   @ApiProperty() id!: string;
@@ -103,11 +90,11 @@ export class CartItemProductDto {
   @ApiPropertyOptional()
   images?: { url: string }[];
 
-  @ApiPropertyOptional({ type: () => CartItemProductCategoryDto })
-  category?: CartItemProductCategoryDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  category?: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => CartItemProductCategoryDto })
-  subcategory?: CartItemProductCategoryDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  subcategory?: CategoryRefDto;
 
   @ApiPropertyOptional()
   vendor?: { id: string; name: string };

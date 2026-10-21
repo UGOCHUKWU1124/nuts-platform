@@ -7,12 +7,16 @@ export const USER_AUTH_SELECT = {
   lastName: true,
   role: true,
   tokenVersion: true,
+  isEmailVerified: true,
 } as const satisfies Prisma.UserSelect;
 
 export const USER_LOGIN_SELECT = {
   ...USER_AUTH_SELECT,
   password: true,
   isActive: true,
+  deactivatedBy: true,
+  deactivationReason: true,
+  deactivatedAt: true,
 } as const satisfies Prisma.UserSelect;
 
 export const USER_REFRESH_SELECT = {
@@ -56,4 +60,31 @@ export type UserLoginRecord = Prisma.UserGetPayload<{
 
 export type UserRefreshRecord = Prisma.UserGetPayload<{
   select: typeof USER_REFRESH_SELECT;
+}>;
+
+export const ADMIN_AUTH_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  isActive: true,
+  tokenVersion: true,
+} as const satisfies Prisma.AdminSelect;
+
+export const VENDOR_AUTH_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  isActive: true,
+  isApproved: true,
+  tokenVersion: true,
+} as const satisfies Prisma.VendorSelect;
+
+export type AdminAuthRecord = Prisma.AdminGetPayload<{
+  select: typeof ADMIN_AUTH_SELECT;
+}>;
+
+export type VendorAuthRecord = Prisma.VendorGetPayload<{
+  select: typeof VENDOR_AUTH_SELECT;
 }>;

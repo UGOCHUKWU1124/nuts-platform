@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/api/core/client";
+import { publicApi } from "@/api/core/client";
 import type { AuthResponseDto } from "@/api/dto/auth";
 import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
@@ -36,7 +36,7 @@ export default function AdminSetupPage() {
 
   async function onSubmit(data: SetupFormData) {
     try {
-      await api.post<AuthResponseDto>("/admin/auth/setup", data);
+      await publicApi.post<AuthResponseDto>("/admin/auth/setup", data);
       toast.success("Initial admin account created successfully! Please sign in.");
       router.push("/auth/admin/login");
     } catch (err: unknown) {

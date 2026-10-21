@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -19,8 +11,6 @@ import { ROLE } from '@prisma/client';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminAnalyticsQueryDto } from './dto/admin-analytics-query.dto';
 import {
@@ -37,7 +27,6 @@ import {
 } from './dto/admin-analytics-summary.dto';
 
 @Roles(ROLE.ADMIN)
-@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags('ADMIN - ANALYTICS')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/analytics')

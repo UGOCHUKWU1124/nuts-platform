@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiExtraModels,
@@ -7,9 +7,8 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
-
-import { VendorJwtAuthGuard } from '@api/modules/identity/vendors/guards/vendor-auth.guard';
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { SearchService } from '@api/modules/shared/search/search.service';
@@ -20,8 +19,7 @@ import { SearchResponseDto, SearchResultDto } from './dto/search-result.dto';
 @ApiTags('VENDOR - SEARCH')
 @ApiBearerAuth('JWT-auth')
 @Controller('vendors/search')
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 export class VendorSearchController {
   constructor(private readonly searchService: SearchService) {}
 

@@ -7,6 +7,7 @@ export * from "./modules/auth";
 export * from "./modules/cart";
 export * from "./modules/category";
 export * from "./modules/discount";
+export * from "./modules/notifications";
 export * from "./modules/order";
 export * from "./modules/payment";
 export * from "./modules/product";

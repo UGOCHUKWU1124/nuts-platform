@@ -6,10 +6,11 @@ import type { ProductCardDto,PublicProductResponseDto } from "@/api/dto/product"
 import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
 import { formatPrice } from "@/lib/util";
+import { resolveProductDetailPath } from "@/lib/product-path";
 import { useAuthStore } from "@/zustand/auth";
 import { Heart,Plus,ShoppingBag } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -72,14 +73,14 @@ export function ProductCard({
   priority = false,
 }: ProductCardProps) {
   const router = useRouter();
-  const targetHref = href || (categoryPath
-    ? `${categoryPath.replace(/\/$/, "")}/${product.slug}`
-    : `/product/${product.slug}`);
+  const targetHref = resolveProductDetailPath(product.slug, categoryPath, href);
 
   const effectiveAddedFrom: AddedFromType =
     addedFrom || (categoryPath ? "CATEGORY_PAGE" : "PRODUCT_PAGE");
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const capabilities = useAuthStore((state) => state.capabilities);
+  const canPurchase = capabilities ? capabilities.canPurchase : !isAuthenticated;
   const { toggleItem, isInWishlist } = useWishlist();
   const { addItem: addToCart } = useCart();
   const [isWishlistPending, setIsWishlistPending] = useState(false);
@@ -136,6 +137,11 @@ export function ProductCard({
       toast.error("Please sign in to add items to your cart");
       return;
     }
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      toast.info("Your account type cannot make storefront purchases.");
+      return;
+    }
     if (hasVariants) {
       toast.info("Choose an option on the product page before adding this item");
       return;
@@ -173,6 +179,20 @@ export function ProductCard({
   const handleToggleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!isAuthenticated) {
+      toast.error("Please sign in to save items to your wishlist", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push("/auth/login"),
+        },
+      });
+      return;
+    }
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      toast.info("Your account type cannot maintain customer wishlists.");
+      return;
+    }
     if (isWishlistPending) return;
 
     setIsWishlistPending(true);
@@ -201,6 +221,7 @@ export function ProductCard({
               alt={product.name}
               fill
               priority={priority}
+              loading={priority ? "eager" : "lazy"}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
             />
@@ -226,15 +247,17 @@ export function ProductCard({
         </div>
 
         {/* Floating Quick Add '+' Button */}
-        <button
-          type="button"
-          onClick={handleAdd}
-          disabled={isOutOfStock || addToCart.isPending}
-          aria-label="Quick add to cart"
-          className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-card text-foreground border border-border shadow-md transition-all duration-200 hover:scale-110 hover:bg-secondary active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 z-10"
-        >
-          <Plus className="h-4 w-4 stroke-[2.5]" />
-        </button>
+        {canPurchase && (
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={isOutOfStock || addToCart.isPending}
+            aria-label="Quick add to cart"
+            className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-card text-foreground border border-border shadow-md transition-all duration-200 hover:scale-110 hover:bg-secondary active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 z-10"
+          >
+            <Plus className="h-4 w-4 stroke-[2.5]" />
+          </button>
+        )}
       </div>
 
       {/* Product Content Details */}
@@ -254,19 +277,21 @@ export function ProductCard({
             </h3>
           </Link>
 
-          <button
-            type="button"
-            onClick={handleToggleWishlist}
-            aria-label={isLiked ? "Remove from wishlist" : "Add to wishlist"}
-            disabled={isWishlistPending}
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Heart
-              className={`h-4.5 w-4.5 ${
-                isLiked ? "fill-primary text-primary" : "stroke-[1.6]"
-              } ${isWishlistPending ? "animate-pulse" : ""}`}
-            />
-          </button>
+          {canPurchase && (
+            <button
+              type="button"
+              onClick={handleToggleWishlist}
+              aria-label={isLiked ? "Remove from wishlist" : "Add to wishlist"}
+              disabled={isWishlistPending}
+              className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Heart
+                className={`h-4.5 w-4.5 ${
+                  isLiked ? "fill-primary text-primary" : "stroke-[1.6]"
+                } ${isWishlistPending ? "animate-pulse" : ""}`}
+              />
+            </button>
+          )}
         </div>
 
         {/* Vendor Store Name */}

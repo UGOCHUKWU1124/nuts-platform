@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { publicApi, userApi } from "@/api/core/client";
 import type {
 CreateReviewDto,
 ProductReviewsMetaDto,
@@ -6,13 +6,13 @@ ReviewResponseDto,
 } from "@/api/dto/review";
 
 export const reviewService = {
-  listByProduct(productId: string) {
-    return api.get<ReviewResponseDto[], ProductReviewsMetaDto>(`/reviews/product/${productId}`);
+  listByProduct(productId: string, signal?: AbortSignal) {
+    return publicApi.get<ReviewResponseDto[], ProductReviewsMetaDto>(`/reviews/product/${productId}`, { signal });
   },
   create(payload: CreateReviewDto) {
-    return api.post<ReviewResponseDto>("/reviews", payload);
+    return userApi.post<ReviewResponseDto>("/reviews", payload);
   },
   remove(id: string) {
-    return api.delete<void>(`/reviews/${id}`);
+    return userApi.delete<void>(`/reviews/${id}`);
   },
 };

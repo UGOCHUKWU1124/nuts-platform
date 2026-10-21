@@ -1,28 +1,25 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { api } from "@/api/core/client";
+import { publicApi } from "@/api/core/client";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import type { ProductCardDto } from "@/api/dto/product";
-import type { VendorResponseDto } from "@/api/dto/vendor";
-import { findCategoryFullPath } from "@/lib/cart-path";
 import { formatPrice } from "@/lib/util";
 import { useQuery } from "@tanstack/react-query";
 import {
-ArrowRight,
-Loader2,
-Search,
-ShoppingBag,
-Sparkles,
-Store,
-Tag,
-X,
+  ArrowRight,
+  Layers,
+  Loader2,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Store,
+  Tag,
+  X,
 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect,useMemo,useRef,useState } from "react";
-
-import { useDebouncedValue } from "@/hook/use-debounced-value";
+import Link from "@/components/navigation/AppLink";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 function normalizeCategoryList(value: unknown): CategoryResponseDto[] {
   if (Array.isArray(value)) return value as CategoryResponseDto[];
@@ -32,10 +29,42 @@ function normalizeCategoryList(value: unknown): CategoryResponseDto[] {
   return [];
 }
 
-interface SearchResultsResponse {
-  products?: ProductCardDto[];
-  categories?: CategoryResponseDto[];
-  vendors?: VendorResponseDto[];
+interface SearchItemPayload {
+  id?: string;
+  name?: string;
+  sku?: string;
+  slug?: string;
+  price?: number;
+  imageUrl?: string | null;
+  storeName?: string;
+  storeSlug?: string;
+  storeLogoUrl?: string | null;
+  storeDescription?: string | null;
+  parentId?: string | null;
+  parentName?: string | null;
+  parentSlug?: string | null;
+  path?: string | null;
+  isSubcategory?: boolean;
+}
+
+export interface SearchResultItem {
+  id: string;
+  index: string;
+  type: string;
+  title: string;
+  subtitle?: string;
+  score: number;
+  payload?: SearchItemPayload;
+}
+
+interface AutocompleteApiResponse {
+  results: SearchResultItem[];
+  pagination?: {
+    totalItems: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 interface GlobalSearchBarProps {
@@ -43,19 +72,41 @@ interface GlobalSearchBarProps {
   variant?: "hero" | "navbar";
   className?: string;
   categories?: CategoryResponseDto[];
+  autoFocus?: boolean;
 }
 
 export function GlobalSearchBar({
-  placeholder = "Search products, categories, vendors...",
+  placeholder = "Search products, vendors, categories...",
   variant = "hero",
   className = "",
   categories,
+  autoFocus = false,
 }: GlobalSearchBarProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
-  const debouncedQuery = useDebouncedValue(query.trim(), 160);
+  const debouncedQuery = useDebouncedValue(query.trim(), 350);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when requested (e.g. mobile search toggle)
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus]);
+
+  // Close dropdown whenever pathname or search params change
+  useEffect(() => {
+    const timer = setTimeout(() => setIsOpen(false), 0);
+    return () => clearTimeout(timer);
+  }, [pathname, searchParams]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -71,75 +122,132 @@ export function GlobalSearchBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Categories received directly from server-first RSC layout — zero browser network overhead
+  // Keyboard navigation: Escape closes dropdown
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const popularCategories = useMemo(
     () => normalizeCategoryList(categories),
     [categories]
   );
 
-  // Fetch search autocomplete & preview data — parallel product, vendor, and category matches
-  const { data, isFetching, isLoading } = useQuery({
+  // Unified Omnisearch Autocomplete Query
+  const { data, isFetching } = useQuery({
     queryKey: ["global-search-autocomplete", debouncedQuery],
     queryFn: async ({ signal }) => {
       if (!debouncedQuery || debouncedQuery.length < 2) return null;
 
-      const normalized = debouncedQuery.toLowerCase();
-      const popularList = normalizeCategoryList(popularCategories);
-      const matchedCategories = popularList
-        .filter(
-          (c: CategoryResponseDto) =>
-            c.name.toLowerCase().includes(normalized) ||
-            c.slug.toLowerCase().includes(normalized)
-        )
-        .slice(0, 4);
+      try {
+        const res = await publicApi.get<AutocompleteApiResponse>(
+          "/search/autocomplete",
+          {
+            params: { query: debouncedQuery, limit: 12 },
+            signal,
+          }
+        );
 
-      const [prodRes, vendorRes] = await Promise.allSettled([
-        api.get<ProductCardDto[]>("/products", {
-          params: { search: debouncedQuery, limit: 5 },
-          signal,
-        }),
-        api.get<VendorResponseDto[]>("/vendors/store", {
-          params: { search: debouncedQuery, limit: 3 },
-          signal,
-        }),
-      ]);
+        const raw = res.data as unknown as Record<string, unknown> | SearchResultItem[];
+        const items: SearchResultItem[] = Array.isArray(raw)
+          ? raw
+          : Array.isArray((raw as Record<string, unknown>)?.data)
+          ? ((raw as Record<string, unknown>).data as SearchResultItem[])
+          : Array.isArray((raw as Record<string, unknown>)?.results)
+          ? ((raw as Record<string, unknown>).results as SearchResultItem[])
+          : [];
+        return items;
+      } catch (error) {
+        // If query was superseded by a newer keystroke, let TanStack Query cancel cleanly without setting fallback
+        if (signal?.aborted) {
+          throw error;
+        }
 
-      return {
-        products:
-          prodRes.status === "fulfilled" ? prodRes.value.data : [],
-        vendors:
-          vendorRes.status === "fulfilled" ? vendorRes.value.data : [],
-        categories: matchedCategories,
-      } as SearchResultsResponse;
+        // Graceful client fallback using local categories if backend autocomplete is genuinely unavailable
+        const normalized = debouncedQuery.toLowerCase();
+        const fallbackCats: SearchResultItem[] = popularCategories
+          .filter(
+            (c) =>
+              c.name.toLowerCase().includes(normalized) ||
+              c.slug.toLowerCase().includes(normalized)
+          )
+          .slice(0, 4)
+          .map((c) => ({
+            id: c.id,
+            index: "categories",
+            type: "category",
+            title: c.name,
+            subtitle: c.description ?? undefined,
+            score: 1,
+            payload: {
+              id: c.id,
+              name: c.name,
+              slug: c.slug,
+              isSubcategory: false,
+            },
+          }));
+
+        return fallbackCats;
+      }
     },
     enabled: debouncedQuery.length >= 2,
-    staleTime: 1000 * 60,
     placeholderData: (previousData) => previousData,
+    staleTime: 1000 * 60,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    const searchTerm = query.trim();
+    if (!searchTerm) return;
     setIsOpen(false);
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    router.push(`/search?query=${encodeURIComponent(searchTerm)}`);
   };
 
-  const handleTagClick = (tag: string) => {
-    setQuery(tag);
-    setIsOpen(false);
-    router.push(`/search?q=${encodeURIComponent(tag)}`);
+  const handleChipClick = (term: string) => {
+    router.push(`/search?query=${encodeURIComponent(term)}`);
   };
 
-  const products: ProductCardDto[] = data?.products ?? [];
-  const vendors: VendorResponseDto[] = data?.vendors ?? [];
-  const matchedCategories: CategoryResponseDto[] = data?.categories ?? [];
+  const results: SearchResultItem[] = useMemo(() => data ?? [], [data]);
+
+  // Group search items into distinct, intuitive categories
+  const productItems = useMemo(
+    () => results.filter((r) => r.type === "product" || r.index === "products"),
+    [results]
+  );
+
+  const vendorItems = useMemo(
+    () => results.filter((r) => r.type === "vendor" || r.index === "vendors"),
+    [results]
+  );
+
+  const categoryItems = useMemo(
+    () =>
+      results.filter((r) => r.type === "category" && !r.payload?.isSubcategory),
+    [results]
+  );
+
+  const subcategoryItems = useMemo(
+    () =>
+      results.filter(
+        (r) => r.type === "subcategory" || r.payload?.isSubcategory
+      ),
+    [results]
+  );
 
   const hasResults =
-    products.length > 0 || vendors.length > 0 || matchedCategories.length > 0;
+    productItems.length > 0 ||
+    vendorItems.length > 0 ||
+    categoryItems.length > 0 ||
+    subcategoryItems.length > 0;
 
   const isHero = variant === "hero";
-  const popularList: CategoryResponseDto[] = normalizeCategoryList(popularCategories);
-  const searchChips: CategoryResponseDto[] = popularList.slice(0, 6);
+  const searchChips: CategoryResponseDto[] = popularCategories.slice(0, 6);
+  const showDropdown = isOpen && query.trim().length >= 2;
 
   return (
     <div
@@ -151,21 +259,27 @@ export function GlobalSearchBar({
         onSubmit={handleSubmit}
         className={`relative flex items-center transition-all ${
           isHero
-            ? "rounded-2xl border-2 border-border/80 bg-card/95 p-1.5 shadow-xl backdrop-blur-xl focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
-            : "rounded-full border border-border/70 bg-secondary/60 px-3 py-1.5 focus-within:border-primary focus-within:bg-card focus-within:ring-2 focus-within:ring-primary/10"
+            ? "rounded-2xl border-2 border-border/80 bg-card/95 p-1.5 shadow-xl backdrop-blur-xl focus-within:border-black dark:focus-within:border-white focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/10"
+            : "rounded-full border border-border/70 bg-secondary/60 px-3 py-1.5 focus-within:border-black dark:focus-within:border-white focus-within:bg-card focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/10"
         }`}
       >
         <div className="flex items-center pl-3 text-muted-foreground">
           {isFetching ? (
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-foreground" />
           ) : (
-            <Search className="h-5 w-5" />
+            <Search className="h-4 w-4 sm:h-5 sm:w-5" />
           )}
         </div>
 
         <input
+          ref={inputRef}
+          autoFocus={autoFocus}
+          id="global-search-input"
+          name="search"
           type="text"
           value={query}
+          maxLength={100}
+          aria-label="Search marketplace"
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
@@ -178,8 +292,12 @@ export function GlobalSearchBar({
         {query && (
           <button
             type="button"
-            onClick={() => setQuery("")}
-            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => {
+              setQuery("");
+              setIsOpen(false);
+            }}
+            aria-label="Clear search query"
+            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -187,77 +305,71 @@ export function GlobalSearchBar({
 
         <button
           type="submit"
-          className={`${
+          aria-label="Submit search"
+          className={`cursor-pointer ${
             isHero
-              ? "rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all hover:scale-[1.02]"
-              : "rounded-full bg-primary/10 p-1.5 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+              ? "rounded-xl bg-black dark:bg-white px-5 py-2.5 text-sm font-semibold text-white dark:text-black shadow-md hover:opacity-90 transition-all hover:scale-[1.02]"
+              : "rounded-full bg-black/10 dark:bg-white/10 p-1.5 text-foreground hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors"
           }`}
         >
           {isHero ? "Search" : <ArrowRight className="h-4 w-4" />}
         </button>
       </form>
 
-      {/* Dynamic Search Chips from Backend Categories */}
-      {isHero && searchChips.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs">
-          <span className="flex items-center gap-1 text-muted-foreground font-medium">
-            <Sparkles className="h-3 w-3 text-primary" /> Popular:
-          </span>
-          {searchChips.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => handleTagClick(cat.name)}
-              className="rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-muted-foreground transition-all hover:border-primary/40 hover:bg-card hover:text-primary"
-            >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Autocomplete Dropdown Panel */}
-      {isOpen && query.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[420px] overflow-y-auto rounded-2xl border border-border/80 bg-card/98 p-3 shadow-2xl backdrop-blur-2xl">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              Searching marketplace...
+      {/* Live Search Results Dropdown Overlay */}
+      {showDropdown && (
+        <div
+          className={`absolute top-full z-[100] mt-2 max-h-[75vh] overflow-y-auto rounded-2xl border border-border/80 bg-card/95 p-3 shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-150 ${
+            isHero
+              ? "left-0 right-0"
+              : "left-0 right-0 sm:left-1/2 sm:-translate-x-1/2 sm:w-[500px]"
+          }`}
+        >
+          {isFetching && !hasResults ? (
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin text-foreground" />
+              Searching marketplace…
             </div>
           ) : !hasResults ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
-              No results found for <span className="font-semibold text-foreground">&quot;{query}&quot;</span>
-              <p className="mt-1 text-xs">Try searching for other keywords or categories.</p>
+              <p className="font-medium text-foreground">
+                No instant matches found for &ldquo;{query.trim()}&rdquo;
+              </p>
+              <p className="mt-1 text-xs">
+                Press enter to search the full catalog or explore categories below.
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
               {/* Products Section */}
-              {products.length > 0 && (
+              {productItems.length > 0 && (
                 <div>
                   <div className="mb-2 flex items-center justify-between px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <span className="flex items-center gap-1.5">
-                      <ShoppingBag className="h-3.5 w-3.5 text-primary" />
+                      <ShoppingBag className="h-3.5 w-3.5 text-foreground" />
                       Products
                     </span>
-                    <span>{products.length} found</span>
+                    <span>{productItems.length} found</span>
                   </div>
 
                   <div className="space-y-1">
-                    {products.slice(0, 4).map((p) => {
-                      const img = p.thumbnail ?? undefined;
+                    {productItems.slice(0, 4).map((p) => {
+                      const slug = p.payload?.slug || p.id;
+                      const img = p.payload?.imageUrl || null;
+                      const price = p.payload?.price;
 
                       return (
                         <Link
                           key={p.id}
-                          href={`/product/${p.slug}`}
+                          href={`/product/${slug}`}
                           onClick={() => setIsOpen(false)}
-                          className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-secondary/60"
+                          className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-secondary/70 group"
                         >
-                          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
+                          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center border border-border/50">
                             {img ? (
                               <RemoteImage
                                 src={img}
-                                alt={p.name}
+                                alt={p.title}
                                 className="h-full w-full object-cover"
                               />
                             ) : (
@@ -265,14 +377,16 @@ export function GlobalSearchBar({
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">
-                              {p.name}
+                            <p className="text-sm font-medium text-foreground truncate group-hover:underline">
+                              {p.title}
                             </p>
-                            <p className="text-sm font-semibold text-primary">
-                              {formatPrice(Number(p.discountPrice ?? p.price ?? 0))}
-                            </p>
+                            {price !== undefined && (
+                              <p className="text-xs font-semibold text-foreground">
+                                {formatPrice(Number(price))}
+                              </p>
+                            )}
                           </div>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground/60 shrink-0" />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground/60 shrink-0 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
                         </Link>
                       );
                     })}
@@ -280,41 +394,40 @@ export function GlobalSearchBar({
                 </div>
               )}
 
-              {/* Vendors / Stores Section */}
-              {vendors && vendors.length > 0 && (
-                <div className="border-t border-border/40 pt-3">
+              {/* Subcategories & Sections */}
+              {subcategoryItems.length > 0 && (
+                <div className="border-t border-border/50 pt-3">
                   <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Store className="h-3.5 w-3.5 text-primary" />
-                    Verified Vendors
+                    <Layers className="h-3.5 w-3.5 text-foreground" />
+                    Subcategories & Sections
                   </div>
                   <div className="space-y-1">
-                    {vendors.slice(0, 2).map((c) => {
-                      const logo = c.storeLogo ?? c.storeLogoUrl ?? null;
+                    {subcategoryItems.slice(0, 3).map((sub) => {
+                      const path =
+                        sub.payload?.path ||
+                        (sub.payload?.parentSlug
+                          ? `${sub.payload.parentSlug}/${sub.payload.slug}`
+                          : sub.payload?.slug || sub.title.toLowerCase());
+
                       return (
                         <Link
-                          key={c.id}
-                          href={`/vendor/${c.storeSlug}`}
+                          key={sub.id}
+                          href={`/category/${path}`}
                           onClick={() => setIsOpen(false)}
-                          className="flex items-center justify-between rounded-xl p-2 transition-colors hover:bg-secondary/60"
+                          className="flex items-center justify-between rounded-xl p-2 transition-colors hover:bg-secondary/70 group"
                         >
                           <div className="flex items-center gap-2">
-                            <div className="h-7 w-7 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center text-xs font-semibold text-primary">
-                              {logo ? (
-                                <RemoteImage
-                                  src={logo}
-                                  alt={c.storeName}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                c.storeName[0]
-                              )}
-                            </div>
-                            <span className="text-sm font-medium text-foreground">
-                              {c.storeName}
+                            <span className="text-sm font-medium text-foreground group-hover:underline">
+                              {sub.title}
                             </span>
+                            {sub.payload?.parentName && (
+                              <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-md">
+                                in {sub.payload.parentName}
+                              </span>
+                            )}
                           </div>
-                          <span className="text-xs text-primary font-medium">
-                            View Store →
+                          <span className="text-xs text-foreground font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                            Browse section →
                           </span>
                         </Link>
                       );
@@ -323,25 +436,24 @@ export function GlobalSearchBar({
                 </div>
               )}
 
-              {/* Categories Section */}
-              {matchedCategories.length > 0 && (
-                <div className="border-t border-border/40 pt-3">
+              {/* Root Categories Section */}
+              {categoryItems.length > 0 && (
+                <div className="border-t border-border/50 pt-3">
                   <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Tag className="h-3.5 w-3.5 text-primary" />
-                    Categories
+                    <Tag className="h-3.5 w-3.5 text-foreground" />
+                    Departments & Categories
                   </div>
                   <div className="flex flex-wrap gap-1.5 px-2">
-                    {matchedCategories.slice(0, 4).map((cat) => {
-                      const fullCategoryHref =
-                        findCategoryFullPath(cat.slug, popularCategories || []) || `/category/${cat.slug}`;
+                    {categoryItems.slice(0, 4).map((cat) => {
+                      const slug = cat.payload?.slug || cat.title.toLowerCase();
                       return (
                         <Link
-                          key={cat.id || cat.slug}
-                          href={fullCategoryHref}
+                          key={cat.id}
+                          href={`/category/${slug}`}
                           onClick={() => setIsOpen(false)}
-                          className="rounded-lg border border-border/60 bg-secondary/40 px-2.5 py-1 text-xs font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                          className="rounded-lg border border-border/70 bg-secondary/50 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary hover:border-foreground/30 transition-colors"
                         >
-                          {cat.name}
+                          {cat.title}
                         </Link>
                       );
                     })}
@@ -349,18 +461,80 @@ export function GlobalSearchBar({
                 </div>
               )}
 
-              {/* Bottom link */}
-              <div className="border-t border-border/40 pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                >
-                  View all results for &quot;{query}&quot; <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              {/* Verified Vendors Section */}
+              {vendorItems.length > 0 && (
+                <div className="border-t border-border/50 pt-3">
+                  <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Store className="h-3.5 w-3.5 text-foreground" />
+                    Verified Vendors
+                  </div>
+                  <div className="space-y-1">
+                    {vendorItems.slice(0, 2).map((v) => {
+                      const storeSlug = v.payload?.storeSlug || v.id;
+                      const logo = v.payload?.storeLogoUrl ?? null;
+                      return (
+                        <Link
+                          key={v.id}
+                          href={`/vendor/${storeSlug}`}
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center justify-between rounded-xl p-2 transition-colors hover:bg-secondary/70 group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-full bg-secondary overflow-hidden flex items-center justify-center text-xs font-semibold text-foreground border border-border/50">
+                              {logo ? (
+                                <RemoteImage
+                                  src={logo}
+                                  alt={v.title}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                v.title[0]?.toUpperCase()
+                              )}
+                            </div>
+                            <span className="text-sm font-medium text-foreground group-hover:underline">
+                              {v.title}
+                            </span>
+                          </div>
+                          <span className="text-xs text-foreground font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                            View Store →
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+          {/* Full Search Action Link */}
+          <Link
+            href={`/search?query=${encodeURIComponent(query.trim())}`}
+            onClick={() => setIsOpen(false)}
+            className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-2.5 text-xs sm:text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+          >
+            View all results for &ldquo;{query.trim()}&rdquo;
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      )}
+
+      {/* Quick Search Chips on Hero */}
+      {isHero && searchChips.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs">
+          <span className="flex items-center gap-1 text-muted-foreground font-medium">
+            <Sparkles className="h-3 w-3 text-neutral-500" /> Explore:
+          </span>
+          {searchChips.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => handleChipClick(cat.name)}
+              className="rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-muted-foreground transition-all hover:border-black dark:hover:border-white hover:text-foreground cursor-pointer"
+            >
+              {cat.name}
+            </button>
+          ))}
         </div>
       )}
     </div>

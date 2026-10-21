@@ -10,7 +10,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -37,13 +36,10 @@ import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 
 @ApiTags('ADMIN - PRODUCTS')
 @ApiBearerAuth('JWT-auth')
 @Controller('admin/products')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(ROLE.ADMIN)
 export class AdminProductsController {
   constructor(private readonly productsService: ProductsService) {}
@@ -80,17 +76,8 @@ export class AdminProductsController {
   @ApiUnauthorizedResponse({
     description: 'Unauthorized — no valid JWT session.',
   })
-  async findAll(
-    @Query() query: QueryProductDto,
-    @Body() body?: QueryProductDto,
-  ) {
-    const filters = {
-      ...query,
-      ...(body && typeof body === 'object' && Object.keys(body).length > 0
-        ? body
-        : {}),
-    };
-    return this.productsService.findAllForAdmin(filters);
+  async findAll(@Query() query: QueryProductDto) {
+    return this.productsService.findAllForAdmin(query);
   }
 
   /** Cursor-based query — filters travel in the request body. Alias for GET. */

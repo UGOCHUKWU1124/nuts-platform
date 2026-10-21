@@ -16,6 +16,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 
+import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { SearchService } from '@api/modules/shared/search/search.service';
@@ -34,6 +35,7 @@ export class SearchController {
 
   @Post('query')
   @HttpCode(HttpStatus.OK)
+  @Message('Search results retrieved successfully')
   @ApiOperation({
     summary: 'Global search with filters in the request body',
     description:
@@ -84,6 +86,7 @@ export class SearchController {
   }
 
   @Get()
+  @Message('Search results retrieved successfully')
   @ApiOperation({
     summary: 'Global marketplace search',
     description:
@@ -202,6 +205,7 @@ export class SearchController {
   }
 
   @Get('autocomplete')
+  @Message('Autocomplete suggestions retrieved successfully')
   @ApiOperation({
     summary: 'Autocomplete suggestions for marketplace search',
     description: 'Get autocomplete suggestions for the marketplace search bar.',

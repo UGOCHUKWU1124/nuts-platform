@@ -4,27 +4,24 @@ import { useAuthStore } from "@/zustand/auth";
 import { useEffect } from "react";
 
 /**
- * Initializes tab-local UI state via idempotent authBootstrap without duplicate /me requests.
- * Uses window location runtime listeners inside useEffect to avoid blocking Next.js static prerendering.
+ * Initializes the authentication session on application mount.
+ * Authenticates the user in-memory from HttpOnly cookies without re-querying on every page navigation.
  */
 export function SessionHydrator({ children }: { children: React.ReactNode }) {
   const hydrateFromCookies = useAuthStore((state) => state.hydrateFromCookies);
-  const syncActiveRole = useAuthStore((state) => state.syncActiveRole);
 
   useEffect(() => {
-    syncActiveRole();
-    hydrateFromCookies();
+    void hydrateFromCookies();
 
-    const handleLocationChange = () => {
-      syncActiveRole();
-      hydrateFromCookies();
+    const handleOnline = () => {
+      void hydrateFromCookies();
     };
 
-    window.addEventListener("popstate", handleLocationChange);
+    window.addEventListener("online", handleOnline);
     return () => {
-      window.removeEventListener("popstate", handleLocationChange);
+      window.removeEventListener("online", handleOnline);
     };
-  }, [syncActiveRole, hydrateFromCookies]);
+  }, [hydrateFromCookies]);
 
   return <>{children}</>;
 }

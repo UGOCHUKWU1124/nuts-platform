@@ -3,7 +3,30 @@
 set -eu
 
 SCHEMA_PATH="/app/packages/database/schema.prisma"
-PRISMA_BIN="/app/node_modules/.bin/prisma"
+if [ ! -s "$SCHEMA_PATH" ] && [ -s "../../packages/database/schema.prisma" ]; then
+  SCHEMA_PATH="../../packages/database/schema.prisma"
+elif [ ! -s "$SCHEMA_PATH" ] && [ -s "packages/database/schema.prisma" ]; then
+  SCHEMA_PATH="packages/database/schema.prisma"
+fi
+
+PRISMA_CONFIG="/app/apps/api/prisma.config.ts"
+if [ ! -s "$PRISMA_CONFIG" ] && [ -s "./prisma.config.ts" ]; then
+  PRISMA_CONFIG="./prisma.config.ts"
+fi
+
+PRISMA_BIN=""
+if [ -x "/app/apps/api/node_modules/.bin/prisma" ]; then
+  PRISMA_BIN="/app/apps/api/node_modules/.bin/prisma"
+elif [ -x "./node_modules/.bin/prisma" ]; then
+  PRISMA_BIN="./node_modules/.bin/prisma"
+elif [ -x "/app/node_modules/.bin/prisma" ]; then
+  PRISMA_BIN="/app/node_modules/.bin/prisma"
+elif [ -x "/app/packages/database/node_modules/.bin/prisma" ]; then
+  PRISMA_BIN="/app/packages/database/node_modules/.bin/prisma"
+elif command -v npx >/dev/null 2>&1; then
+  PRISMA_BIN="npx prisma"
+fi
+
 MAX_RETRIES="${MIGRATION_MAX_RETRIES:-5}"
 RETRY_DELAY="${MIGRATION_RETRY_DELAY_SECONDS:-3}"
 MAX_RETRY_DELAY=30
@@ -13,13 +36,13 @@ if [ ! -s "$SCHEMA_PATH" ]; then
   exit 1
 fi
 
-if [ ! -s "/app/apps/api/prisma.config.ts" ]; then
-  echo "[migrate] ERROR: Prisma configuration is missing: /app/apps/api/prisma.config.ts" >&2
+if [ ! -s "$PRISMA_CONFIG" ]; then
+  echo "[migrate] ERROR: Prisma configuration is missing: $PRISMA_CONFIG" >&2
   exit 1
 fi
 
-if [ ! -x "$PRISMA_BIN" ]; then
-  echo "[migrate] ERROR: Prisma CLI is missing: $PRISMA_BIN" >&2
+if [ -z "$PRISMA_BIN" ]; then
+  echo "[migrate] ERROR: Prisma CLI is missing across workspace node_modules" >&2
   exit 1
 fi
 
@@ -33,8 +56,8 @@ fi
 
 attempt=1
 while [ "$attempt" -le "$MAX_RETRIES" ]; do
-  echo "[migrate] Applying Prisma migrations (attempt $attempt/$MAX_RETRIES)..."
-  if "$PRISMA_BIN" migrate deploy --schema="$SCHEMA_PATH"; then
+  echo "[migrate] Applying Prisma migrations using $PRISMA_BIN (attempt $attempt/$MAX_RETRIES)..."
+  if eval "$PRISMA_BIN migrate deploy --schema=\"$SCHEMA_PATH\""; then
     echo "[migrate] Migrations completed successfully."
     exit 0
   fi

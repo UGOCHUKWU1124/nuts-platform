@@ -1,16 +1,35 @@
-import { authBroadcast } from "@/lib/auth-events";
+import { authBroadcast } from "../../lib/auth-events.ts";
 import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import {
-clearAuthTokens,
-getAuthToken,
-setAuthTokens,
-} from "./token-storage";
-import type { ApiSuccessEnvelope,PaginationMeta } from "./types";
+  clearAuthTokens,
+  decodeRoleFromToken,
+  getAuthToken,
+  isSessionKnownUnauthenticated,
+  markSessionUnauthenticated,
+  setAuthTokens,
+  type AuthRole,
+} from "./token-storage.ts";
+import type { ApiSuccessEnvelope, PaginationMeta } from "./types.ts";
+
+declare module "axios" {
+  interface AxiosRequestConfig {
+    authRole?: AuthRole | null;
+    _retry?: boolean;
+    _csrfRetry?: boolean;
+  }
+
+  interface InternalAxiosRequestConfig {
+    authRole?: AuthRole | null;
+    _retry?: boolean;
+    _csrfRetry?: boolean;
+  }
+}
 
 let inMemoryCsrfToken: string | null = null;
 
 export const getCsrfToken = (): string | null => {
   if (inMemoryCsrfToken) return inMemoryCsrfToken;
+  // Read directly from the secure csrf_token cookie set by the server
   if (typeof document !== "undefined") {
     const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
     if (match?.[1]) {
@@ -23,48 +42,33 @@ export const getCsrfToken = (): string | null => {
 
 export const setCsrfToken = (token: string | null | undefined) => {
   inMemoryCsrfToken = token || null;
-  if (typeof document !== "undefined") {
-    if (token) {
-      document.cookie = `csrf_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
-    } else {
-      document.cookie = `csrf_token=; Max-Age=0; path=/;`;
-    }
-  }
 };
 
-const axiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "/api/v1",
+export const getApiBaseUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.startsWith("http")) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
+  }
+  // In the browser, always use the relative path so requests flow through Next.js BFF proxy.
+  // This keeps all cookies (refresh token, session, csrf) strictly same-origin and avoids CORS / Lax drops.
+  if (typeof window !== "undefined") {
+    return (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
+  }
+  const backend = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "");
+  const prefix = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/+$/, "");
+  if (backend && backend.startsWith("http")) {
+    return `${backend}${prefix.startsWith("/") ? prefix : `/${prefix}`}`;
+  }
+  return prefix || "/api/v1";
+};
+
+const axiosConfig = {
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
-  xsrfCookieName: "csrf_token",
-  xsrfHeaderName: "x-csrf-token",
-});
+  // Note: x-csrf-token header is managed deterministically in our request interceptor
+  // to avoid Axios adding duplicate/comma-joined headers on mutating requests.
+} as const;
 
-let csrfInitPromise: Promise<void> | null = null;
-
-const ensureCsrfToken = async () => {
-  if (getCsrfToken()) return;
-  if (!csrfInitPromise) {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-    csrfInitPromise = axios
-      .get(`${apiUrl}/health`, {
-        withCredentials: true,
-      })
-      .then((res) => {
-        const token =
-          res.headers["x-csrf-token"] || res.headers["X-CSRF-TOKEN"];
-        if (token) {
-          setCsrfToken(token as string);
-        }
-      })
-      .catch(() => {
-        getCsrfToken();
-      })
-      .finally(() => {
-        csrfInitPromise = null;
-      });
-  }
-  await csrfInitPromise;
-};
+const axiosInstance = axios.create(axiosConfig);
 
 function setHeader(headers: AxiosRequestConfig["headers"], name: string, value: string) {
   if (!headers) return;
@@ -87,72 +91,135 @@ export interface RefreshSessionResult {
   success: boolean;
   accessToken?: string;
   user?: unknown;
+  role?: AuthRole;
+  reason?: "expired" | "unavailable" | "invalid-response";
 }
 
-export const getRoleForUrl = (url?: string): "admin" | "vendor" | "user" => {
-  const target = (url || (typeof window !== "undefined" ? window.location.pathname : "")).toLowerCase();
-  if (target.includes("/admin")) return "admin";
-  if (target.includes("/vendor")) return "vendor";
-  return "user";
-};
+export class AuthRefreshUnavailableError extends Error {
+  constructor() {
+    super("Authentication is temporarily unavailable. Please retry.");
+    this.name = "AuthRefreshUnavailableError";
+  }
+}
 
-/**
- * Single-flight refresh mutexes per role.
- * Guarantees exactly ONE concurrent refresh execution per role across parallel 401s,
- * preventing admin/vendor/user from interfering with each other.
- */
-const refreshPromises: Record<string, Promise<RefreshSessionResult> | null> = {
+const refreshPromises: Record<AuthRole, Promise<RefreshSessionResult> | null> = {
+  user: null,
   admin: null,
   vendor: null,
-  user: null,
 };
 
-export const performTokenRefresh = async (
-  hintUrl?: string,
-  specificRole?: "admin" | "vendor" | "user"
-): Promise<RefreshSessionResult> => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-  const role = specificRole || getRoleForUrl(hintUrl);
+async function executeTokenRefresh(
+  role: AuthRole,
+): Promise<RefreshSessionResult> {
+  const apiUrl = getApiBaseUrl();
   try {
     const csrf = getCsrfToken();
     const headers: Record<string, string> = {};
-    if (csrf) {
-      headers["x-csrf-token"] = csrf;
-    }
+    if (csrf) headers["x-csrf-token"] = csrf;
 
-    let refreshEndpoint = `${apiUrl}/auth/refresh`;
-    if (role === "admin") {
-      refreshEndpoint = `${apiUrl}/admin/auth/refresh`;
-    } else if (role === "vendor") {
-      refreshEndpoint = `${apiUrl}/vendors/auth/refresh`;
-    }
-
+    const refreshEndpoint =
+      role === "admin"
+        ? `${apiUrl}/admin/auth/refresh`
+        : role === "vendor"
+          ? `${apiUrl}/vendors/auth/refresh`
+          : `${apiUrl}/auth/refresh`;
     const res = await axios.post(
       refreshEndpoint,
       {},
-      {
-        withCredentials: true,
-        headers,
-      }
+      { withCredentials: true, headers },
     );
 
-    const data = res.data?.data || res.data;
-    if (data?.accessToken) {
-      setAuthTokens(role, {
-        accessToken: data.accessToken,
-      });
-      return {
-        success: true,
-        accessToken: data.accessToken,
-        user: data.user,
-      };
+    const freshCsrf =
+      res.headers?.["x-csrf-token"] ||
+      res.headers?.["X-CSRF-TOKEN"] ||
+      (typeof res.headers?.get === "function"
+        ? res.headers.get("x-csrf-token")
+        : undefined);
+    if (freshCsrf && typeof freshCsrf === "string") {
+      setCsrfToken(freshCsrf);
     }
-    return { success: false };
-  } catch {
-    clearAuthTokens(role);
-    authBroadcast.broadcast({ type: "SESSION_EXPIRED", role });
-    return { success: false };
+
+    const data = res.data?.data || res.data;
+    if (!data?.accessToken) {
+      return { success: false, reason: "invalid-response" };
+    }
+
+    const user = data.user ?? data.vendor ?? data.admin;
+    if (!user) {
+      return { success: false, reason: "invalid-response" };
+    }
+
+    const tokenRole = decodeRoleFromToken(data.accessToken);
+    const resolvedRole: AuthRole =
+      tokenRole ||
+      (user.role ? (String(user.role).toLowerCase() as AuthRole) : null) ||
+      role;
+
+    setAuthTokens(resolvedRole, { accessToken: data.accessToken });
+    authBroadcast.publish({
+      type: "SESSION_REFRESHED",
+      role: resolvedRole,
+      user: { ...user, role: resolvedRole },
+    });
+
+    return {
+      success: true,
+      accessToken: data.accessToken,
+      user: { ...user, role: resolvedRole },
+      role: resolvedRole,
+    };
+  } catch (error) {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    if (status === 401) {
+      const hadToken = Boolean(getAuthToken(role));
+      clearAuthTokens(role);
+      markSessionUnauthenticated(role);
+
+      // Only notify other tabs if the user actually had an active session that just expired.
+      // An unauthenticated guest checking session MUST NOT trigger SESSION_EXPIRED.
+      if (hadToken) {
+        authBroadcast.publish({ type: "SESSION_EXPIRED", role });
+      }
+      return { success: false, reason: "expired" };
+    }
+
+    return { success: false, reason: "unavailable" };
   }
+}
+
+/**
+ * Single-flight refresh lock across tabs and concurrent requests in this tab.
+ */
+export const performTokenRefresh = (
+  role: AuthRole,
+): Promise<RefreshSessionResult> => {
+  if (isSessionKnownUnauthenticated(role)) {
+    return Promise.resolve({ success: false, reason: "expired" });
+  }
+
+  const pending = refreshPromises[role];
+  if (pending) return pending;
+
+  const runRefresh = () => executeTokenRefresh(role);
+  const promise: Promise<RefreshSessionResult> = (async () => {
+    if (typeof navigator !== "undefined" && navigator.locks) {
+      return await navigator.locks.request(
+        `nuts-auth-refresh:${role}`,
+        { mode: "exclusive" },
+        runRefresh,
+      );
+    }
+    return await runRefresh();
+  })();
+
+  const trackedPromise = promise.finally(() => {
+    if (refreshPromises[role] === trackedPromise) {
+      refreshPromises[role] = null;
+    }
+  });
+
+  refreshPromises[role] = trackedPromise;
+  return trackedPromise;
 };
 
 axiosInstance.interceptors.request.use(async (config) => {
@@ -162,28 +229,15 @@ axiosInstance.interceptors.request.use(async (config) => {
 
   config.headers = config.headers || {};
 
-  // Attach role-aware access token from memory if present
-  const reqUrl = (config.url || "").toLowerCase();
-  let roleContext: string | undefined = undefined;
-  if (reqUrl.includes("/admin")) roleContext = "admin";
-  else if (reqUrl.includes("/vendor")) roleContext = "vendor";
-  else if (typeof window !== "undefined") {
-    const path = window.location.pathname.toLowerCase();
-    if (path.startsWith("/admin")) roleContext = "admin";
-    else if (path.startsWith("/vendor")) roleContext = "vendor";
-  }
-
-  const token = getAuthToken(roleContext);
+  // Attach in-memory access token as Bearer token if present
+  const role = config.authRole;
+  const token = role ? getAuthToken(role) : null;
   if (token && !extractHeader(config.headers, "Authorization")) {
     setHeader(config.headers, "Authorization", `Bearer ${token}`);
   }
 
   if (isMutating) {
-    let csrf = getCsrfToken();
-    if (!csrf && typeof window !== "undefined") {
-      await ensureCsrfToken();
-      csrf = getCsrfToken();
-    }
+    const csrf = getCsrfToken();
     if (csrf) {
       setHeader(config.headers, "x-csrf-token", csrf);
     }
@@ -208,43 +262,58 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config;
     if (!originalRequest) return Promise.reject(error);
 
-    const status = error.response?.status;
+    const isCsrfError =
+      error.response?.status === 403 &&
+      (error.response?.data?.errors?.[0]?.code === "CSRF_ERROR" ||
+        error.response?.data?.message === "CSRF token validation failed");
 
-    // 403 Forbidden is strictly an Authorization failure. Do NOT attempt refresh loops.
-    if (status === 403) {
-      return Promise.reject(error);
-    }
-
-    const is401 = status === 401;
-    const isAuthEndpoint =
-      originalRequest.url?.includes("/auth/refresh") ||
-      originalRequest.url?.includes("/auth/login") ||
-      originalRequest.url?.includes("/auth/register") ||
-      false;
-
-    if (is401 && !originalRequest._retry && !isAuthEndpoint) {
-      originalRequest._retry = true;
-      const role = getRoleForUrl(originalRequest.url);
-
-      if (!refreshPromises[role]) {
-        refreshPromises[role] = performTokenRefresh(originalRequest.url, role).finally(() => {
-          refreshPromises[role] = null;
-        });
-      }
-
-      const refreshed = await refreshPromises[role];
-      if (refreshed?.success && refreshed.accessToken) {
-        setHeader(originalRequest.headers, "Authorization", `Bearer ${refreshed.accessToken}`);
-        const freshCsrf = getCsrfToken();
-        if (freshCsrf) {
-          setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
-        }
+    if (isCsrfError && !originalRequest._csrfRetry) {
+      originalRequest._csrfRetry = true;
+      inMemoryCsrfToken = null;
+      const freshCsrf = getCsrfToken();
+      if (freshCsrf) {
+        setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
         return axiosInstance(originalRequest);
       }
     }
 
+    const role = originalRequest.authRole;
+    if (
+      error.response?.status !== 401 ||
+      !role ||
+      originalRequest._retry
+    ) {
+      return Promise.reject(error);
+    }
+
+    if (isSessionKnownUnauthenticated(role)) {
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+    const refreshed = await performTokenRefresh(role);
+    if (refreshed?.success && refreshed.accessToken) {
+      setHeader(
+        originalRequest.headers,
+        "Authorization",
+        `Bearer ${refreshed.accessToken}`,
+      );
+      const freshCsrf = getCsrfToken();
+      if (freshCsrf) {
+        setHeader(originalRequest.headers, "x-csrf-token", freshCsrf);
+      }
+      return axiosInstance(originalRequest);
+    }
+
+    if (
+      refreshed.reason === "unavailable" ||
+      refreshed.reason === "invalid-response"
+    ) {
+      return Promise.reject(new AuthRefreshUnavailableError());
+    }
+
     return Promise.reject(error);
-  }
+  },
 );
 
 export interface ApiResult<T, TMeta = PaginationMeta> {
@@ -271,37 +340,42 @@ const unwrap = <T, TMeta = PaginationMeta>(payload: unknown): ApiResult<T, TMeta
   return { data: payload as T };
 };
 
-export const api = {
+const createApiClient = (authRole: AuthRole | null) => ({
   get<T, TMeta = PaginationMeta>(url: string, config?: AxiosRequestConfig): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.get(url, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.get(url, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   post<T, TMeta = PaginationMeta>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.post(url, body, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.post(url, body, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   put<T, TMeta = PaginationMeta>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.put(url, body, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.put(url, body, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   patch<T, TMeta = PaginationMeta>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T, TMeta>> {
-    return axiosInstance.patch(url, body, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
+    return axiosInstance.patch(url, body, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T, TMeta>(res.data));
   },
   delete<T = void>(
     url: string,
     config?: AxiosRequestConfig
   ): Promise<ApiResult<T>> {
-    return axiosInstance.delete(url, config).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T>(res.data));
+    return axiosInstance.delete(url, { ...config, authRole }).then((res: AxiosResponse<ApiSuccessEnvelope<T>>) => unwrap<T>(res.data));
   },
-};
+});
+
+export const publicApi = createApiClient(null);
+export const userApi = createApiClient("user");
+export const vendorApi = createApiClient("vendor");
+export const adminApi = createApiClient("admin");
 
 export type { AxiosRequestConfig };

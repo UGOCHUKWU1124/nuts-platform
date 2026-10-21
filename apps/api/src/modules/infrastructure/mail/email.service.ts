@@ -1,17 +1,20 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
-import nodemailer, { SendMailOptions, Transporter } from 'nodemailer';
 import * as os from 'os';
 import * as path from 'path';
 
 import { CircuitBreakerService } from '@api/modules/infrastructure/resiliency/circuit-breaker.service';
+import {
+  EmailProvider,
+  SendEmailOptions,
+} from '@api/modules/shared/interfaces/email-provider.interface';
 import {
   generateInvoicePdf,
   PdfInvoiceData,
@@ -21,94 +24,30 @@ import {
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
 
-  /**
-   * Nodemailer maintains the SMTP connection pool for us.
-   *
-   * Keeping one transporter for the lifetime of the application is important.
-   * Creating a new transporter for every email would repeatedly establish SMTP
-   * connections and can exhaust provider connection limits.
-   */
-  private transporter: Transporter | null = null;
-
-  private readonly smtpHost: string | undefined;
-  private readonly smtpPort: number | undefined;
-  private readonly smtpUser: string | undefined;
-  private readonly smtpPass: string | undefined;
-  private readonly smtpService: string | undefined;
-  private readonly smtpSecure: boolean;
-  private readonly fromAddress: string;
-
   constructor(
-    private readonly configService: ConfigService,
+    @Inject('EMAIL_PROVIDER')
+    private readonly emailProvider: EmailProvider,
     private readonly circuitBreaker: CircuitBreakerService,
-  ) {
-    this.smtpHost = this.configService.get<string>('SMTP_HOST');
-    this.smtpUser = this.configService.get<string>('SMTP_USER');
-    this.smtpPass = this.configService.get<string>('SMTP_PASS');
-    this.smtpService = this.configService.get<string>('SMTP_SERVICE');
-
-    const portRaw = this.configService.get<string>('SMTP_PORT');
-
-    if (portRaw !== undefined && portRaw !== '') {
-      const parsedPort = Number(portRaw);
-
-      if (
-        !Number.isInteger(parsedPort) ||
-        parsedPort < 1 ||
-        parsedPort > 65535
-      ) {
-        throw new Error(
-          `Invalid SMTP_PORT "${portRaw}". SMTP_PORT must be a valid TCP port.`,
-        );
-      }
-
-      this.smtpPort = parsedPort;
-    }
-
-    /**
-     * SMTP_SECURE should explicitly control TLS when supplied.
-     *
-     * Otherwise:
-     * - Port 465 normally uses implicit TLS.
-     * - Ports such as 587 normally start unencrypted and upgrade through STARTTLS.
-     */
-    const secureRaw = this.configService.get<string>('SMTP_SECURE');
-
-    if (secureRaw !== undefined) {
-      const normalized = secureRaw.trim().toLowerCase();
-
-      if (normalized === 'true') {
-        this.smtpSecure = true;
-      } else if (normalized === 'false') {
-        this.smtpSecure = false;
-      } else {
-        throw new Error(
-          `Invalid SMTP_SECURE "${secureRaw}". Use "true" or "false".`,
-        );
-      }
-    } else {
-      this.smtpSecure = this.smtpPort === 465;
-    }
-
-    this.fromAddress =
-      this.configService.get<string>('EMAIL_FROM')?.trim() ||
-      'no-reply@example.com';
-
-    this.createTransporter();
-  }
+  ) {}
 
   /**
-   * Verify SMTP connectivity after Nest has initialized the provider.
-   *
-   * This is intentionally separate from the constructor because constructors
-   * should not perform asynchronous I/O.
+   * Verify provider credentials after Nest initializes the provider.
    */
   async onModuleInit(): Promise<void> {
-    await this.verifyTransporter();
+    const verified = await this.emailProvider.verifyConnection();
+    if (verified) {
+      this.logger.log(
+        `${this.emailProvider.name} email provider verified successfully`,
+      );
+    } else {
+      this.logger.warn(
+        `${this.emailProvider.name} email provider verification failed; email delivery may be unavailable`,
+      );
+    }
   }
 
   /**
-   * Sends an OTP/verification email.
+   * Sends an OTP/verification email tailored to the specific purpose.
    */
   async sendOtpEmail(
     to: string,
@@ -116,11 +55,25 @@ export class EmailService implements OnModuleInit {
     options?: {
       subject?: string;
       orderDetails?: string;
+      eyebrow?: string;
+      title?: string;
+      description?: string;
+      purpose?: string;
     },
   ): Promise<void> {
-    const subject = options?.subject ?? 'Your verification code';
+    const copy = this.getOtpCopyByPurpose(options?.purpose);
+    const subject = options?.subject || copy.subject;
+    const eyebrow = options?.eyebrow || copy.eyebrow;
+    const title = options?.title || copy.title;
+    const description = options?.description || copy.description;
 
-    const html = this.buildOtpHtml(otp, options?.orderDetails);
+    const html = this.buildOtpHtml({
+      otp,
+      eyebrow,
+      title,
+      description,
+      orderDetails: options?.orderDetails,
+    });
 
     await this.sendEmail({
       to,
@@ -129,7 +82,9 @@ export class EmailService implements OnModuleInit {
     });
 
     // Do not log OTPs or unnecessary recipient information.
-    this.logger.log('OTP email sent successfully');
+    this.logger.log(
+      `OTP email sent successfully (purpose: ${options?.purpose || 'default'})`,
+    );
   }
 
   /**
@@ -204,126 +159,19 @@ export class EmailService implements OnModuleInit {
   }
 
   /**
-   * Creates the SMTP transporter once during application startup.
-   *
-   * A connection pool is used so multiple emails can reuse SMTP connections
-   * instead of opening a new connection for every message.
-   */
-  private createTransporter(): void {
-    const hasAnySmtpSetting =
-      Boolean(this.smtpHost) ||
-      this.smtpPort !== undefined ||
-      Boolean(this.smtpUser) ||
-      Boolean(this.smtpPass) ||
-      Boolean(this.smtpService);
-
-    if (!hasAnySmtpSetting) {
-      this.logger.warn('SMTP is not configured. Email sending is disabled.');
-
-      return;
-    }
-
-    /**
-     * If SMTP configuration is partially supplied, fail immediately.
-     *
-     * Silently running with a broken SMTP configuration makes production
-     * failures much harder to diagnose.
-     */
-    if (!this.smtpUser || !this.smtpPass || this.smtpPort === undefined) {
-      throw new Error(
-        'Incomplete SMTP configuration. SMTP_PORT, SMTP_USER and SMTP_PASS are required.',
-      );
-    }
-
-    /**
-     * Nodemailer allows a service configuration instead of an SMTP host.
-     * If SMTP_SERVICE is configured, it can provide the provider-specific
-     * connection details.
-     */
-    if (!this.smtpService && !this.smtpHost) {
-      throw new Error(
-        'SMTP_HOST is required when SMTP_SERVICE is not configured.',
-      );
-    }
-
-    this.transporter = nodemailer.createTransport({
-      ...(this.smtpService
-        ? { service: this.smtpService }
-        : { host: this.smtpHost }),
-      port: this.smtpPort,
-      secure: this.smtpSecure,
-
-      /**
-       * Connection pooling prevents repeatedly creating SMTP connections.
-       */
-      pool: true,
-
-      /**
-       * Keep the pool deliberately bounded.
-       * The correct value depends on the SMTP provider's limits.
-       */
-      maxConnections: 5,
-
-      /**
-       * Prevent an idle connection from staying around forever.
-       */
-      maxMessages: 100,
-
-      auth: {
-        user: this.smtpUser,
-        pass: this.smtpPass,
-      },
-    });
-  }
-
-  /**
-   * Verifies SMTP connectivity once during application startup.
-   *
-   * Verification does not send an email. It checks whether the transporter
-   * can establish/authenticate an SMTP connection.
-   */
-  private async verifyTransporter(): Promise<void> {
-    if (!this.transporter) {
-      return;
-    }
-
-    try {
-      await this.transporter.verify();
-
-      this.logger.log('SMTP transporter verified successfully');
-    } catch (error) {
-      this.transporter = null;
-
-      this.logger.error(
-        'SMTP transporter verification failed',
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
-  }
-
-  /**
    * Centralized email sending.
    *
-   * Keeping sendMail in one place ensures every outgoing email uses the same
-   * configured sender and transporter.
+   * Keeping provider calls in one place ensures every outgoing email uses the
+   * same provider, circuit breaker, and safe error handling.
    */
-  public async sendEmail(options: SendMailOptions): Promise<void> {
-    if (!this.transporter) {
-      throw new ServiceUnavailableException(
-        'Email service is currently unavailable.',
-      );
-    }
-
+  public async sendEmail(options: SendEmailOptions): Promise<void> {
     try {
-      await this.circuitBreaker.executeSmtp(async () => {
-        await this.transporter!.sendMail({
-          from: this.fromAddress,
-          ...options,
-        });
+      await this.circuitBreaker.executeEmail(async () => {
+        await this.emailProvider.send(options);
       });
     } catch (error) {
       /**
-       * Do not expose SMTP credentials or the raw provider response to the
+       * Do not expose provider credentials or raw provider responses to the
        * caller. Log the technical error internally and return a safe error.
        */
       this.logger.error(
@@ -447,38 +295,121 @@ export class EmailService implements OnModuleInit {
     return `${normalizedCurrency} ${Number(amount).toFixed(2)}`;
   }
 
-  private buildOtpHtml(otp: string, orderDetails?: string): string {
-    const safeOtp = this.escapeHtml(otp);
+  /**
+   * Returns domain-tailored email copywriting matching the exact security context.
+   */
+  private getOtpCopyByPurpose(purpose?: string): {
+    eyebrow: string;
+    title: string;
+    description: string;
+    subject: string;
+  } {
+    switch (purpose) {
+      case 'account-deactivation':
+        return {
+          eyebrow: 'Account Security Alert',
+          title: 'Confirm Account Deactivation',
+          description:
+            'You recently requested to deactivate your NUTS account. If this was intentional, use the verification code below to authorize this action. You have a 60-day grace period to sign back in before permanent deletion:',
+          subject: 'NUTS — Account Deactivation Verification Code',
+        };
+      case 'admin:action':
+        return {
+          eyebrow: 'Admin Security Authorization',
+          title: 'Authorize Admin Action',
+          description:
+            'A sensitive administrative operation has been requested on the NUTS platform. Use the verification code below to authorize this operation:',
+          subject: 'NUTS — Admin Security Action Verification Code',
+        };
+      case 'password-reset':
+        return {
+          eyebrow: 'Account Security',
+          title: 'Reset Your Password',
+          description:
+            'We received a request to reset the password for your NUTS account. Use the verification code below to complete your password reset:',
+          subject: 'NUTS — Password Reset Verification Code',
+        };
+      case 'vendor:password-reset':
+        return {
+          eyebrow: 'Merchant Security',
+          title: 'Reset Merchant Password',
+          description:
+            'A password reset request was initiated for your NUTS Merchant account. Use the verification code below to establish a new password:',
+          subject: 'NUTS — Merchant Password Reset Verification Code',
+        };
+      case 'vendor:registration':
+        return {
+          eyebrow: 'Merchant Partner Verification',
+          title: 'Verify Your Merchant Account',
+          description:
+            'Thank you for partnering with NUTS. Please verify your merchant email address using the code below to activate your vendor dashboard:',
+          subject: 'NUTS — Verify your Merchant Account',
+        };
+      case 'payment':
+        return {
+          eyebrow: 'Payment Authorization',
+          title: 'Authorize Checkout Payment',
+          description:
+            'A verification code is required to authorize your order payment on NUTS. Use the code below to complete your checkout:',
+          subject: 'NUTS — Payment Authorization Code',
+        };
+      case 'email-verification':
+        return {
+          eyebrow: 'Email Verification',
+          title: 'Verify Your Email Address',
+          description:
+            'Please verify that this is your email address for your NUTS account. Use the code below to proceed:',
+          subject: 'NUTS — Email Verification Code',
+        };
+      case 'registration':
+      default:
+        return {
+          eyebrow: 'Account Verification',
+          title: 'Verify Your NUTS Account',
+          description:
+            'Welcome to NUTS! Please enter the 6-digit verification code below to confirm your email and activate your account:',
+          subject: 'NUTS — Verify your email address',
+        };
+    }
+  }
 
-    const detailsHtml = orderDetails
+  private buildOtpHtml(params: {
+    otp: string;
+    eyebrow: string;
+    title: string;
+    description: string;
+    orderDetails?: string;
+  }): string {
+    const safeOtp = this.escapeHtml(params.otp);
+    const safeEyebrow = this.escapeHtml(params.eyebrow);
+    const safeTitle = this.escapeHtml(params.title);
+    const safeDescription = this.escapeHtml(params.description);
+
+    const detailsHtml = params.orderDetails
       ? `
         <div class="details-box">
-          <p>${this.escapeHtml(orderDetails)}</p>
+          <p>${this.escapeHtml(params.orderDetails)}</p>
         </div>
       `
       : '';
 
     return this.wrapHtml(`
       <div class="email-header">
-        <p class="eyebrow">Secure login</p>
-        <h1>Verify your NUTS login</h1>
+        <p class="eyebrow">${safeEyebrow}</p>
+        <h1>${safeTitle}</h1>
       </div>
 
       <div class="email-body">
         ${detailsHtml}
 
-        <p>
-          Use the code below to continue.
-          It will expire in 10 minutes.
-        </p>
+        <p>${safeDescription}</p>
 
         <div class="otp-box">
           <span>${safeOtp}</span>
         </div>
 
         <p>
-          If you did not request this verification,
-          simply ignore this email.
+          This verification code will expire in 10 minutes. If you did not request this verification, please disregard this email or contact security support if you suspect unauthorized activity.
         </p>
       </div>
     `);

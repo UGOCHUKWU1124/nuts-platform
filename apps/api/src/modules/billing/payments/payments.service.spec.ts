@@ -13,7 +13,7 @@ import { PaymentsService } from './payments.service';
 
 const mockCircuitBreakerService = {
   executePaystack: jest.fn((fn: () => unknown) => fn()),
-  executeSmtp: jest.fn((fn: () => unknown) => fn()),
+  executeEmail: jest.fn((fn: () => unknown) => fn()),
   executeCloudinary: jest.fn((fn: () => unknown) => fn()),
   getStatus: jest.fn(),
 };

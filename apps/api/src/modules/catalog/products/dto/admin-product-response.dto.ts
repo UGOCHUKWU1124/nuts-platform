@@ -1,12 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AdminVariantResponseDto } from '@api/modules/product-variants/dto/admin-variant-response.dto';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 import type { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 
-class AdminProductCategoryRefDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() name!: string;
-  @ApiProperty() slug!: string;
-}
+export { CategoryRefDto as AdminProductCategoryRefDto };
 
 class AdminVendorRefDto {
   @ApiProperty() id!: string;
@@ -53,14 +50,14 @@ export class AdminProductResponseDto {
   variantCombinations?: VariantCombinations;
   @ApiProperty({ type: () => AdminVendorRefDto })
   vendor!: AdminVendorRefDto;
-  @ApiProperty({ type: () => AdminProductCategoryRefDto })
-  category!: AdminProductCategoryRefDto;
+  @ApiProperty({ type: () => CategoryRefDto })
+  category!: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => AdminProductCategoryRefDto })
-  parentSubcategory?: AdminProductCategoryRefDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  parentSubcategory?: CategoryRefDto;
 
-  @ApiPropertyOptional({ type: () => AdminProductCategoryRefDto })
-  subcategory?: AdminProductCategoryRefDto;
+  @ApiPropertyOptional({ type: () => CategoryRefDto })
+  subcategory?: CategoryRefDto;
   @ApiPropertyOptional({ type: () => AdminProductImageDto, isArray: true })
   images?: AdminProductImageDto[];
   @ApiProperty() isActive!: boolean;

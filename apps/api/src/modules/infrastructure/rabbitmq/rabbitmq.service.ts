@@ -146,6 +146,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       await this.channel.bindQueue(
         RABBITMQ_QUEUES.EMAILS,
         RABBITMQ_EXCHANGES.TOPIC,
+        RABBITMQ_QUEUES.EMAILS,
+      );
+      await this.channel.bindQueue(
+        RABBITMQ_QUEUES.EMAILS,
+        RABBITMQ_EXCHANGES.TOPIC,
         'email.*',
       );
       await this.channel.bindQueue(
@@ -157,6 +162,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       await this.channel.assertQueue(
         RABBITMQ_QUEUES.NOTIFICATIONS,
         queueOptions,
+      );
+      await this.channel.bindQueue(
+        RABBITMQ_QUEUES.NOTIFICATIONS,
+        RABBITMQ_EXCHANGES.TOPIC,
+        RABBITMQ_QUEUES.NOTIFICATIONS,
       );
       await this.channel.bindQueue(
         RABBITMQ_QUEUES.NOTIFICATIONS,

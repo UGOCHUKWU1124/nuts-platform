@@ -1,34 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderStatus, PaymentStatus } from '@prisma/client';
 import { OrderItemResponseDto } from './order-response.dto';
+import { UserIdentitySummaryDto } from '@api/modules/shared/dto/user-identity-summary.dto';
 
-export class OrderCustomerDto {
-  @ApiProperty({
-    description: 'Unique identifier of the customer',
-    example: 'usr-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Customer email address',
-    example: 'jane.doe@example.com',
-  })
-  email!: string;
-
-  @ApiPropertyOptional({
-    description: 'Customer first name',
-    example: 'Jane',
-    nullable: true,
-  })
-  firstName?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Customer last name',
-    example: 'Doe',
-    nullable: true,
-  })
-  lastName?: string | null;
-}
+export { UserIdentitySummaryDto as OrderCustomerDto };
 
 export class OrderVendorDto {
   @ApiProperty({
@@ -106,8 +81,8 @@ export class OrderStatusHistoryDto {
 
   @ApiProperty() createdAt!: Date;
 
-  @ApiPropertyOptional({ type: OrderCustomerDto, nullable: true })
-  changedBy!: OrderCustomerDto | null;
+  @ApiPropertyOptional({ type: UserIdentitySummaryDto, nullable: true })
+  changedBy!: UserIdentitySummaryDto | null;
 }
 
 export class AdminOrderResponseDto {
@@ -189,9 +164,9 @@ export class AdminOrderResponseDto {
 
   @ApiProperty({
     description: 'Customer who placed the order',
-    type: OrderCustomerDto,
+    type: UserIdentitySummaryDto,
   })
-  customer!: OrderCustomerDto;
+  customer!: UserIdentitySummaryDto;
 
   @ApiPropertyOptional({
     description: 'Vendor who owns the products in this order',

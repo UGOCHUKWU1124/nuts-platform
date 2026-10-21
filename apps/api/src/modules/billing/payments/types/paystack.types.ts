@@ -34,5 +34,9 @@ export type PaystackWebhookEvent = {
     status?: string;
     reference?: string;
     id?: number;
+    amount?: number;
+    currency?: string;
+    paid_at?: string;
+    metadata?: Record<string, unknown>;
   };
 };

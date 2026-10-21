@@ -95,7 +95,7 @@ export class PrismaService
      * Therefore, increasing this value blindly can exhaust PostgreSQL's
      * connection limit in production.
      */
-    const poolMax = getNumber('DB_CONNECTION_LIMIT', 10, 1);
+    const poolMax = getNumber('DB_CONNECTION_LIMIT', 15, 1);
 
     /**
      * How long an idle connection remains available in the pg pool.
@@ -111,7 +111,7 @@ export class PrismaService
      * This prevents requests from hanging indefinitely when the database is
      * unavailable or the pool is exhausted.
      */
-    const connectionTimeoutMs = getNumber('DB_POOL_TIMEOUT', 10, 1) * 1_000;
+    const connectionTimeoutMs = getNumber('DB_POOL_TIMEOUT', 30, 1) * 1_000;
 
     const adapter = new PrismaPg({
       connectionString,
@@ -219,6 +219,31 @@ export class PrismaService
      * slow query alerts during server boot.
      */
     await this.$queryRaw`SELECT 1`;
+
+    /**
+     * Self-healing production schema synchronization:
+     * Idempotently ensure crucial columns and partial performance indexes exist
+     * in the active database even if pending migrations have not been applied manually.
+     */
+    try {
+      await this.$executeRawUnsafe(
+        'ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "dedupeKey" TEXT;',
+      );
+      await this.$executeRawUnsafe(
+        'CREATE UNIQUE INDEX IF NOT EXISTS "notifications_dedupeKey_key" ON "notifications"("dedupeKey");',
+      );
+      await this.$executeRawUnsafe(
+        'CREATE INDEX IF NOT EXISTS "notifications_userId_role_isRead_createdAt_idx" ON "notifications"("userId", "role", "isRead", "createdAt");',
+      );
+      await this.$executeRawUnsafe(
+        'CREATE INDEX IF NOT EXISTS "outbox_events_pending_process_idx" ON "outbox_events" ("createdAt" ASC) WHERE "status" IN (\'PENDING\', \'FAILED\') AND "attempts" < 5;',
+      );
+    } catch (schemaSyncErr) {
+      this.logger.warn(
+        { err: schemaSyncErr },
+        'Self-healing schema verification skipped or encountered permission notice',
+      );
+    }
 
     /**
      * Prisma query events contain the SQL statement, duration and parameters.

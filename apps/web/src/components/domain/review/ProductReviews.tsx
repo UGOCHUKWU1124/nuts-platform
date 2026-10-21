@@ -8,7 +8,7 @@ import { queryKey } from "@/lib/query-key";
 import { useAuthStore } from "@/zustand/auth";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2,MessageSquarePlus,Star,Trash2,X } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -42,7 +42,7 @@ export function ProductReviews({
   const { data: reviewResponse, isLoading } = useQuery({
     queryKey: queryKey.product.review(productId),
     enabled: Boolean(productId) && !hasInitialData,
-    queryFn: () => reviewService.listByProduct(productId),
+    queryFn: ({ signal }) => reviewService.listByProduct(productId, signal),
     initialData: initialReviews ? { data: initialReviews.data, meta: initialReviews.meta } : undefined,
     staleTime: 1000 * 60 * 15,
     refetchOnMount: false,
@@ -202,9 +202,9 @@ export function ProductReviews({
 
           {/* Star Rating Picker */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-foreground mb-1.5">
+            <span className="block text-sm font-medium text-foreground mb-1.5">
               Overall Rating
-            </label>
+            </span>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => {

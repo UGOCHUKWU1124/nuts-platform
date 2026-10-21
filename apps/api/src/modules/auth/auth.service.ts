@@ -17,6 +17,8 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { VerifyOtpResponseDto } from './dto/auth-response.dto';
 import { OtpService } from './otp/otp.service';
 import {
   BCRYPT_COST_FACTOR,
@@ -26,6 +28,8 @@ import { USER_AUTH_SELECT, USER_LOGIN_SELECT } from './auth.selects';
 import type { AuthSession } from './types/auth.types';
 import { RefreshSessionService } from './sessions/refresh-session.service';
 import type { RefreshJwtPayload } from './types/refresh-jwt-payload.type';
+import type { AuthenticatedUser } from './types/authenticated-user.type';
+import { parseSuspension } from '@api/modules/users/utils/suspension.util';
 
 @Injectable()
 export class AuthService {
@@ -52,9 +56,15 @@ export class AuthService {
   ): Promise<AuthSession> {
     const email = this.normalizeEmail(dto.email);
 
-    // OTP verification happens before the database transaction because
-    // it is an external/stateful operation and does not need DB rollback.
-    await this.otpService.verifyOtp(email, dto.otpCode, 'registration');
+    // If already pre-verified in Step 2, consume verification token.
+    // Otherwise, verify and consume the OTP code directly.
+    const isPreVerified = await this.otpService.consumeVerification(
+      email,
+      'registration',
+    );
+    if (!isPreVerified) {
+      await this.otpService.verifyOtp(email, dto.otpCode, 'registration');
+    }
 
     // Validate the referral code before creating the user.
     // We only keep the IDs required inside the transaction.
@@ -84,6 +94,7 @@ export class AuthService {
             firstName: dto.firstName,
             lastName: dto.lastName,
             phone: dto.phone,
+            isEmailVerified: true,
           },
           select: USER_AUTH_SELECT,
         });
@@ -197,7 +208,7 @@ export class AuthService {
       user?.password ?? UNKNOWN_ACCOUNT_PASSWORD_HASH,
     );
 
-    if (!user || !passwordMatches || !user.isActive) {
+    if (!user || !passwordMatches) {
       this.fireAndForget(
         this.accountLockService.recordFailedAttempt(identifier),
         'failed login attempt',
@@ -216,6 +227,66 @@ export class AuthService {
       );
 
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.isActive) {
+      if (user.deactivatedBy) {
+        const suspension = parseSuspension(
+          user.deactivationReason,
+          user.deactivatedBy,
+        );
+
+        if (suspension.isExpired) {
+          // Automatic unsuspend because the suspension duration has elapsed
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+              isActive: true,
+              deactivatedAt: null,
+              deactivatedBy: null,
+              deactivationReason: null,
+              tokenVersion: { increment: 1 },
+            },
+          });
+
+          this.fireAndForget(
+            this.auditLog.log({
+              action: 'USER_AUTO_UNSUSPEND_EXPIRED',
+              entity: 'User',
+              entityId: user.id,
+              userId: user.id,
+              payload: {
+                reason: suspension.reason,
+                expiredAt: suspension.suspendedUntil?.toISOString() ?? null,
+              },
+              ipAddress,
+              userAgent,
+            }),
+            'auto-unsuspend audit log',
+          );
+        } else {
+          const dateStr = suspension.suspendedUntil
+            ? new Date(suspension.suspendedUntil).toLocaleString('en-US', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })
+            : null;
+
+          const detailMsg = dateStr
+            ? `Your account has been suspended until ${dateStr}. Reason: "${suspension.reason}". Please contact support if you need assistance.`
+            : `Your account has been suspended indefinitely. Reason: "${suspension.reason}". Please contact support if you need assistance.`;
+
+          throw new UnauthorizedException({
+            message: detailMsg,
+            code: 'ACCOUNT_SUSPENDED',
+            reason: suspension.reason,
+            suspendedUntil: suspension.suspendedUntil?.toISOString() ?? null,
+            isIndefinite: suspension.isIndefinite,
+          });
+        }
+      } else {
+        throw new UnauthorizedException('ACCOUNT_DEACTIVATED');
+      }
     }
 
     this.fireAndForget(
@@ -260,10 +331,23 @@ export class AuthService {
   async logout(
     userId: string,
     role: ROLE = ROLE.USER,
+    sessionId?: string,
+    refreshToken?: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
-    await this.refreshSessionService.revokeSession(userId, role, true);
+    if (role === ROLE.USER) {
+      if (sessionId) {
+        await this.refreshSessionService.revokeUserSession(userId, sessionId);
+      } else if (refreshToken) {
+        await this.refreshSessionService.revokeUserSessionByRefreshToken(
+          userId,
+          refreshToken,
+        );
+      }
+    } else {
+      await this.refreshSessionService.revokeSession(userId, role, true);
+    }
 
     this.fireAndForget(
       this.auditLog.log({
@@ -275,6 +359,26 @@ export class AuthService {
         userAgent,
       }),
       'logout audit log',
+    );
+  }
+
+  async logoutAll(
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.refreshSessionService.revokeAllUserSessions(userId);
+
+    this.fireAndForget(
+      this.auditLog.log({
+        action: 'USER_LOGOUT_ALL',
+        entity: 'User',
+        entityId: userId,
+        userId,
+        ipAddress,
+        userAgent,
+      }),
+      'logout-all audit log',
     );
   }
 
@@ -295,6 +399,14 @@ export class AuthService {
     }
 
     await this.otpService.createOtp(email, 'registration');
+  }
+
+  async verifyRegistrationOtp(
+    dto: VerifyOtpDto,
+  ): Promise<VerifyOtpResponseDto> {
+    const email = this.normalizeEmail(dto.email);
+    await this.otpService.verifyRegistrationOtp(email, dto.otpCode);
+    return { verified: true };
   }
 
   async requestPasswordResetOtp(dto: RequestOtpDto): Promise<void> {
@@ -332,17 +444,15 @@ export class AuthService {
         where: { email },
         data: {
           password,
-          refreshToken: null,
-          refreshTokenId: null,
-          tokenVersion: {
-            increment: 1,
-          },
         },
         select: {
           id: true,
           firstName: true,
         },
       });
+
+      // Revoke ALL sessions atomically (UserAuthSession + account-level tokens + Redis stamp)
+      await this.refreshSessionService.revokeAllUserSessions(user.id);
 
       this.fireAndForget(
         this.auditLog.log({
@@ -399,6 +509,77 @@ export class AuthService {
     } catch (error) {
       this.logger.warn('Failed to upgrade password hash', error);
     }
+  }
+
+  async getProfile(user: AuthenticatedUser) {
+    if (user.role === ROLE.VENDOR) {
+      const vendor = await this.prisma.vendor.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          storeName: true,
+          storeSlug: true,
+          storeDescription: true,
+          storeLogoUrl: true,
+          isVerified: true,
+          isActive: true,
+          isApproved: true,
+        },
+      });
+      if (!vendor) throw new UnauthorizedException('Vendor profile not found');
+      return {
+        ...vendor,
+        role: 'vendor' as const,
+        capabilities: {
+          canSell: Boolean(vendor.isApproved && vendor.isActive),
+        },
+      };
+    }
+
+    if (user.role === ROLE.ADMIN) {
+      const admin = await this.prisma.admin.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isActive: true,
+        },
+      });
+      if (!admin) throw new UnauthorizedException('Admin profile not found');
+      return {
+        ...admin,
+        role: 'admin' as const,
+        capabilities: {
+          canAdminister: Boolean(admin.isActive),
+        },
+      };
+    }
+
+    const customer = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        isActive: true,
+      },
+    });
+    if (!customer) throw new UnauthorizedException('User profile not found');
+    return {
+      ...customer,
+      role: 'user' as const,
+      capabilities: {
+        canPurchase: Boolean(customer.isActive),
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------

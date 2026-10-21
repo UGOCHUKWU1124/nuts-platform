@@ -2,16 +2,15 @@ import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiNotFoundResponse,
-  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { ApiEnvelopeResponse } from '@api/modules/shared/decorators/api-envelope-response.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
-import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import { CategoriesService } from './categories.service';
 import {
   CategoryBreadcrumbDto,
@@ -30,9 +29,7 @@ export class CategoriesController {
     description:
       'Retrieve the active category hierarchy with nested children and navigation metadata.',
   })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto[]>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto, { isArray: true })
   async getCategories(): Promise<CategoryResponseDto[]> {
     return this.categoriesService.getTree(false, false);
   }
@@ -42,9 +39,7 @@ export class CategoriesController {
     summary: 'Get public categories (alias)',
     description: 'Backward-compatible alias for GET /categories.',
   })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto[]>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto, { isArray: true })
   async getTree(): Promise<CategoryResponseDto[]> {
     return this.categoriesService.getTree(false, false);
   }
@@ -56,9 +51,7 @@ export class CategoriesController {
     description:
       'Retrieve top-level department/root categories for navigation.',
   })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto[]>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto, { isArray: true })
   async getRoots(): Promise<CategoryResponseDto[]> {
     return this.categoriesService.getRootCategories(false);
   }
@@ -71,9 +64,7 @@ export class CategoriesController {
       'Search for categories by name, slug, or path, returning results with breadcrumbs.',
   })
   @ApiQuery({ name: 'q', required: true, description: 'Search keyword' })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto[]>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto, { isArray: true })
   async search(@Query('q') query: string): Promise<CategoryResponseDto[]> {
     return this.categoriesService.searchCategories(query, false);
   }
@@ -92,9 +83,7 @@ export class CategoriesController {
   })
   @ApiNotFoundResponse({ description: 'Path not found' })
   @ApiBadRequestResponse({ description: 'Invalid path parameter' })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto)
   async findByPath(
     @Param() params: Record<string, string | string[] | undefined>,
     @Req() req: Request,
@@ -135,9 +124,7 @@ export class CategoriesController {
       'Returns the ordered chain of ancestors from root down to this category.',
   })
   @ApiParam({ name: 'idOrSlug', description: 'Category UUID or slug' })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryBreadcrumbDto[]>,
-  })
+  @ApiEnvelopeResponse(CategoryBreadcrumbDto, { isArray: true })
   async getBreadcrumbs(
     @Param('idOrSlug') idOrSlug: string,
   ): Promise<CategoryBreadcrumbDto[]> {
@@ -155,9 +142,7 @@ export class CategoriesController {
       'Returns all direct child categories under the specified category node.',
   })
   @ApiParam({ name: 'idOrSlug', description: 'Category UUID or slug' })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto[]>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto, { isArray: true })
   async getChildren(
     @Param('idOrSlug') idOrSlug: string,
   ): Promise<CategoryResponseDto[]> {
@@ -175,9 +160,7 @@ export class CategoriesController {
   })
   @ApiParam({ name: 'slug', description: 'Category slug or UUID' })
   @ApiNotFoundResponse({ description: 'Category not found' })
-  @ApiOkResponse({
-    type: ApiResponseDto<CategoryResponseDto>,
-  })
+  @ApiEnvelopeResponse(CategoryResponseDto)
   async findOne(@Param('slug') slug: string): Promise<CategoryResponseDto> {
     return this.categoriesService
       .findBySlug(slug, false)

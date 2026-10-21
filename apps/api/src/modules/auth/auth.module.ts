@@ -31,11 +31,16 @@ import { JwtRefreshStrategy } from './strategies/refresh/jwt-refresh.strategy';
     JwtModule.registerAsync({
       inject: [ConfigService],
 
-      useFactory: (config: ConfigService) => ({
-        secret: config.getOrThrow<string>('JWT_SECRET'),
-        issuer: config.getOrThrow<string>('JWT_ISSUER'),
-        audience: config.getOrThrow<string>('JWT_ACCESS_AUDIENCE'),
-      }),
+      useFactory: (config: ConfigService) => {
+        return {
+          secret: config.getOrThrow<string>('JWT_SECRET'),
+          issuer: config.getOrThrow<string>('JWT_ISSUER'),
+          audience: config.getOrThrow<string>('JWT_ACCESS_AUDIENCE'),
+          signOptions: {
+            algorithm: 'HS256' as const,
+          },
+        };
+      },
     }),
   ],
 
@@ -60,6 +65,7 @@ import { JwtRefreshStrategy } from './strategies/refresh/jwt-refresh.strategy';
     JwtRefreshStrategy,
     JwtRefreshGuard,
     AuthSessionService,
+    RefreshSessionService,
   ],
 })
 export class AuthModule {}

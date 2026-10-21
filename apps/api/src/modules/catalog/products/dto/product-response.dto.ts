@@ -1,18 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { VariantSummaryDto } from '@api/modules/product-variants/dto/variant-response.dto';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
 import type { VariantCombinations } from '@api/modules/shared/dto/variant-combinations.dto';
 import { VendorSummaryDto } from './vendor-summary.dto';
 
-class ProductCategoryRefDto {
-  @ApiProperty({ description: 'Unique identifier of the category' })
-  id!: string;
-
-  @ApiProperty({ description: 'Display name of the category' })
-  name!: string;
-
-  @ApiProperty({ description: 'URL-friendly category slug' })
-  slug!: string;
-}
+export { CategoryRefDto as ProductCategoryRefDto };
 
 class ProductImageDto {
   @ApiProperty() id!: string;
@@ -85,21 +77,21 @@ export class ProductResponseDto {
 
   @ApiProperty({
     description: 'Main category this product belongs to',
-    type: () => ProductCategoryRefDto,
+    type: () => CategoryRefDto,
   })
-  category!: ProductCategoryRefDto | null;
+  category!: CategoryRefDto | null;
 
   @ApiPropertyOptional({
     description: 'Parent subcategory this product belongs to (optional)',
-    type: () => ProductCategoryRefDto,
+    type: () => CategoryRefDto,
   })
-  parentSubcategory?: ProductCategoryRefDto | null;
+  parentSubcategory?: CategoryRefDto | null;
 
   @ApiPropertyOptional({
     description: 'Subcategory this product belongs to (optional)',
-    type: () => ProductCategoryRefDto,
+    type: () => CategoryRefDto,
   })
-  subcategory?: ProductCategoryRefDto | null;
+  subcategory?: CategoryRefDto | null;
 
   @ApiPropertyOptional({
     description: 'Legacy field for backward compatibility',

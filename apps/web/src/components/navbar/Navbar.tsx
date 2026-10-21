@@ -1,7 +1,6 @@
 "use client";
 
 import {
-Bell,
 ChevronDown,
 Heart,
 LayoutDashboard,
@@ -11,45 +10,41 @@ Search,
 Settings,
 Shield,
 ShoppingCart,
+Store,
 User as UserIcon,
 Wallet,
-X,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
 
 import type { CategoryResponseDto } from "@/api/dto/category";
 import { CategoryNavMenu } from "@/component/category/CategoryNavMenu";
 import { NotificationBell } from "@/component/notification/NotificationBell";
-import { GlobalSearchBar } from "@/component/search/GlobalSearchBar";
 import { useCart } from "@/hook/use-cart";
 import { useHydrated } from "../../hook/use-hydrated";
 import { useWishlist } from "@/hook/use-wishlist";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useAuthStore } from "@/zustand/auth";
+import { logoutWithFeedback } from "@/lib/logout";
+
+import { SearchDrawer } from "@/components/search/SearchDrawer";
 
 export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = {}) {
+  const { data: cachedCategories } = usePublicCategories(categories);
+  const navCategories = cachedCategories ?? categories;
   const pathname = usePathname();
   const { user, isAuthenticated, role, logout } = useAuthStore();
   const isMounted = useHydrated();
   const [accountOpen, setAccountOpen] = useState(false);
-  const [mobileSearchPath, setMobileSearchPath] = useState<string | null>(null);
-  const mobileSearchOpen = mobileSearchPath === pathname;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const hasSessionCookie =
-    typeof document !== "undefined" &&
-    (document.cookie.includes("user_session=1") ||
-      document.cookie.includes("vendor_session=1") ||
-      document.cookie.includes("admin_session=1") ||
-      document.cookie.includes("user_access_token") ||
-      document.cookie.includes("vendor_access_token") ||
-      document.cookie.includes("admin_access_token"));
+  const isLoggedIn = isAuthenticated && (!!user || !!role);
+  const capabilities = useAuthStore((state) => state.capabilities);
+  const canPurchase = capabilities ? capabilities.canPurchase : !isLoggedIn;
+  const canSell = capabilities?.canSell ?? false;
+  const canAdminister = capabilities?.canAdminister ?? false;
 
-  const isLoggedIn =
-    (isAuthenticated && (!!user || !!role)) ||
-    (Boolean(user) && hasSessionCookie);
-  const userRole = (role ?? user?.role ?? "").toLowerCase();
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
 
@@ -58,6 +53,8 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
     return pathname.startsWith(href);
   };
 
+  const [searchDrawerOpen, setSearchDrawerOpen] = useState(false);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -65,8 +62,19 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
       }
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        setSearchDrawerOpen((prev) => !prev);
+      }
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const firstName = user?.firstName ?? "";
@@ -77,17 +85,17 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
     ? `${firstName[0]}${lastName ? lastName[0] : ""}`.toUpperCase()
     : user?.email?.[0]?.toUpperCase() || "U";
 
-  const roleLabel = userRole === "admin" ? "Administrator" : userRole === "vendor" ? "Vendor" : "Member";
-  const portalHref = userRole === "admin" ? "/admin" : userRole === "vendor" ? "/vendor/analytic" : null;
-  const portalLabel = userRole === "admin" ? "Admin Panel" : "Vendor Portal";
-  const PortalIcon = userRole === "admin" ? Shield : LayoutDashboard;
+  const roleLabel = canAdminister ? "Administrator" : canSell ? "Vendor" : "Member";
+  const DashboardIcon = canAdminister ? Shield : LayoutDashboard;
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 lg:px-8">
         {/* Left: Category Menu, Brand Logo & Main Nav */}
         <div className="flex items-center gap-2.5 sm:gap-5 min-w-0">
-          <CategoryNavMenu categories={categories} />
+          <div className="hidden xl:flex">
+            <CategoryNavMenu categories={navCategories} />
+          </div>
 
           <Link href="/" className="flex shrink-0 items-center gap-1 group">
             <span className="text-xl sm:text-2xl font-bold tracking-tight text-foreground transition-transform group-hover:scale-105">
@@ -95,7 +103,7 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-6 ml-3">
+          <nav className="hidden xl:flex items-center gap-6 ml-3">
             <Link
               href="/"
               className={`text-sm font-medium transition-colors ${
@@ -123,14 +131,19 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
           </nav>
         </div>
 
-        {/* Center: Search Bar (Desktop / Tablet) */}
-        <div className="hidden md:block flex-1 max-w-md mx-4 lg:mx-6">
-          <GlobalSearchBar
-            categories={categories}
-            variant="navbar"
-            placeholder="Search products, vendors, categories..."
-            className="w-full"
-          />
+        {/* Center: Search Trigger (Desktop / Tablet) */}
+        <div className="hidden md:block flex-1 max-w-md mx-3 lg:mx-6">
+          <button
+            type="button"
+            onClick={() => setSearchDrawerOpen(true)}
+            className="flex w-full items-center justify-between rounded-full border border-border/80 bg-secondary/60 px-4 py-2 text-sm text-muted-foreground transition-all hover:border-black dark:hover:border-white hover:bg-card hover:text-foreground cursor-pointer group shadow-2xs"
+            aria-label="Open search drawer"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+              <span className="truncate">Search products, vendors, categories...</span>
+            </div>
+          </button>
         </div>
 
         {/* Right: Actions */}
@@ -138,48 +151,58 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
           {/* Mobile Search Toggle Button */}
           <button
             type="button"
-            onClick={() => setMobileSearchPath((current) => current === pathname ? null : pathname)}
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            aria-label="Toggle mobile search"
+            onClick={() => setSearchDrawerOpen(true)}
+            className="md:hidden flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground cursor-pointer"
+            aria-label="Open search drawer"
           >
-            {mobileSearchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+            <Search className="h-5 w-5" />
           </button>
 
-          <Link
-            href="/wishlist"
-            className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all ${
-              isLinkActive("/wishlist")
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-            aria-label="Wishlist"
-          >
-            <Heart className="h-5 w-5" />
-            {isMounted && wishlistCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
-                {wishlistCount}
-              </span>
-            )}
-          </Link>
+          {/* Wishlist and Cart - Only show for customer sessions */}
+          {canPurchase && (
+            <>
+              <Link
+                href="/wishlist"
+                className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
+                  isLinkActive("/wishlist")
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+                aria-label="Wishlist"
+              >
+                <Heart className="h-5 w-5" />
+                {isMounted && wishlistCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
 
-          <Link
-            href="/cart"
-            className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all ${
-              isLinkActive("/cart")
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-            aria-label="Shopping Cart"
-          >
-            <ShoppingCart className="h-5 w-5" />
-            {isMounted && cartCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
-                {cartCount}
-              </span>
-            )}
-          </Link>
+              <Link
+                href="/cart"
+                className={`relative hidden h-9 w-9 items-center justify-center rounded-full transition-all xl:flex ${
+                  isLinkActive("/cart")
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+                aria-label="Shopping Cart"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {isMounted && cartCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+            </>
+          )}
 
-          {isMounted && isLoggedIn && <NotificationBell />}
+          {isMounted && isLoggedIn && (
+            <div className="hidden xl:block">
+              <NotificationBell />
+            </div>
+          )}
+
 
           {!isMounted ? (
             <div className="flex items-center gap-2 opacity-0 pointer-events-none" aria-hidden="true">
@@ -244,84 +267,151 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
                   </div>
 
                   <div className="space-y-0.5">
-                    {portalHref && (
-                      <Link
-                        href={portalHref}
-                        onClick={() => setAccountOpen(false)}
-                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                      >
-                        <PortalIcon className="h-4 w-4 text-foreground" />
-                        {portalLabel}
-                      </Link>
+                    {canSell ? (
+                      <>
+                        <Link
+                          href="/vendor/analytic"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <DashboardIcon className="h-4 w-4 text-foreground" />
+                          Vendor Dashboard
+                        </Link>
+                        <Link
+                          href="/vendor/product"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                          My Products
+                        </Link>
+                        <Link
+                          href="/vendor/order"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                          Store Orders
+                        </Link>
+                        <Link
+                          href="/vendor/wallet"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Wallet className="h-4 w-4 text-muted-foreground" />
+                          Vendor Wallet
+                        </Link>
+                        <Link
+                          href="/vendor/setting"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Settings className="h-4 w-4 text-muted-foreground" />
+                          Store Settings
+                        </Link>
+                        {user?.storeSlug && (
+                          <Link
+                            href={`/vendor/${user.storeSlug}`}
+                            onClick={() => setAccountOpen(false)}
+                            className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                          >
+                            <Store className="h-4 w-4 text-muted-foreground" />
+                            My Storefront
+                          </Link>
+                        )}
+                      </>
+                    ) : canAdminister ? (
+                      <>
+                        <Link
+                          href="/admin"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <DashboardIcon className="h-4 w-4 text-foreground" />
+                          Admin Dashboard
+                        </Link>
+                        <Link
+                          href="/admin/product"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                          Manage Products
+                        </Link>
+                        <Link
+                          href="/admin/order"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                          Manage Orders
+                        </Link>
+                        <Link
+                          href="/admin/user"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          Manage Users
+                        </Link>
+                        <Link
+                          href="/admin/vendor"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Store className="h-4 w-4 text-muted-foreground" />
+                          Manage Vendors
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href="/account"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          My Account
+                        </Link>
+                        <Link
+                          href="/order"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                          My Orders
+                        </Link>
+                        <Link
+                          href="/wallet"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Wallet className="h-4 w-4 text-muted-foreground" />
+                          My Wallet
+                        </Link>
+                        <Link
+                          href="/account/setting"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <Settings className="h-4 w-4 text-muted-foreground" />
+                          Settings & Preferences
+                        </Link>
+                      </>
                     )}
-
-                    <Link
-                      href="/account"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <UserIcon className="h-4 w-4 text-muted-foreground" />
-                      My Account
-                    </Link>
-
-                    <Link
-                      href="/order"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Package className="h-4 w-4 text-muted-foreground" />
-                      My Orders
-                    </Link>
-
-                    <Link
-                      href="/wallet"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Wallet className="h-4 w-4 text-muted-foreground" />
-                      My Wallet
-                    </Link>
-
-                    <Link
-                      href="/wishlist"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Heart className="h-4 w-4 text-muted-foreground" />
-                      Saved Wishlist
-                    </Link>
-
-                    <Link
-                      href={
-                        userRole === "admin"
-                          ? "/admin/notifications"
-                          : userRole === "vendor"
-                          ? "/vendor/notifications"
-                          : "/account/notifications"
-                      }
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      Notifications
-                    </Link>
-
-                    <Link
-                      href="/account/setting"
-                      onClick={() => setAccountOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-                    >
-                      <Settings className="h-4 w-4 text-muted-foreground" />
-                      Settings & Security
-                    </Link>
                   </div>
 
                   <div className="border-t border-border my-1 pt-1">
                     <button
                       type="button"
-                      onClick={async () => {
+                      onClick={() => {
                         setAccountOpen(false);
-                        await logout({ redirectTo: "/auth/login" });
+                        const redirectPath = canAdminister
+                          ? "/auth/admin/login"
+                          : canSell
+                            ? "/auth/vendor/login"
+                            : "/auth/login";
+                        void logoutWithFeedback(logout, { redirectTo: redirectPath });
                       }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
                     >
@@ -336,17 +426,12 @@ export function Navbar({ categories }: { categories?: CategoryResponseDto[] } = 
         </div>
       </div>
 
-      {/* Mobile Search Dropdown */}
-      {mobileSearchOpen && (
-        <div className="md:hidden border-t border-border/80 bg-background/95 backdrop-blur-md px-4 py-2.5 shadow-md animate-in slide-in-from-top-2 duration-150">
-          <GlobalSearchBar
-            categories={categories}
-            variant="navbar"
-            placeholder="Search products, vendors, categories..."
-            className="w-full"
-          />
-        </div>
-      )}
+      {/* Global Search Popout Drawer with Recommended For You & Quick Suggestions */}
+      <SearchDrawer
+        isOpen={searchDrawerOpen}
+        onClose={() => setSearchDrawerOpen(false)}
+        categories={navCategories}
+      />
     </header>
   );
 }

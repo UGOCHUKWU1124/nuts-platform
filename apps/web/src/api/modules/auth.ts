@@ -1,7 +1,10 @@
-import { api } from "@/api/core/client";
+import { adminApi, publicApi, userApi, vendorApi } from "@/api/core/client";
 import type {
+AdminAuthResponseDto,
 AdminLoginPayload,
 AdminSetupPayload,
+AuthProfileDto,
+AuthUserDto,
 AuthResponseDto,
 LoginPayload,
 OtpRequestPayload,
@@ -16,73 +19,87 @@ VerifyOtpResponseDto,
 
 export const authService = {
   requestOtp(payload: OtpRequestPayload) {
-    return api.post<VerifyOtpResponseDto>("/auth/otp/request", payload);
+    return publicApi.post<VerifyOtpResponseDto>("/auth/otp/request", payload);
   },
   requestRegistrationOtp(payload: OtpRequestPayload) {
-    return api.post<VerifyOtpResponseDto>("/auth/otp/request", payload);
+    return publicApi.post<VerifyOtpResponseDto>("/auth/otp/request", payload);
+  },
+  verifyRegistrationOtp(payload: { email: string; otpCode: string }) {
+    return publicApi.post<VerifyOtpResponseDto>("/auth/otp/verify", payload);
   },
   requestPasswordResetOtp(payload: { email: string }) {
-    return api.post<{ message: string }>("/auth/forgot-password", payload);
+    return publicApi.post<{ message: string }>("/auth/forgot-password", payload);
   },
   register(payload: RegisterPayload) {
-    return api.post<RegisterResponseDto>("/auth/register", payload);
+    return publicApi.post<RegisterResponseDto>("/auth/register", payload);
   },
   resetPassword(payload: ResetPasswordPayload) {
     const { otp, otpCode, ...rest } = payload;
-    return api.post<{ message: string }>("/auth/reset-password", {
+    return publicApi.post<{ message: string }>("/auth/reset-password", {
       ...rest,
       otpCode: otpCode ?? otp,
     });
   },
   login(payload: LoginPayload) {
-    return api.post<AuthResponseDto>("/auth/login", payload);
+    return publicApi.post<AuthResponseDto>("/auth/login", payload);
   },
   me() {
-    return api.get<{ id: string; email: string; firstName?: string; lastName?: string }>("/auth/me");
+    return userApi.get<AuthProfileDto>("/auth/me");
   },
   refresh() {
-    return api.post<AuthResponseDto>("/auth/refresh");
+    return publicApi.post<AuthResponseDto>("/auth/refresh");
   },
   logout() {
-    return api.post<void>("/auth/logout");
+    return userApi.post<void>("/auth/logout");
+  },
+  logoutAll() {
+    return userApi.post<void>("/auth/logout-all");
   },
 };
 
 export const adminAuthService = {
   setup(payload: AdminSetupPayload) {
-    return api.post<AuthResponseDto>("/admin/auth/setup", payload);
+    return publicApi.post<AdminAuthResponseDto>("/admin/auth/setup", payload);
   },
   login(payload: AdminLoginPayload) {
-    return api.post<AuthResponseDto>("/admin/auth/login", payload);
+    return publicApi.post<AdminAuthResponseDto>("/admin/auth/login", payload);
   },
   me() {
-    return api.get<AuthResponseDto>("/admin/auth/me");
+    return adminApi.get<AuthUserDto>("/admin/auth/me");
   },
   updateMe(payload: { firstName?: string; lastName?: string }) {
-    return api.patch<AuthResponseDto>("/admin/auth/me", payload);
+    return adminApi.patch<AdminAuthResponseDto>("/admin/auth/me", payload);
   },
   refresh() {
-    return api.post<AuthResponseDto>("/admin/auth/refresh");
+    return publicApi.post<AdminAuthResponseDto>("/admin/auth/refresh");
   },
   logout() {
-    return api.post<void>("/admin/auth/logout");
+    return adminApi.post<void>("/admin/auth/logout");
   },
 };
 
 export const vendorAuthService = {
   requestOtp(payload: VendorOtpRequestPayload) {
-    return api.post<VerifyOtpResponseDto>("/vendors/auth/otp/request", payload);
+    return publicApi.post<VerifyOtpResponseDto>("/vendors/auth/otp/request", payload);
   },
   register(payload: VendorRegisterPayload) {
-    return api.post<RegisterResponseDto>("/vendors/auth/register", payload);
+    return publicApi.post<RegisterResponseDto>("/vendors/auth/register", payload);
   },
   login(payload: VendorLoginPayload) {
-    return api.post<import("@/api/dto/vendor").VendorAuthSessionDto>(
+    return publicApi.post<import("@/api/dto/vendor").VendorAuthSessionDto>(
       "/vendors/auth/login",
       payload
     );
   },
+  me() {
+    return vendorApi.get<import("@/api/dto/vendor").VendorResponseDto>("/vendors/me");
+  },
+  refresh() {
+    return publicApi.post<import("@/api/dto/vendor").VendorAuthSessionDto>(
+      "/vendors/auth/refresh"
+    );
+  },
   logout() {
-    return api.post<void>("/vendors/auth/logout");
+    return vendorApi.post<void>("/vendors/auth/logout");
   },
 };

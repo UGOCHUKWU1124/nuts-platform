@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/api/core/client";
+import { adminApi } from "@/api/core/client";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
 import { PageHeader } from "@/component/common/PageHeader";
 import { DataTable,type Column } from "@/component/data/DataTable";
@@ -28,6 +28,7 @@ Check,
 Copy,
 Pencil,
 Plus,
+RotateCcw,
 Tag,
 Trash2
 } from "lucide-react";
@@ -72,6 +73,7 @@ export default function AdminDiscountPage() {
   const [editingDiscount, setEditingDiscount] = useState<AdminDiscount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminDiscount | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<AdminDiscount | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<AdminDiscount | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -79,10 +81,12 @@ export default function AdminDiscountPage() {
   const pageSize = 15;
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: queryKey.admin.discount,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
-      const res = await api.get<AdminDiscount[]>("/admin/discounts");
+      const res = await adminApi.get<AdminDiscount[]>("/admin/discounts");
       return res.data;
     },
   });
@@ -122,7 +126,7 @@ export default function AdminDiscountPage() {
 
   const createMutation = useMutation({
     mutationFn: (values: CreateDiscountFormData) =>
-      api.post("/admin/discounts", discountPayload(values)),
+      adminApi.post("/admin/discounts", discountPayload(values)),
     onSuccess: () => {
       toast.success("Discount coupon code created successfully!");
       refreshDiscounts();
@@ -142,7 +146,7 @@ export default function AdminDiscountPage() {
     }: {
       id: string;
       values: CreateDiscountFormData;
-    }) => api.patch(`/admin/discounts/${id}`, discountPayload(values)),
+    }) => adminApi.patch(`/admin/discounts/${id}`, discountPayload(values)),
     onSuccess: () => {
       toast.success("Discount coupon updated successfully!");
       refreshDiscounts();
@@ -154,7 +158,7 @@ export default function AdminDiscountPage() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (id: string) => api.patch(`/admin/discounts/${id}/deactivate`),
+    mutationFn: (id: string) => adminApi.patch(`/admin/discounts/${id}/deactivate`),
     onSuccess: () => {
       toast.success("Discount code deactivated");
       refreshDiscounts();
@@ -164,8 +168,19 @@ export default function AdminDiscountPage() {
       toast.error(err?.response?.data?.message ?? "Failed to deactivate discount code"),
   });
 
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => adminApi.patch(`/admin/discounts/${id}/reactivate`),
+    onSuccess: () => {
+      toast.success("Discount code reactivated successfully");
+      refreshDiscounts();
+      setReactivateTarget(null);
+    },
+    onError: (err: AxiosError<{ message: string }>) =>
+      toast.error(err?.response?.data?.message ?? "Failed to reactivate discount code"),
+  });
+
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/discounts/${id}`),
+    mutationFn: (id: string) => adminApi.delete(`/admin/discounts/${id}`),
     onSuccess: () => {
       toast.success("Discount code deleted permanently");
       refreshDiscounts();
@@ -306,7 +321,7 @@ export default function AdminDiscountPage() {
             <Pencil className="h-3.5 w-3.5" />
           </Button>
 
-          {r.isActive && (
+          {r.isActive ? (
             <Button
               variant="ghost"
               size="sm"
@@ -315,6 +330,16 @@ export default function AdminDiscountPage() {
               onClick={() => setDeactivateTarget(r)}
             >
               <Ban className="h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Reactivate code"
+              className="h-8 w-8 p-0 rounded-lg text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              onClick={() => setReactivateTarget(r)}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
             </Button>
           )}
 
@@ -364,10 +389,16 @@ export default function AdminDiscountPage() {
           { value: "active", label: "Active Coupons" },
           { value: "inactive", label: "Disabled Coupons" },
         ]}
+        onRefresh={refreshDiscounts}
+        isLoading={isLoading || isFetching}
       />
 
       {(() => {
-        const rawList: AdminDiscount[] = Array.isArray(data) ? data : [];
+        const rawList: AdminDiscount[] = Array.isArray(data)
+          ? data
+          : data && typeof data === "object" && "data" in data && Array.isArray((data as { data: unknown }).data)
+          ? ((data as { data: AdminDiscount[] }).data)
+          : [];
         const term = search.trim().toLowerCase();
         const filtered = rawList.filter((discount: AdminDiscount) => {
           const matchesSearch = !term || `${discount.code} ${discount.description ?? ""}`.toLowerCase().includes(term);
@@ -385,6 +416,7 @@ export default function AdminDiscountPage() {
             columns={columns}
             data={paginated}
             isLoading={isLoading}
+            isFetching={isFetching}
             emptyMessage="No promotion discount codes found."
             pagination={{
               page,
@@ -551,6 +583,24 @@ export default function AdminDiscountPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM REACTIVATE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(reactivateTarget)}
+        onOpenChange={(v) => !v && setReactivateTarget(null)}
+        title="Reactivate Discount Code"
+        description={
+          <>
+            Reactivate coupon code <strong>&quot;{reactivateTarget?.code}&quot;</strong>? Customers will immediately be able to apply this discount at checkout.
+          </>
+        }
+        confirmText="Reactivate Code"
+        variant="default"
+        isLoading={reactivateMutation.isPending}
+        onConfirm={() =>
+          reactivateTarget && reactivateMutation.mutate(reactivateTarget.id)
+        }
       />
     </div>
   );

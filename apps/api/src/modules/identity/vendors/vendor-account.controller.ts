@@ -10,7 +10,7 @@ import {
   Patch,
   Post,
   Req,
-  UseGuards,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -24,9 +24,9 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
-import { AuthStrategy } from '@api/modules/shared/decorators/auth-strategy.decorator';
+import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
@@ -35,19 +35,22 @@ import {
   extractIpAddress,
   extractUserAgent,
 } from '@api/modules/shared/utils/request.util';
+import { ROLE } from '@prisma/client';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { VendorReactivateDto } from './dto/vendor-reactivate.dto';
 import { VendorProfileDto } from './dto/vendor-response.dto';
 import { VendorStatusResponseDto } from './dto/vendor-status-response.dto';
-import { VendorJwtAuthGuard } from './guards/vendor-auth.guard';
 import { VendorsService } from './vendors.service';
 
 @ApiTags('VENDORS - ACCOUNT')
 @Controller('vendors')
-@AuthStrategy('vendor-jwt')
-@UseGuards(VendorJwtAuthGuard)
+@Roles(ROLE.VENDOR)
 export class VendorAccountController {
-  constructor(private readonly vendorsService: VendorsService) {}
+  constructor(
+    private readonly vendorsService: VendorsService,
+    private readonly authCookies: AuthCookieService,
+  ) {}
 
   @Get('me')
   @ApiBearerAuth('JWT-auth')
@@ -166,7 +169,8 @@ export class VendorAccountController {
   @Message('Vendor account deactivated successfully')
   @ApiOperation({
     summary: 'Deactivate vendor account',
-    description: 'Deactivate the authenticated vendor account.',
+    description:
+      'Deactivate the authenticated vendor account and clear its authentication cookies.',
   })
   @ApiResponse({
     status: 200,
@@ -181,12 +185,17 @@ export class VendorAccountController {
   async deactivateProfile(
     @GetVendor('id') vendorId: string,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<VendorStatusResponseDto> {
-    return this.vendorsService.deactivateProfile(
+    const result = await this.vendorsService.deactivateProfile(
       vendorId,
       extractIpAddress(req),
       extractUserAgent(req),
     );
+
+    this.authCookies.clearAuthCookies(res);
+
+    return result;
   }
 
   @Delete('account')
@@ -208,12 +217,15 @@ export class VendorAccountController {
   async deleteProfile(
     @GetVendor('id') vendorId: string,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<null> {
     await this.vendorsService.deleteProfile(
       vendorId,
       extractIpAddress(req),
       extractUserAgent(req),
     );
+
+    this.authCookies.clearAuthCookies(res);
 
     return null;
   }

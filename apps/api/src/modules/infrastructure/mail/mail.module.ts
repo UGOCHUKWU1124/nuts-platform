@@ -1,14 +1,14 @@
 import { Global, Module } from '@nestjs/common';
 import { EmailTemplatesService } from './email-templates.service';
 import { EmailService } from './email.service';
-import { NodemailerProvider } from './mail.provider';
+import { BrevoProvider } from './brevo.provider';
 
 @Global()
 @Module({
   providers: [
     {
       provide: 'EMAIL_PROVIDER',
-      useClass: NodemailerProvider,
+      useClass: BrevoProvider,
     },
     {
       provide: 'MAIL_PROVIDER',

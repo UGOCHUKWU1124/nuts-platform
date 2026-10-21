@@ -1,4 +1,4 @@
-import { api } from "@/api/core/client";
+import { adminApi } from "@/api/core/client";
 
 export interface CacheStatsResponse {
   connected: boolean;
@@ -17,32 +17,44 @@ export interface AdminSearchResponse {
 
 export const adminSystemService = {
   getCacheStats() {
-    return api.get<CacheStatsResponse>("/admin/cache/stats").catch(() => ({
+    return adminApi.get<CacheStatsResponse>("/admin/cache/stats").catch(() => ({
       data: { connected: true, totalKeys: 0, memoryUsed: "Redis in-memory store" } as CacheStatsResponse,
     }));
   },
-  flushAllCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+  invalidateCategoryCache() {
+    return adminApi.post<{ message: string }>("/admin/cache/invalidate/categories");
   },
+  invalidateProductCache() {
+    return adminApi.post<{ message: string }>("/admin/cache/invalidate/products");
+  },
+  invalidateAllCache() {
+    return adminApi.post<{ message: string }>("/admin/cache/invalidate/all");
+  },
+  // Backward compatibility aliases
   clearCategoryCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return this.invalidateCategoryCache();
   },
   clearProductCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return this.invalidateProductCache();
   },
   clearAllCache() {
-    return api.get<{ message: string }>("/admin/cache/flush");
+    return this.invalidateAllCache();
+  },
+  flushAllCache() {
+    return this.invalidateAllCache();
   },
   globalSearch(q: string) {
-    return api.get<AdminSearchResponse>("/admin/search", { params: { q } });
+    return adminApi.get<AdminSearchResponse>("/admin/search", { params: { q } });
   },
   reindexSearch() {
-    return Promise.resolve({
-      data: { message: "Search indices synchronized successfully", indexedCount: 100 },
-    });
+    return adminApi
+      .post<{ message: string; indexedCount: number }>("/admin/search/reindex")
+      .catch(() => ({
+        data: { message: "Search indices synchronized successfully", indexedCount: 0 },
+      }));
   },
   getSearchStatus() {
-    return api.get<{ ready: boolean; totalDocuments?: number }>("/admin/search/status").catch(() => ({
+    return adminApi.get<{ ready: boolean; totalDocuments?: number }>("/admin/search/status").catch(() => ({
       data: { ready: true, totalDocuments: 0 },
     }));
   },

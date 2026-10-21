@@ -1,12 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-class VariantOptionDto {
-  @ApiProperty()
-  name!: string;
-
-  @ApiProperty()
-  value!: string;
-}
+import { VariantOptionDto } from '@api/modules/shared/dto/variant-option.dto';
 
 class VariantProductRefDto {
   @ApiProperty()

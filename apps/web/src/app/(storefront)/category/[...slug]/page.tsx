@@ -5,8 +5,8 @@ serverGetProductBySlug,
 serverGetProductReviews,
 serverGetProducts,
 } from "@/api/server";
-import { CatchAllCategoryView } from "@/component/category/CatchAllCategoryView";
-import { findCategoryNode,resolveCategoryPath } from "@/lib/cart-path";
+import { HierarchicalCategoryView } from "@/component/domain/category/HierarchicalCategoryView";
+import { findCategoryNode,resolveCategoryPath } from "@/lib/category-tree";
 import { Metadata } from "next";
 import type { ProductCardDto } from "@/api/dto/product";
 import type { PaginationMeta, CursorPaginationMeta } from "@/api/core/types";
@@ -126,7 +126,7 @@ export default async function CatchAllCategoryPage({
   }
 
   return (
-    <CatchAllCategoryView
+    <HierarchicalCategoryView
       key={slugs.join("/")}
       slugs={slugs}
       initialCategories={categories}

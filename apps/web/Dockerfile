@@ -75,6 +75,7 @@ RUN apt-get update \
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=400"
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
@@ -90,8 +91,8 @@ USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://localhost:3000/ || exit 1
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -fsS "http://localhost:${PORT:-3000}/health" || exit 1
 
 STOPSIGNAL SIGTERM
 

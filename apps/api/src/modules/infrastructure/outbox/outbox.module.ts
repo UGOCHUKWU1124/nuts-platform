@@ -7,6 +7,6 @@ import { OutboxService } from './outbox.service';
 @Module({
   imports: [RabbitMQModule],
   providers: [OutboxService, OutboxRelay],
-  exports: [OutboxService],
+  exports: [OutboxService, OutboxRelay],
 })
 export class OutboxModule {}

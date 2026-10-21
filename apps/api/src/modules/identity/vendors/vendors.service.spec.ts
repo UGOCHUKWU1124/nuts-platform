@@ -114,15 +114,26 @@ describe('VendorsService', () => {
       resetAttempts: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockRefreshSession = {
+      issueVendorSession: jest.fn().mockResolvedValue({
+        user: { id: 'v1', email: 'shop@nuts.dev' },
+        tokens: { accessToken: 'at', refreshToken: 'rt', refreshId: 'rid' },
+      }),
+      refresh: jest.fn().mockResolvedValue({
+        user: { id: 'v1', email: 'shop@nuts.dev' },
+        tokens: { accessToken: 'at', refreshToken: 'rt', refreshId: 'rid' },
+      }),
+      revokeSession: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new VendorsService(
       mockPrisma,
-      mockJwt,
-      mockConfig,
       mockOtp,
       mockEmail,
       mockAudit,
       mockCache,
       mockAccountLock,
+      mockRefreshSession as any,
     );
   });
 
@@ -151,7 +162,11 @@ describe('VendorsService', () => {
 
       const result = await service.register(dto);
 
-      expect(mockOtp.verifyOtp).toHaveBeenCalledWith('shop@nuts.dev', '123456');
+      expect(mockOtp.verifyOtp).toHaveBeenCalledWith(
+        'shop@nuts.dev',
+        '123456',
+        'vendor:registration',
+      );
       expect(mockPrisma.vendor.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

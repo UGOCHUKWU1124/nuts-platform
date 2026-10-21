@@ -19,6 +19,7 @@ export interface UserResponseDto {
   lastName: string | null;
   email: string;
   phoneNumber: string | null;
+  isEmailVerified?: boolean;
   isVerified: boolean;
   createdAt: Date;
   shippingInformation?: ShippingInformation | null;

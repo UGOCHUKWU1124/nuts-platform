@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -16,7 +16,6 @@ import {
   ApiResponseDto,
   PaginationMetaDto,
 } from '@api/modules/shared/dto/api-response.dto';
-import { JwtAuthGuard } from '@api/modules/shared/guards/jwt-auth.guard';
 import { UserWalletResponseDto } from './dto/user-wallet-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
 import { WalletService } from './wallet.service';
@@ -24,7 +23,6 @@ import { WalletService } from './wallet.service';
 @ApiTags('USER WALLET')
 @ApiBearerAuth('JWT-auth')
 @Controller('users/wallet')
-@UseGuards(JwtAuthGuard)
 @Roles(ROLE.USER)
 export class UserWalletController {
   constructor(private readonly walletService: WalletService) {}

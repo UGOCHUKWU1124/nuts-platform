@@ -23,7 +23,7 @@ Store,
 Trash2,
 UserCheck,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -35,6 +35,9 @@ export default function AdminVendorPage() {
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<AdminVendor | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<AdminVendor | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<AdminVendor | null>(null);
+  const [approveTarget, setApproveTarget] = useState<AdminVendor | null>(null);
+  const [verifyTarget, setVerifyTarget] = useState<AdminVendor | null>(null);
 
   const qc = useQueryClient();
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -48,8 +51,10 @@ export default function AdminVendorPage() {
     { value: "unverified", label: "Unverified" },
   ];
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.admin.vendor, debouncedSearch, filter, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {
@@ -90,6 +95,7 @@ export default function AdminVendorPage() {
     onSuccess: () => {
       toast.success("Vendor approved successfully!");
       refreshVendors();
+      setApproveTarget(null);
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to approve vendor")),
@@ -100,6 +106,7 @@ export default function AdminVendorPage() {
     onSuccess: () => {
       toast.success("Vendor KYC verified successfully!");
       refreshVendors();
+      setVerifyTarget(null);
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to verify vendor")),
@@ -116,6 +123,7 @@ export default function AdminVendorPage() {
       );
       refreshVendors();
       setSuspendTarget(null);
+      setReactivateTarget(null);
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to update vendor status")),
@@ -234,7 +242,7 @@ export default function AdminVendorPage() {
               size="sm"
               title="Approve vendor"
               className="h-8 w-8 p-0 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-              onClick={() => approveMutation.mutate(r.id)}
+              onClick={() => setApproveTarget(r)}
             >
               <UserCheck className="h-3.5 w-3.5" />
             </Button>
@@ -246,7 +254,7 @@ export default function AdminVendorPage() {
               size="sm"
               title="Verify KYC"
               className="h-8 w-8 p-0 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-              onClick={() => verifyMutation.mutate(r.id)}
+              onClick={() => setVerifyTarget(r)}
             >
               <ShieldCheck className="h-3.5 w-3.5" />
             </Button>
@@ -268,9 +276,7 @@ export default function AdminVendorPage() {
               size="sm"
               title="Reactivate store"
               className="h-8 w-8 p-0 rounded-lg text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-              onClick={() =>
-                toggleActiveMutation.mutate({ id: r.id, activate: true })
-              }
+              onClick={() => setReactivateTarget(r)}
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
@@ -310,20 +316,25 @@ export default function AdminVendorPage() {
           setPage(1);
         }}
         filters={vendorFilters}
+        onRefresh={refreshVendors}
+        isLoading={isLoading || isFetching}
       />
 
       <DataTable
         columns={columns}
         data={data?.data ?? []}
         isLoading={isLoading}
+        isFetching={isFetching}
         emptyMessage="No vendor accounts found."
         pagination={
           data?.meta
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
+                hasNextPage: data.meta.hasNextPage,
+                hasPrevPage: data.meta.hasPreviousPage,
                 onPageChange: (newPage) => setPage(newPage),
               }
             : undefined
@@ -366,6 +377,58 @@ export default function AdminVendorPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM APPROVE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(approveTarget)}
+        onOpenChange={(v) => !v && setApproveTarget(null)}
+        title="Approve Vendor Store"
+        description={
+          <>
+            Are you sure you want to approve store <strong>&quot;{approveTarget?.storeName}&quot;</strong> (
+            {approveTarget?.email})? This grants the merchant permission to list catalog inventory and receive customer orders.
+          </>
+        }
+        confirmText="Approve Vendor"
+        variant="default"
+        isLoading={approveMutation.isPending}
+        onConfirm={() => approveTarget && approveMutation.mutate(approveTarget.id)}
+      />
+
+      {/* CONFIRM VERIFY KYC DIALOG */}
+      <ConfirmDialog
+        open={Boolean(verifyTarget)}
+        onOpenChange={(v) => !v && setVerifyTarget(null)}
+        title="Verify KYC Compliance"
+        description={
+          <>
+            Confirm that you have reviewed identity documents for <strong>&quot;{verifyTarget?.storeName}&quot;</strong> and verified regulatory KYC compliance?
+          </>
+        }
+        confirmText="Mark as Verified"
+        variant="default"
+        isLoading={verifyMutation.isPending}
+        onConfirm={() => verifyTarget && verifyMutation.mutate(verifyTarget.id)}
+      />
+
+      {/* CONFIRM REACTIVATE STORE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(reactivateTarget)}
+        onOpenChange={(v) => !v && setReactivateTarget(null)}
+        title="Reactivate Vendor Store"
+        description={
+          <>
+            Reactivate vendor account <strong>&quot;{reactivateTarget?.storeName}&quot;</strong>? Their catalog listings will immediately be restored to marketplace search and browsing.
+          </>
+        }
+        confirmText="Reactivate Account"
+        variant="default"
+        isLoading={toggleActiveMutation.isPending}
+        onConfirm={() =>
+          reactivateTarget &&
+          toggleActiveMutation.mutate({ id: reactivateTarget.id, activate: true })
+        }
       />
     </div>
   );

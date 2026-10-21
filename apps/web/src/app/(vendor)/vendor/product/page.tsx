@@ -2,7 +2,7 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import { categoryService } from "@/api";
-import { api } from "@/api/core/client";
+import { vendorApi } from "@/api/core/client";
 import type { VendorVariantResponseDto } from "@/api/dto/variant";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
 import { PageHeader } from "@/component/common/PageHeader";
@@ -113,6 +113,7 @@ export default function DashboardProductPage() {
   const [editingProduct, setEditingProduct] = useState<VendorProduct | null>(null);
   const [stockProduct, setStockProduct] = useState<VendorProduct | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VendorProduct | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<VendorProduct | null>(null);
   const [variantsList, setVariantsList] = useState<ProductVariantItem[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -120,8 +121,10 @@ export default function DashboardProductPage() {
   const qc = useQueryClient();
   const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.vendor.product, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {
@@ -133,7 +136,7 @@ export default function DashboardProductPage() {
       if (status === "active") params.isActive = true;
       if (status === "inactive") params.isActive = false;
 
-      const res = await api.get<VendorProduct[]>("/vendors/products", { params });
+      const res = await vendorApi.get<VendorProduct[]>("/vendors/products", { params });
       return res;
     },
   });
@@ -144,7 +147,8 @@ export default function DashboardProductPage() {
       const res = await categoryService.getAll();
       return res.data;
     },
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   const methods = useForm<ProductFormData>({
@@ -163,7 +167,7 @@ export default function DashboardProductPage() {
 
   const createMutation = useMutation({
     mutationFn: (values: ProductFormData) =>
-      api.post("/vendors/products", {
+      vendorApi.post("/vendors/products", {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -186,7 +190,7 @@ export default function DashboardProductPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, values }: { id: string; values: ProductFormData }) =>
-      api.patch(`/vendors/products/${id}`, {
+      vendorApi.patch(`/vendors/products/${id}`, {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -208,7 +212,7 @@ export default function DashboardProductPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/vendors/products/${id}/permanent`),
+    mutationFn: (id: string) => vendorApi.delete(`/vendors/products/${id}/permanent`),
     onSuccess: () => {
       toast.success("Product permanently deleted from your store");
       refreshProducts();
@@ -219,10 +223,11 @@ export default function DashboardProductPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      api.patch(`/vendors/products/${id}/${active ? "deactivate" : "reactivate"}`),
+      vendorApi.patch(`/vendors/products/${id}/${active ? "deactivate" : "reactivate"}`),
     onSuccess: () => {
       toast.success("Product status updated");
       refreshProducts();
+      setToggleActiveTarget(null);
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update product status")),
   });
@@ -237,7 +242,7 @@ export default function DashboardProductPage() {
       quantity: number;
       description?: string;
     }) =>
-      api.patch(`/vendors/products/${id}/stock`, {
+      vendorApi.patch(`/vendors/products/${id}/stock`, {
         quantity,
         ...(description ? { description } : {}),
       }),
@@ -273,7 +278,7 @@ export default function DashboardProductPage() {
 
     if (product.hasVariants) {
       try {
-        const res = await api.get<{ variants: VendorVariantResponseDto[] }>(`/vendors/products/variants?productId=${product.id}`);
+        const res = await vendorApi.get<{ variants: VendorVariantResponseDto[] }>(`/vendors/products/variants?productId=${product.id}`);
         const list = res.data.variants;
         setVariantsList(
           list.map((v) => ({
@@ -390,15 +395,15 @@ export default function DashboardProductPage() {
     },
     {
       key: "isActive",
-      header: "Visibility",
+      header: "Status",
       render: (r) =>
         r.isActive ? (
           <Badge variant="success" className="text-xs font-semibold">
-            Live on Store
+            Active
           </Badge>
         ) : (
           <Badge variant="muted" className="text-xs font-semibold">
-            Hidden
+            Inactive
           </Badge>
         ),
     },
@@ -439,15 +444,13 @@ export default function DashboardProductPage() {
           <Button
             variant="ghost"
             size="sm"
-            title={r.isActive ? "Hide from store" : "Publish to store"}
+            title={r.isActive ? "Deactivate product" : "Activate product"}
             className={`h-8 w-8 p-0 rounded-lg ${
               r.isActive
                 ? "text-amber-500 hover:text-amber-600"
                 : "text-emerald-500 hover:text-emerald-600"
             }`}
-            onClick={() =>
-              toggleActiveMutation.mutate({ id: r.id, active: !!r.isActive })
-            }
+            onClick={() => setToggleActiveTarget(r)}
           >
             {r.isActive ? <Ban className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
           </Button>
@@ -497,23 +500,28 @@ export default function DashboardProductPage() {
           setPage(1);
         }}
         filters={[
-          { value: "active", label: "Live Listings" },
-          { value: "inactive", label: "Hidden Items" },
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
         ]}
+        onRefresh={refreshProducts}
+        isLoading={isLoading || isFetching}
       />
 
       <DataTable
         columns={columns}
         data={data?.data ?? []}
         isLoading={isLoading}
+        isFetching={isFetching}
         emptyMessage="No product listings found in your store."
         pagination={
           data?.meta
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
+                hasNextPage: data.meta.hasNextPage,
+                hasPrevPage: data.meta.hasPreviousPage,
                 onPageChange: (newPage) => setPage(newPage),
               }
             : undefined
@@ -590,6 +598,7 @@ export default function DashboardProductPage() {
                 </div>
                 <input
                   id="hasVariants"
+                  name="hasVariants"
                   type="checkbox"
                   checked={Boolean(hasVariants)}
                   onChange={(e) => {
@@ -612,6 +621,7 @@ export default function DashboardProductPage() {
               {/* Variant builder section */}
               {hasVariants && (
                 <ProductVariantBuilder
+                  authRole="vendor"
                   variants={variantsList}
                   onChange={setVariantsList}
                 />
@@ -620,6 +630,7 @@ export default function DashboardProductPage() {
               <CategoryPicker categories={categoriesData ?? []} />
 
               <ImageUpload
+                authRole="vendor"
                 name="imageUrls"
                 label="Product Images (up to 6)"
                 aspectHint="square or portrait"
@@ -745,6 +756,35 @@ export default function DashboardProductPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM TOGGLE ACTIVE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(toggleActiveTarget)}
+        onOpenChange={(v) => !v && setToggleActiveTarget(null)}
+        title={toggleActiveTarget?.isActive ? "Deactivate Product Listing" : "Reactivate Product Listing"}
+        description={
+          toggleActiveTarget?.isActive ? (
+            <>
+              Are you sure you want to deactivate <strong>&quot;{toggleActiveTarget?.name}&quot;</strong>? It will no longer be visible to customers on your storefront until reactivated.
+            </>
+          ) : (
+            <>
+              Reactivate <strong>&quot;{toggleActiveTarget?.name}&quot;</strong>? It will immediately become visible to shoppers again.
+            </>
+          )
+        }
+        confirmText={toggleActiveTarget?.isActive ? "Deactivate Listing" : "Reactivate Listing"}
+        variant={toggleActiveTarget?.isActive ? "destructive" : "default"}
+        isLoading={toggleActiveMutation.isPending}
+        onConfirm={() => {
+          if (toggleActiveTarget) {
+            toggleActiveMutation.mutate(
+              { id: toggleActiveTarget.id, active: !!toggleActiveTarget.isActive },
+              { onSettled: () => setToggleActiveTarget(null) }
+            );
+          }
+        }}
       />
     </div>
   );

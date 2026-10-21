@@ -8,15 +8,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { Prisma, ROLE } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { createHmac, randomBytes } from 'crypto';
-import type { StringValue } from 'ms';
 
 import type { AuthTokens } from '@api/modules/auth/types/auth.types';
 import { OtpService } from '@api/modules/auth/otp/otp.service';
+import { RefreshSessionService } from '@api/modules/auth/sessions/refresh-session.service';
 import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
@@ -115,7 +112,7 @@ const storeProductSelect = {
 
 export interface VendorSession {
   profile: VendorProfileDto;
-  tokens: AuthTokens;
+  tokens: AuthTokens | null;
 }
 
 @Injectable()
@@ -124,13 +121,12 @@ export class VendorsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
     private readonly otpService: OtpService,
     private readonly emailService: EmailService,
     private readonly auditLog: AuditLogService,
     private readonly cacheService: CacheService,
     private readonly accountLockService: AccountLockService,
+    private readonly refreshSessionService: RefreshSessionService,
   ) {}
 
   async register(
@@ -172,7 +168,11 @@ export class VendorsService {
       throw new ConflictException('Email or store slug already in use');
     }
 
-    await this.otpService.verifyOtp(normalizedEmail, dto.otpCode);
+    await this.otpService.verifyOtp(
+      normalizedEmail,
+      dto.otpCode,
+      'vendor:registration',
+    );
 
     const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
 
@@ -204,11 +204,6 @@ export class VendorsService {
         select: vendorSelect,
       });
     } catch (error) {
-      /*
-       * A unique constraint can still fail after the pre-check when two
-       * registrations race each other. Convert that database error into the
-       * expected API response.
-       */
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -219,10 +214,6 @@ export class VendorsService {
       throw error;
     }
 
-    /*
-     * Audit/email are intentionally not part of the database transaction.
-     * External side effects should not hold a database transaction open.
-     */
     void this.auditLog
       .log({
         action: 'VENDOR_REGISTER',
@@ -246,21 +237,14 @@ export class VendorsService {
         this.logger.error('Failed to send vendor welcome email', error);
       });
 
-    const tokens = await this.generateTokens(
-      vendor.id,
-      vendor.email,
-      vendor.tokenVersion,
-    );
-
-    await this.storeRefreshToken(
-      vendor.id,
-      tokens.refreshToken,
-      tokens.refreshId,
-    );
-
+    /*
+     * Vendor registration does NOT auto-login.
+     * Unapproved vendors cannot have an active session.
+     * The frontend shows a "pending approval" screen instead.
+     */
     return {
       profile: this.toVendorProfile(vendor),
-      tokens,
+      tokens: null,
     };
   }
 
@@ -348,17 +332,15 @@ export class VendorsService {
         });
     }
 
-    const tokens = await this.generateTokens(
-      vendor.id,
-      vendor.email,
-      vendor.tokenVersion,
-    );
-
-    await this.storeRefreshToken(
-      vendor.id,
-      tokens.refreshToken,
-      tokens.refreshId,
-    );
+    const session = await this.refreshSessionService.issueVendorSession({
+      id: vendor.id,
+      email: vendor.email,
+      firstName: vendor.firstName,
+      lastName: vendor.lastName,
+      isActive: vendor.isActive,
+      isApproved: vendor.isApproved,
+      tokenVersion: vendor.tokenVersion,
+    });
 
     void this.auditLog
       .log({
@@ -375,7 +357,7 @@ export class VendorsService {
 
     return {
       profile: this.toVendorProfile(vendor),
-      tokens,
+      tokens: session.tokens,
     };
   }
 
@@ -632,17 +614,20 @@ export class VendorsService {
     });
 
     if (!vendor) {
+      // Timing-safe: always compare against dummy hash even if vendor not found
+      await bcrypt.compare(dto.password, UNKNOWN_ACCOUNT_PASSWORD_HASH);
       throw new UnauthorizedException('Invalid credentials');
-    }
-
-    if (vendor.isActive) {
-      throw new BadRequestException('Account is already active');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, vendor.password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check active status AFTER password verification to prevent enumeration
+    if (vendor.isActive) {
+      throw new BadRequestException('Account is already active');
     }
 
     const updated = await this.prisma.vendor.update({
@@ -809,42 +794,69 @@ export class VendorsService {
           : {}),
       };
 
-      const vendors = await this.prisma.vendor.findMany({
-        where,
-        select: {
-          ...vendorSelect,
-          products: {
-            where: { isDeleted: false, isActive: true },
-            select: {
-              category: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  parent: {
-                    select: {
-                      id: true,
-                      name: true,
-                      slug: true,
-                      parent: {
-                        select: {
-                          id: true,
-                          name: true,
-                          slug: true,
-                        },
-                      },
-                    },
+      const [allCategories, vendors] = await Promise.all([
+        this.prisma.category.findMany({
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            parentId: true,
+            path: true,
+          },
+        }),
+        this.prisma.vendor.findMany({
+          where,
+          select: {
+            ...vendorSelect,
+            products: {
+              where: { isDeleted: false, isActive: true },
+              select: {
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    path: true,
                   },
                 },
               },
             },
           },
-        },
-        ...(limit ? { take: limit } : {}),
-        orderBy: {
-          storeName: 'asc',
-        },
-      });
+          ...(limit ? { take: limit } : {}),
+          orderBy: {
+            storeName: 'asc',
+          },
+        }),
+      ]);
+
+      const catById = new Map(allCategories.map((c) => [c.id, c]));
+      const rootBySlug = new Map(
+        allCategories.filter((c) => !c.parentId).map((c) => [c.slug, c]),
+      );
+
+      const findRootCategory = (
+        catId?: string | null,
+        catSlug?: string | null,
+        catPath?: string | null,
+      ) => {
+        if (catId) {
+          let current = catById.get(catId);
+          while (current && current.parentId) {
+            const parent = catById.get(current.parentId);
+            if (!parent) break;
+            current = parent;
+          }
+          if (current && !current.parentId) return current;
+        }
+        const cleanPath = (catPath || catSlug || '').replace(/^\/+/, '');
+        const rootSlug = cleanPath.split('/')[0];
+        if (rootSlug) {
+          const root = rootBySlug.get(rootSlug);
+          if (root) return root;
+        }
+        return null;
+      };
 
       return vendors.map((vendor) => {
         const catMap = new Map<
@@ -853,8 +865,11 @@ export class VendorsService {
         >();
         for (const p of vendor.products || []) {
           if (p.category) {
-            const root =
-              p.category.parent?.parent ?? p.category.parent ?? p.category;
+            const root = findRootCategory(
+              p.category.id,
+              p.category.slug,
+              p.category.path,
+            );
             if (root && !catMap.has(root.id)) {
               catMap.set(root.id, {
                 id: root.id,
@@ -874,48 +889,75 @@ export class VendorsService {
       VENDOR_STORE(storeSlug),
       VENDOR_STORE_TTL,
       async () => {
-        const vendor = await this.prisma.vendor.findUnique({
-          where: {
-            storeSlug,
-          },
-          select: {
-            ...vendorSelect,
-            products: {
-              where: {
-                isDeleted: false,
-                isActive: true,
-              },
-              take: 100,
-              select: {
-                category: {
-                  select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    parent: {
-                      select: {
-                        id: true,
-                        name: true,
-                        slug: true,
-                        parent: {
-                          select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                          },
-                        },
-                      },
+        const [allCategories, vendor] = await Promise.all([
+          this.prisma.category.findMany({
+            where: { isActive: true },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              parentId: true,
+              path: true,
+            },
+          }),
+          this.prisma.vendor.findUnique({
+            where: {
+              storeSlug,
+            },
+            select: {
+              ...vendorSelect,
+              products: {
+                where: {
+                  isDeleted: false,
+                  isActive: true,
+                },
+                take: 100,
+                select: {
+                  category: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                      path: true,
                     },
                   },
                 },
               },
             },
-          },
-        });
+          }),
+        ]);
 
         if (!vendor || !vendor.isActive || !vendor.isApproved) {
           throw new NotFoundException('Store not found');
         }
+
+        const catById = new Map(allCategories.map((c) => [c.id, c]));
+        const rootBySlug = new Map(
+          allCategories.filter((c) => !c.parentId).map((c) => [c.slug, c]),
+        );
+
+        const findRootCategory = (
+          catId?: string | null,
+          catSlug?: string | null,
+          catPath?: string | null,
+        ) => {
+          if (catId) {
+            let current = catById.get(catId);
+            while (current && current.parentId) {
+              const parent = catById.get(current.parentId);
+              if (!parent) break;
+              current = parent;
+            }
+            if (current && !current.parentId) return current;
+          }
+          const cleanPath = (catPath || catSlug || '').replace(/^\/+/, '');
+          const rootSlug = cleanPath.split('/')[0];
+          if (rootSlug) {
+            const root = rootBySlug.get(rootSlug);
+            if (root) return root;
+          }
+          return null;
+        };
 
         const catMap = new Map<
           string,
@@ -923,8 +965,11 @@ export class VendorsService {
         >();
         for (const p of vendor.products || []) {
           if (p.category) {
-            const root =
-              p.category.parent?.parent ?? p.category.parent ?? p.category;
+            const root = findRootCategory(
+              p.category.id,
+              p.category.slug,
+              p.category.path,
+            );
             if (root && !catMap.has(root.id)) {
               catMap.set(root.id, {
                 id: root.id,
@@ -1097,6 +1142,9 @@ export class VendorsService {
       },
     });
 
+    // Invalidate Redis stamp so old access tokens fail immediately
+    await this.refreshSessionService.revokeSession(vendor.id, ROLE.VENDOR);
+
     await this.auditLog.log({
       action: 'VENDOR_RESET_PASSWORD',
       entity: 'Vendor',
@@ -1120,16 +1168,8 @@ export class VendorsService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
-    await this.prisma.vendor.update({
-      where: {
-        id: vendorId,
-      },
-      data: {
-        refreshToken: null,
-        refreshTokenId: null,
-        tokenVersion: { increment: 1 },
-      },
-    });
+    // Consolidated revocation: clears DB tokens + invalidates Redis stamp
+    await this.refreshSessionService.revokeSession(vendorId, ROLE.VENDOR);
 
     await this.auditLog.log({
       action: 'VENDOR_LOGOUT',
@@ -1144,10 +1184,18 @@ export class VendorsService {
     vendorId: string,
     expectedRefreshId: string,
   ): Promise<VendorSession> {
+    // Delegate to consolidated refresh logic which provides:
+    // - grace period for concurrent requests
+    // - token reuse detection with session revocation
+    // - timing-safe hash verification
+    const session = await this.refreshSessionService.refresh({
+      sub: vendorId,
+      role: ROLE.VENDOR,
+      refreshId: expectedRefreshId,
+    });
+
     const vendor = await this.prisma.vendor.findUnique({
-      where: {
-        id: vendorId,
-      },
+      where: { id: vendorId },
       select: vendorSelect,
     });
 
@@ -1155,143 +1203,9 @@ export class VendorsService {
       throw new UnauthorizedException('Vendor not found');
     }
 
-    if (!vendor.isActive) {
-      throw new UnauthorizedException('Vendor account is deactivated');
-    }
-
-    if (!vendor.isApproved) {
-      throw new UnauthorizedException('Vendor account is not approved yet');
-    }
-
-    const tokens = await this.generateTokens(
-      vendor.id,
-      vendor.email,
-      vendor.tokenVersion,
-    );
-
-    await this.storeRefreshToken(
-      vendor.id,
-      tokens.refreshToken,
-      tokens.refreshId,
-      expectedRefreshId,
-    );
-
     return {
       profile: this.toVendorProfile(vendor),
-      tokens,
+      tokens: session.tokens,
     };
-  }
-
-  private async generateTokens(
-    vendorId: string,
-    email: string,
-    tokenVersion = 0,
-  ): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    refreshId: string;
-  }> {
-    const refreshId = randomBytes(16).toString('hex');
-
-    const accessSecret = this.configService.getOrThrow<string>('JWT_SECRET');
-    const refreshSecret =
-      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
-    const accessExpiresIn = this.configService.getOrThrow<string>(
-      'JWT_ACCESS_EXPIRES_IN',
-    ) as StringValue;
-    const refreshExpiresIn = this.configService.get<string>(
-      'JWT_REFRESH_EXPIRES_IN',
-      '7d',
-    ) as StringValue;
-    const issuer = this.configService.getOrThrow<string>('JWT_ISSUER');
-    const accessAudience = this.configService.getOrThrow<string>(
-      'JWT_ACCESS_AUDIENCE',
-    );
-    const refreshAudience = this.configService.getOrThrow<string>(
-      'JWT_REFRESH_AUDIENCE',
-    );
-
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(
-        {
-          sub: vendorId,
-          email,
-          role: ROLE.VENDOR,
-          type: 'vendor',
-          tokenVersion,
-        },
-        {
-          secret: accessSecret,
-          expiresIn: accessExpiresIn,
-          issuer,
-          audience: accessAudience,
-        },
-      ),
-      this.jwtService.signAsync(
-        {
-          sub: vendorId,
-          email,
-          role: ROLE.VENDOR,
-          type: 'vendor',
-          refreshId,
-        },
-        {
-          secret: refreshSecret,
-          expiresIn: refreshExpiresIn,
-          issuer,
-          audience: refreshAudience,
-        },
-      ),
-    ]);
-
-    return {
-      accessToken,
-      refreshToken,
-      refreshId,
-    };
-  }
-
-  private async storeRefreshToken(
-    vendorId: string,
-    _refreshToken: string,
-    refreshId: string,
-    expectedRefreshId?: string,
-  ): Promise<void> {
-    const refreshSecret =
-      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
-
-    /*
-     * High-entropy random IDs (128 bits) are hashed using HMAC-SHA256 (0.005ms)
-     * instead of CPU-intensive password stretching (bcrypt, 75ms).
-     */
-    const hashedRefreshId = createHmac('sha256', refreshSecret)
-      .update(refreshId)
-      .digest('hex');
-
-    if (expectedRefreshId) {
-      const result = await this.prisma.vendor.updateMany({
-        where: {
-          id: vendorId,
-          refreshTokenId: expectedRefreshId,
-          isActive: true,
-          isApproved: true,
-        },
-        data: {
-          refreshToken: hashedRefreshId,
-          refreshTokenId: refreshId,
-        },
-      });
-      if (result.count !== 1) {
-        throw new UnauthorizedException(
-          'Refresh session has already been rotated',
-        );
-      }
-      return;
-    }
-
-    await this.prisma.vendor.update({
-      where: { id: vendorId },
-      data: { refreshToken: hashedRefreshId, refreshTokenId: refreshId },
-    });
   }
 }

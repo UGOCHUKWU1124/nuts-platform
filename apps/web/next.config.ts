@@ -2,12 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
 
-  // Enable Next 16.3 instant navigation and route-segment `instant` settings.
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Production tree-shaking optimizations for memory-constrained environments
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@tanstack/react-query", "sonner"],
+  },
 
-  // Enable standalone output for minimal Docker image
+  // Standalone output produces a lean production build containing only necessary dependencies
   output: "standalone",
 
   images: {

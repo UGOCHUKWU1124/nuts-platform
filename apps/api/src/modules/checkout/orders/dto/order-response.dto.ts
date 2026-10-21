@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderStatus } from '@prisma/client';
+import { VariantOptionDto } from '@api/modules/shared/dto/variant-option.dto';
 
 class OrderProductSnapshotDto {
   @ApiProperty({ description: 'Product name at time of order' })
@@ -12,17 +13,10 @@ class OrderProductSnapshotDto {
   images!: string[];
 }
 
-class VariantOptionItemDto {
-  @ApiProperty({ description: 'Option name (e.g. size, color)' })
-  name!: string;
-  @ApiProperty({ description: 'Option value (e.g. M, Black)' })
-  value!: string;
-}
-
 class OrderVariantSnapshotDto {
   @ApiProperty({
     description: 'Variant options snapshot as array of {name, value} pairs',
-    type: () => VariantOptionItemDto,
+    type: () => VariantOptionDto,
     isArray: true,
     example: [
       { name: 'size', value: 'M' },

@@ -1,23 +1,20 @@
 "use client";
 
-import { Button } from "@/component/ui/button";
 import { cn } from "@/lib/util";
-import { useAuthStore } from "@/zustand/auth";
 import {
-BarChart3,
-ChevronRight,
-LogOut,
-Package,
-Settings,
-ShoppingBag,
-Tag,
-Wallet,
-X,
+  BarChart3,
+  ChevronRight,
+  Package,
+  Settings,
+  ShoppingBag,
+  Tag,
+  Wallet,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
-import { type ReactNode,useState } from "react";
+import { type ReactNode, useState } from "react";
 import { VendorHeader } from "./VendorHeader";
 
 interface NavItem {
@@ -36,7 +33,6 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function VendorLayout({ children }: { children: ReactNode }) {
-  const { logout } = useAuthStore();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -68,7 +64,7 @@ export function VendorLayout({ children }: { children: ReactNode }) {
                 NUTS <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border font-semibold uppercase tracking-wider">VENDOR</span>
               </span>
               <span className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mt-1">
-                Vendor Portal
+                Vendor Dashboard
               </span>
             </div>
           </Link>
@@ -121,19 +117,6 @@ export function VendorLayout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-
-        {/* Sign Out & Footer */}
-        <div className="px-4 py-3 border-t border-border bg-card">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2.5 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors h-10"
-            onClick={() => logout({ redirectTo: "/auth/vendor/login" })}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out of Store
-          </Button>
-        </div>
       </aside>
 
       {/* Main Content Area */}

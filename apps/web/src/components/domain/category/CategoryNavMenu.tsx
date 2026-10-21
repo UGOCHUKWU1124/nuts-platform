@@ -2,11 +2,11 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import { getNodeChildren } from "@/lib/cart-path";
+import { getNodeChildren } from "@/lib/category-tree";
 import {
 ChevronRight
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
 

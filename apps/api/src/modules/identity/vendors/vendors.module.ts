@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { VendorAnalyticsController } from '@api/modules/analytics/vendors/vendor-analytics.controller';
 import { VendorAnalyticsService } from '@api/modules/analytics/vendors/vendor-analytics.service';
 import { AuthCookiesModule } from '@api/modules/auth/auth-cookies.module';
@@ -14,8 +13,6 @@ import { SecurityModule } from '@api/modules/security/security.module';
 import { WalletModule } from '@api/modules/wallet/wallet.module';
 import { VendorWalletController } from './manage-wallet/vendor-wallet.controller';
 import { PublicStoreController } from './public-store.controller';
-import { VendorJwtStrategy } from './strategies/vendor-jwt.strategy';
-import { VendorRefreshTokenStrategy } from './strategies/vendor-refresh-token.strategy';
 import { VendorAccountController } from './vendor-account.controller';
 import { VendorAuthController } from './vendor-auth.controller';
 import { VendorDiscountCodesController } from './vendor-discount-codes.controller';
@@ -29,7 +26,6 @@ import { VendorsService } from './vendors.service';
     AuthCookiesModule,
     AuthModule,
     DiscountCodeModule,
-    JwtModule,
     OrdersModule,
     PrismaModule,
     ProductVariantsModule,
@@ -48,13 +44,7 @@ import { VendorsService } from './vendors.service';
     VendorProductsController,
     VendorWalletController,
   ],
-  providers: [
-    VendorAnalyticsService,
-    VendorJwtStrategy,
-    VendorRefreshTokenStrategy,
-    VendorsService,
-    OtpService,
-  ],
+  providers: [VendorAnalyticsService, VendorsService, OtpService],
   exports: [VendorsService],
 })
 export class VendorsModule {}

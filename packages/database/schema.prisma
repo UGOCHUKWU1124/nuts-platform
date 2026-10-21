@@ -95,6 +95,7 @@ model User {
   refreshTokenId             String?
   tokenVersion               Int       @default(0)
   isActive                   Boolean   @default(true)
+  isEmailVerified            Boolean   @default(false)
   deactivatedAt              DateTime?
   scheduledPermanentDeleteAt DateTime?
   deactivatedBy              String?
@@ -122,11 +123,30 @@ model User {
   shippingAddresses      ShippingAddress[]
   userWallet             UserWallet?
   wishlistItems          WishlistItem[]
+  authSessions           UserAuthSession[]
 
   @@index([isActive])
+  @@index([isEmailVerified])
   @@index([scheduledPermanentDeleteAt])
   @@index([isActive, createdAt])
   @@map("users")
+}
+
+model UserAuthSession {
+  id             String    @id @default(uuid())
+  userId         String
+  tokenVersion   Int
+  refreshToken   String?
+  refreshTokenId String?   @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("user_auth_sessions")
 }
 
 model Vendor {
@@ -255,6 +275,7 @@ model ProductImage {
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([productId, isPrimary], map: "product_images_product_id_is_primary_idx")
+  @@index([productId, position])
   @@index([variantId])
   @@map("product_images")
 }
@@ -834,6 +855,7 @@ enum NotificationType {
   ORDER_DELIVERED
   ORDER_CANCELLED
   PAYMENT_RECEIVED
+  PAYMENT_FAILED
   PAYOUT_PROCESSED
   LOW_STOCK_ALERT
   SYSTEM_ANNOUNCEMENT
@@ -858,13 +880,52 @@ model Notification {
   metadata  Json?
   isRead    Boolean              @default(false)
   readAt    DateTime?
+  dedupeKey String?              @unique
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
-  @@index([userId, isRead, createdAt])
+  @@index([userId, role, isRead, createdAt])
   @@index([userId, role, createdAt])
   @@index([createdAt])
   @@map("notifications")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  role      ROLE     @default(USER)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, role])
+  @@map("push_subscriptions")
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid())
+  userId          String
+  role            ROLE     @default(USER)
+
+  // Channels
+  emailEnabled    Boolean  @default(true)
+  inAppEnabled    Boolean  @default(true)
+  pushEnabled     Boolean  @default(true)
+
+  // Functional Categories
+  orderUpdates    Boolean  @default(true)
+  paymentAlerts   Boolean  @default(true)
+  inventoryAlerts Boolean  @default(true)
+  marketingPromos Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, role])
+  @@map("notification_preferences")
 }
 
 enum OutboxStatus {

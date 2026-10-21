@@ -14,11 +14,18 @@ export type OtpPurpose =
   | 'registration'
   | 'payment'
   | 'password-reset'
-  | 'email-verification';
+  | 'email-verification'
+  | 'account-deactivation'
+  | 'admin:action'
+  | 'vendor:registration'
+  | 'vendor:password-reset';
 
 type CreateOtpOptions = {
   subject?: string;
   orderDetails?: string;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
 };
 
 /**
@@ -145,9 +152,12 @@ export class OtpService {
     );
 
     if (cooldownCreated !== 'OK') {
-      throw new BadRequestException(
-        'Please wait before requesting another OTP.',
-      );
+      const ttl = await this.redisClient.ttl(keys.cooldown);
+      const retryAfter = ttl > 0 ? ttl : this.resendCooldown;
+      throw new BadRequestException({
+        message: `Please wait ${retryAfter} second${retryAfter === 1 ? '' : 's'} before requesting another OTP.`,
+        retryAfter,
+      });
     }
 
     try {
@@ -171,24 +181,27 @@ export class OtpService {
 
         // In development, dispatch email asynchronously in background so developer gets instant ~50ms response
         void this.emailService
-          .sendOtpEmail(normalizedEmail, otp, options)
+          .sendOtpEmail(normalizedEmail, otp, { ...options, purpose })
           .catch((error) => {
             this.logger.warn(
-              `[DEV] Background SMTP delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
+              `[DEV] Background email delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
             );
           });
 
         return;
       }
 
-      await this.emailService.sendOtpEmail(normalizedEmail, otp, options);
+      await this.emailService.sendOtpEmail(normalizedEmail, otp, {
+        ...options,
+        purpose,
+      });
     } catch (error) {
       const isDevelopment =
         this.configService.get<string>('NODE_ENV') !== 'production';
 
       if (isDevelopment) {
         this.logger.warn(
-          `[DEV] SMTP delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
+          `[DEV] Email delivery failed (${(error as Error).message}), but OTP ${otp} remains active in Redis for local testing.`,
         );
         return;
       }
@@ -263,6 +276,35 @@ export class OtpService {
     }
   }
 
+  async verifyRegistrationOtp(email: string, code: string): Promise<boolean> {
+    const normalizedEmail = this.normalizeEmail(email);
+    await this.verifyOtp(normalizedEmail, code, 'registration');
+
+    const keys = this.getKeys(normalizedEmail, 'registration');
+    await this.redisClient.set(keys.verified, '1', 'EX', 900);
+    return true;
+  }
+
+  async consumeVerification(
+    email: string,
+    purpose: OtpPurpose = 'registration',
+  ): Promise<boolean> {
+    const normalizedEmail = this.normalizeEmail(email);
+    const keys = this.getKeys(normalizedEmail, purpose);
+    const deleted = await this.redisClient.del(keys.verified);
+    return deleted > 0;
+  }
+
+  async isOtpVerified(
+    email: string,
+    purpose: OtpPurpose = 'registration',
+  ): Promise<boolean> {
+    const normalizedEmail = this.normalizeEmail(email);
+    const keys = this.getKeys(normalizedEmail, purpose);
+    const val = await this.redisClient.get(keys.verified);
+    return val === '1';
+  }
+
   private generateCode(): string {
     const max = 10 ** this.length;
 
@@ -298,6 +340,7 @@ export class OtpService {
       otp: `otp:v1:${namespace}:value`,
       attempts: `otp:v1:${namespace}:attempts`,
       cooldown: `otp:v1:${namespace}:cooldown`,
+      verified: `otp:v1:${namespace}:verified`,
     };
   }
 }

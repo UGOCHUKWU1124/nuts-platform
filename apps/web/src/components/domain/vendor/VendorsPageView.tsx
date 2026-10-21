@@ -8,8 +8,8 @@ import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { Input } from "@/component/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Search,Sparkles,Store,X } from "lucide-react";
-import Link from "next/link";
-import { useDeferredValue,useMemo,useState } from "react";
+import Link from "@/components/navigation/AppLink";
+import { useDeferredValue, useMemo, useState } from "react";
 
 const EMPTY_VENDORS: VendorResponseDto[] = [];
 
@@ -25,16 +25,16 @@ function getStoreInitials(name: string): string {
   return ((first[0] ?? "") + (second[0] ?? "")).toUpperCase() || "CR";
 }
 
+const EMPTY_CATEGORIES: CategoryResponseDto[] = [];
+
 export interface VendorsPageViewProps {
   initialCategories: CategoryResponseDto[];
   initialVendors?: VendorResponseDto[];
-  
 }
 
 export function VendorsPageView({
   initialCategories,
   initialVendors,
-  
 }: VendorsPageViewProps) {
   const vendorsList = initialVendors ?? EMPTY_VENDORS;
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("ALL");
@@ -42,43 +42,69 @@ export function VendorsPageView({
   const search = useDeferredValue(searchInput.trim());
 
   // Categories delivered directly via RSC props
-  const categories = initialCategories ?? [];
-  const rootCategories: CategoryResponseDto[] = categories.filter(
-    (c) => !c.parentId
+  const categories = initialCategories ?? EMPTY_CATEGORIES;
+  const rootCategories = useMemo(
+    () => categories.filter((c) => !c.parentId),
+    [categories],
   );
 
-  // If the server's first directory request failed, recover in the browser.
-  // A successful empty directory is also confirmed by this one request.
+  // Pre-build hierarchy map from categories so any subcategory strictly resolves to its root main category
+  const categoryToRootMap = useMemo(() => {
+    const catById = new Map<string, CategoryResponseDto>();
+    for (const cat of categories) {
+      catById.set(cat.id, cat);
+      if (cat.slug) catById.set(cat.slug, cat);
+    }
+
+    const mapping = new Map<string, { id: string; name: string }>();
+
+    for (const cat of categories) {
+      let current: CategoryResponseDto | undefined = cat;
+      while (current && current.parentId) {
+        current = catById.get(current.parentId);
+      }
+      if (current && !current.parentId) {
+        const rootInfo = { id: current.id, name: current.name };
+        mapping.set(cat.id, rootInfo);
+        if (cat.slug) mapping.set(cat.slug, rootInfo);
+        if (cat.name) mapping.set(cat.name.toLowerCase(), rootInfo);
+      }
+    }
+
+    // Also register root categories directly
+    for (const root of rootCategories) {
+      const rootInfo = { id: root.id, name: root.name };
+      mapping.set(root.id, rootInfo);
+      if (root.slug) mapping.set(root.slug, rootInfo);
+      if (root.name) mapping.set(root.name.toLowerCase(), rootInfo);
+    }
+
+    return mapping;
+  }, [categories, rootCategories]);
+
+  const isFiltered = selectedCategoryId !== "ALL" || search.length > 0;
+
+  // Live database-backed query for vendor directory with debounced search & category filtering
   const vendorsQuery = useQuery({
-    queryKey: ["vendors-public-list", "all"],
-    queryFn: async () => (await publicVendorService.list()).data,
-    enabled: vendorsList.length === 0,
-    staleTime: 1000 * 60 * 10,
+    queryKey: ["vendors-public-list", selectedCategoryId, search],
+    queryFn: async ({ signal }) => {
+      const res = await publicVendorService.list(
+        {
+          categoryId: selectedCategoryId !== "ALL" ? selectedCategoryId : undefined,
+          search: search || undefined,
+          limit: 50,
+        },
+        signal,
+      );
+      return res.data ?? [];
+    },
+    initialData: !isFiltered && vendorsList.length > 0 ? vendorsList : undefined,
+    placeholderData: (previousData) => previousData,
+    staleTime: 1000 * 60 * 5,
   });
-  const vendorDirectory = useMemo(
-    () => vendorsList.length > 0 ? vendorsList : vendorsQuery.data ?? [],
-    [vendorsList, vendorsQuery.data],
-  );
-  const isLoadingVendors = vendorsList.length === 0 && vendorsQuery.isLoading;
 
-  // The server page supplies the complete directory with each vendor's root
-  // category memberships. Filtering that payload locally keeps these controls
-  // immediate and avoids a round trip for every category/search change.
-  const displayedVendors = useMemo(() => {
-    const normalizedSearch = search.toLocaleLowerCase();
-    return vendorDirectory.filter((vendor) => {
-      const matchesCategory =
-        selectedCategoryId === "ALL" ||
-        vendor.categories?.some(
-          (category: { id: string }) => category.id === selectedCategoryId,
-        );
-      const matchesSearch =
-        !normalizedSearch ||
-        vendor.storeName?.toLocaleLowerCase().includes(normalizedSearch) ||
-        vendor.storeDescription?.toLocaleLowerCase().includes(normalizedSearch);
-      return matchesCategory && matchesSearch;
-    });
-  }, [vendorDirectory, search, selectedCategoryId]);
+  const displayedVendors = vendorsQuery.data ?? (isFiltered ? [] : vendorsList);
+  const isLoadingVendors = vendorsQuery.isLoading;
 
   return (
     <CustomerLayout categories={categories}>
@@ -98,6 +124,9 @@ export function VendorsPageView({
           <div className="relative w-full max-w-xs">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              id="vendors-search-input"
+              name="vendorSearch"
+              aria-label="Search stores by name"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search stores by name..."
@@ -118,12 +147,16 @@ export function VendorsPageView({
         {/* Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[230px_minmax(0,1fr)] gap-8 items-start">
           {/* Left Column: Vertical Category Filter Pills */}
-          <aside className="space-y-2 lg:sticky lg:top-24">
+          <aside
+            aria-label="Filter vendors by category"
+            className="flex gap-2 overflow-x-auto pb-2 lg:sticky lg:top-24 lg:flex-col lg:overflow-visible lg:pb-0"
+          >
             {/* "All Stores" Pill */}
             <button
               type="button"
               onClick={() => setSelectedCategoryId("ALL")}
-              className={`w-full flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-medium transition-all ${
+              aria-pressed={selectedCategoryId === "ALL"}
+              className={`w-max max-w-[75vw] shrink-0 flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-medium transition-all lg:w-full lg:max-w-none ${
                 selectedCategoryId === "ALL"
                   ? "bg-primary text-primary-foreground border-primary shadow-xs"
                   : "bg-card text-foreground border-border hover:bg-secondary"
@@ -132,7 +165,7 @@ export function VendorsPageView({
               <div className="flex h-5 w-5 items-center justify-center shrink-0">
                 <Sparkles className="h-4 w-4" />
               </div>
-              <span className="truncate">All Stores</span>
+              <span className="min-w-0 truncate">All Stores</span>
             </button>
 
             {/* Dynamic Root Categories from DB */}
@@ -143,7 +176,8 @@ export function VendorsPageView({
                   key={cat.id}
                   type="button"
                   onClick={() => setSelectedCategoryId(cat.id)}
-                  className={`w-full flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all ${
+                  aria-pressed={isSelected}
+                  className={`w-max max-w-[75vw] shrink-0 flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all lg:w-full lg:max-w-none ${
                     isSelected
                       ? "bg-primary text-primary-foreground border-primary shadow-xs"
                       : "bg-card text-foreground border-border hover:bg-secondary"
@@ -160,7 +194,7 @@ export function VendorsPageView({
                       <span className="text-xs font-bold">{cat.name.charAt(0)}</span>
                     )}
                   </div>
-                  <span className="truncate">{cat.name}</span>
+                  <span className="min-w-0 truncate">{cat.name}</span>
                 </button>
               );
             })}
@@ -197,7 +231,23 @@ export function VendorsPageView({
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {displayedVendors.map((vendor) => {
                   const initials = getStoreInitials(vendor.storeName);
-                  const vendorCategories = vendor.categories ?? [];
+                  const rawCategories = vendor.categories ?? [];
+
+                  // Resolve every category tag to its root main category if mapped, or preserve category name, and deduplicate
+                  const mainCategoriesMap = new Map<string, { id: string; name: string }>();
+                  for (const c of rawCategories) {
+                    const root =
+                      categoryToRootMap.get(c.id) ||
+                      (c.slug ? categoryToRootMap.get(c.slug) : undefined) ||
+                      (c.name ? categoryToRootMap.get(c.name.toLowerCase()) : undefined);
+
+                    if (root) {
+                      mainCategoriesMap.set(root.id, root);
+                    } else if (c.name) {
+                      mainCategoriesMap.set(c.id || c.name, { id: c.id || c.name, name: c.name });
+                    }
+                  }
+                  const vendorMainCategories = Array.from(mainCategoriesMap.values());
 
                   return (
                     <Link
@@ -240,17 +290,19 @@ export function VendorsPageView({
                             {vendor.storeName}
                           </h2>
 
-                          {/* Category Tags at Bottom */}
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            {vendorCategories.length > 0 ? (
-                              vendorCategories.slice(0, 3).map((c, i) => (
-                                <span key={c.id} className="inline-flex items-center">
-                                  {i > 0 && <span className="mx-1 text-muted-foreground/40">•</span>}
-                                  <span>{c.name}</span>
+                          {/* Category Tags at Bottom - Shows ALL categories the vendor belongs to */}
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                            {vendorMainCategories.length > 0 ? (
+                              vendorMainCategories.map((c) => (
+                                <span
+                                  key={c.id}
+                                  className="inline-flex items-center rounded-md bg-secondary/80 px-2 py-0.5 text-[11px] font-medium text-secondary-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary"
+                                >
+                                  {c.name}
                                 </span>
                               ))
                             ) : (
-                              <span>Vendor Store</span>
+                              <span className="text-xs text-muted-foreground">Vendor Store</span>
                             )}
                           </div>
                         </div>

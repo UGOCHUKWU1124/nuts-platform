@@ -22,7 +22,7 @@ Share2,
 User,
 Wallet,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -30,16 +30,22 @@ export default function AccountPage() {
   const { data: user, isLoading: userLoading } = useQuery({
     queryKey: queryKey.user.profile,
     queryFn: async () => (await userService.me()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { data: walletData } = useQuery({
     queryKey: ["wallet"],
     queryFn: async () => (await walletService.getUserWallet()).data,
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { data: ordersData } = useQuery({
     queryKey: queryKey.order.list({ page: 1, limit: 1 }),
     queryFn: async () => await orderService.list({ page: 1, limit: 1 }),
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   const { items: wishlistItems } = useWishlist();
@@ -82,16 +88,16 @@ export default function AccountPage() {
             <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-2xl bg-white text-neutral-950 font-bold text-xl sm:text-2xl shadow-lg">
               {initials}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{fullName}</h1>
+                <h1 className="break-words text-2xl sm:text-3xl font-bold tracking-tight">{fullName}</h1>
               </div>
-              <p className="mt-1 text-sm text-neutral-400 flex items-center gap-2">
-                <span>{user.email}</span>
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-400">
+                <span className="break-all">{user.email}</span>
                 {user.phoneNumber && (
                   <>
                     <span>·</span>
-                    <span>{user.phoneNumber}</span>
+                    <span className="break-all">{user.phoneNumber}</span>
                   </>
                 )}
               </p>
@@ -344,9 +350,17 @@ export default function AccountPage() {
             </div>
 
             <div>
-              <span className="text-xs font-semibold text-muted-foreground block mb-1">Direct Registration URL</span>
+              <label
+                htmlFor="direct-registration-url"
+                className="text-xs font-semibold text-muted-foreground block mb-1"
+              >
+                Direct Registration URL
+              </label>
               <div className="flex items-center gap-2">
                 <input
+                  id="direct-registration-url"
+                  name="registrationUrl"
+                  aria-label="Direct Registration URL"
                   type="text"
                   readOnly
                   value={

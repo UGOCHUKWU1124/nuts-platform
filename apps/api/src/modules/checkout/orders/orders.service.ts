@@ -4,12 +4,15 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { customAlphabet } from 'nanoid';
 
+import { CacheService } from '@api/modules/infrastructure/cache/cache.service';
+import { CART_CACHE_PREFIX } from '@api/modules/checkout/cart/cart.service';
 import { EmailService } from '@api/modules/infrastructure/mail/email.service';
 import { PrismaService } from '@api/modules/infrastructure/prisma/prisma.service';
 import { PaymentsService } from '@api/modules/payments/payments.service';
@@ -319,6 +322,7 @@ export class OrdersService {
     private readonly walletService: WalletService,
     private readonly eventEmitter: EventEmitter2,
     config: ConfigService,
+    @Optional() private readonly cacheService?: CacheService,
   ) {
     this.revalidatePrices =
       config.getOrThrow<string>('CHECKOUT_REVALIDATE_PRICES') !== 'false';
@@ -327,6 +331,18 @@ export class OrdersService {
       .getOrThrow<string>('DEFAULT_CURRENCY')
       .trim()
       .toLowerCase();
+  }
+
+  private async invalidateCartCache(userId: string): Promise<void> {
+    if (this.cacheService) {
+      try {
+        await this.cacheService.del(`${CART_CACHE_PREFIX}${userId}`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to invalidate cart cache for user ${userId}: ${(error as Error).message}`,
+        );
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -476,20 +492,8 @@ export class OrdersService {
 
     const response = this.toCheckoutResponse(order);
 
-    /**
-     * Email is non-critical to checkout.
-     * Do not make the customer wait for SMTP.
-     */
-    this.sendOrderConfirmationEmail(userId, response).catch((error) => {
-      this.logger.error(
-        `Failed to send order confirmation email for ${order.id}`,
-        error,
-      );
-    });
-
     if (paymentInit) {
       response.authorizationUrl = paymentInit.authorizationUrl;
-      response.authorization_url = paymentInit.authorizationUrl;
       response.paymentId = paymentInit.paymentId;
       response.paystackAccessCode = paymentInit.accessCode ?? null;
       response.paymentReference = paymentInit.reference;
@@ -545,6 +549,34 @@ export class OrdersService {
     });
 
     return this.findOne(userId, orderId);
+  }
+
+  /**
+   * System-automated cancellation for unpaid orders exceeding the checkout TTL.
+   * Atomically transitions PENDING -> CANCELLED, releases reserved stock, updates
+   * payment to FAILED, records audit history, and emits domain events.
+   */
+  async cancelExpiredPendingOrder(
+    orderId: string,
+    reason = 'Payment window expired (auto-cancelled by system)',
+  ): Promise<boolean> {
+    try {
+      await this.transitionOrderStatus({
+        orderId,
+        nextStatus: OrderStatus.CANCELLED,
+        note: reason,
+      });
+      this.logger.log(
+        `Successfully auto-cancelled expired order ${orderId} and restored reserved stock`,
+      );
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to auto-cancel expired order ${orderId}: ${message}`,
+      );
+      return false;
+    }
   }
 
   async findMine(userId: string, query: PaginationQueryDto) {
@@ -632,25 +664,69 @@ export class OrdersService {
     }
 
     if (query.search?.trim()) {
-      const term = query.search.trim();
+      const rawTerm = query.search.trim();
+      const cleanTerm = rawTerm.replace(/^#/, '').trim();
 
-      /**
-       * `%term%` searches are not efficiently handled by normal B-tree indexes.
-       *
-       * At scale, add PostgreSQL pg_trgm indexes for orderNumber/email.
-       */
       where.OR = [
         {
           orderNumber: {
-            contains: term,
+            contains: cleanTerm,
             mode: 'insensitive',
           },
         },
         {
           user: {
             email: {
-              contains: term,
+              contains: rawTerm,
               mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            firstName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            lastName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          shippingAddress: {
+            contains: rawTerm,
+            mode: 'insensitive',
+          },
+        },
+        {
+          discountCode: {
+            contains: rawTerm,
+            mode: 'insensitive',
+          },
+        },
+        {
+          payment: {
+            transactionReference: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          orderItems: {
+            some: {
+              product: {
+                name: {
+                  contains: rawTerm,
+                  mode: 'insensitive',
+                },
+              },
             },
           },
         },
@@ -736,8 +812,8 @@ export class OrdersService {
     data: VendorOrderResponseDto[];
     meta: ReturnType<typeof createPaginationMeta>;
   }> {
-    const page = Math.max(1, params.page ?? 1);
-    const limit = Math.min(100, Math.max(1, params.limit ?? 10));
+    const page = Math.max(1, Number(params.page ?? 1) || 1);
+    const limit = Math.min(100, Math.max(1, Number(params.limit ?? 10) || 10));
 
     const where: Prisma.OrderWhereInput = {
       /**
@@ -756,19 +832,69 @@ export class OrdersService {
     }
 
     if (params.search?.trim()) {
-      const term = params.search.trim();
+      const rawTerm = params.search.trim();
+      const cleanTerm = rawTerm.replace(/^#/, '').trim();
+
       where.OR = [
         {
           orderNumber: {
-            contains: term,
+            contains: cleanTerm,
             mode: 'insensitive',
           },
         },
         {
           user: {
             email: {
-              contains: term,
+              contains: rawTerm,
               mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            firstName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            lastName: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          shippingAddress: {
+            contains: rawTerm,
+            mode: 'insensitive',
+          },
+        },
+        {
+          discountCode: {
+            contains: rawTerm,
+            mode: 'insensitive',
+          },
+        },
+        {
+          payment: {
+            transactionReference: {
+              contains: rawTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          orderItems: {
+            some: {
+              product: {
+                name: {
+                  contains: rawTerm,
+                  mode: 'insensitive',
+                },
+              },
             },
           },
         },
@@ -1237,7 +1363,7 @@ export class OrdersService {
     addressId: string | undefined,
     idempotencyKey: string,
   ): Promise<OrderWithItems> {
-    return this.prisma.$transaction(
+    const order = await this.prisma.$transaction(
       async (tx) => {
         /**
          * IMPORTANT:
@@ -1255,8 +1381,6 @@ export class OrdersService {
             FROM "carts"
             WHERE "userId" = ${userId}
               AND "checkedOut" = false
-            ORDER BY "createdAt" DESC
-            LIMIT 1
             FOR UPDATE
           `,
         );
@@ -1302,14 +1426,15 @@ export class OrdersService {
           );
         }
 
-        const cartId = cartRows[0].id;
-
         /**
-         * Fetch only the checkout data we need.
+         * Fetch all active carts locked for this user.
+         *
+         * If duplicate active carts exist (from multi-tab sessions or concurrent requests),
+         * prioritize the cart that contains items over empty orphan carts.
          */
-        const cart = await tx.cart.findUnique({
+        const candidateCarts = await tx.cart.findMany({
           where: {
-            id: cartId,
+            id: { in: cartRows.map((r) => r.id) },
           },
           include: {
             cartItems: {
@@ -1346,7 +1471,14 @@ export class OrdersService {
               },
             },
           },
+          orderBy: {
+            updatedAt: 'desc',
+          },
         });
+
+        const cart =
+          candidateCarts.find((c) => c.cartItems.length > 0) ??
+          candidateCarts[0];
 
         if (!cart || cart.checkedOut) {
           throw new BadRequestException(
@@ -1356,6 +1488,19 @@ export class OrdersService {
 
         if (!cart.cartItems.length) {
           throw new BadRequestException('Your cart is empty.');
+        }
+
+        // Clean up any remaining empty duplicate carts for this user
+        const duplicateEmptyCartIds = candidateCarts
+          .filter((c) => c.id !== cart.id && c.cartItems.length === 0)
+          .map((c) => c.id);
+
+        if (duplicateEmptyCartIds.length > 0) {
+          await tx.cart.deleteMany({
+            where: {
+              id: { in: duplicateEmptyCartIds },
+            },
+          });
         }
 
         /**
@@ -1501,15 +1646,18 @@ export class OrdersService {
         const stockHistoryRows: Prisma.StockHistoryCreateManyInput[] = [];
 
         /**
-         * Deduct stock one inventory row at a time.
+         * Deduct stock one inventory row at a time in deterministic order.
          *
-         * We use PostgreSQL UPDATE ... RETURNING because Prisma's
-         * updateMany() does not return the old/new stock values.
-         *
-         * This means StockHistory contains the actual committed values,
-         * not values guessed from a stale SELECT.
+         * Deterministic row lock ordering eliminates PostgreSQL deadlocks (SQLSTATE 40P01)
+         * when multiple users concurrently check out overlapping sets of items.
          */
-        for (const item of cart.cartItems) {
+        const itemsToDeduct = [...cart.cartItems].sort((a, b) => {
+          const aKey = a.variantId ?? a.productId;
+          const bKey = b.variantId ?? b.productId;
+          return aKey.localeCompare(bKey);
+        });
+
+        for (const item of itemsToDeduct) {
           const variantLabel = item.variant
             ? this.variantLabel(item.variant.options)
             : null;
@@ -1759,6 +1907,12 @@ export class OrdersService {
           },
         });
 
+        await tx.cartItem.deleteMany({
+          where: {
+            cartId: cart.id,
+          },
+        });
+
         /**
          * Fetch only after all writes succeed.
          *
@@ -1784,6 +1938,10 @@ export class OrdersService {
         timeout: 15_000,
       },
     );
+
+    await this.invalidateCartCache(userId);
+
+    return order;
   }
 
   // ---------------------------------------------------------------------------
@@ -2273,6 +2431,19 @@ export class OrdersService {
   private toAdminResponse(
     order: AdminOrderWithRelations,
   ): AdminOrderResponseDto {
+    const itemsTotal =
+      order.orderItems?.reduce(
+        (sum, item) => sum + Number(item.totalPrice),
+        0,
+      ) ?? 0;
+    const effectiveBase =
+      itemsTotal > 0
+        ? itemsTotal
+        : Number(order.finalAmount || order.totalAmount || 0);
+    const vendorRevenue =
+      Math.round(effectiveBase * VENDOR_COMMISSION_RATE * 100) / 100;
+    const platformFee = Math.round((effectiveBase - vendorRevenue) * 100) / 100;
+
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -2292,8 +2463,8 @@ export class OrdersService {
 
       referralCode: order.referralCode ?? null,
 
-      platformFee: 0,
-      vendorRevenue: 0,
+      platformFee,
+      vendorRevenue,
 
       shippingAddress: order.shippingAddress,
 
@@ -2367,104 +2538,6 @@ export class OrdersService {
         };
       }),
     };
-  }
-
-  // ---------------------------------------------------------------------------
-  // EMAIL
-  // ---------------------------------------------------------------------------
-
-  private async sendOrderConfirmationEmail(
-    userId: string,
-    order: OrderResponseDto | CheckoutResponseDto,
-  ): Promise<void> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-        select: {
-          email: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
-
-      if (!user) {
-        return;
-      }
-
-      const rawItems: unknown[] = Array.isArray(order.items) ? order.items : [];
-      const items = rawItems.map((value) => {
-        const rawItem = isRecord(value) ? value : {};
-        let productName = 'Unknown Product';
-        let variantName: string | undefined = undefined;
-
-        if (typeof rawItem.productName === 'string') {
-          productName = rawItem.productName;
-          variantName =
-            typeof rawItem.variantName === 'string'
-              ? rawItem.variantName
-              : undefined;
-        } else if (
-          isRecord(rawItem.productSnapshot) &&
-          typeof rawItem.productSnapshot.name === 'string'
-        ) {
-          productName = rawItem.productSnapshot.name;
-          if (
-            isRecord(rawItem.variantSnapshot) &&
-            Array.isArray(rawItem.variantSnapshot.options)
-          ) {
-            variantName = rawItem.variantSnapshot.options
-              .filter(
-                (option): option is { name: string; value: string } =>
-                  isRecord(option) &&
-                  typeof option.name === 'string' &&
-                  typeof option.value === 'string',
-              )
-              .map((option) => `${option.name}: ${option.value}`)
-              .join(', ');
-          }
-        }
-
-        return {
-          productName,
-          quantity: typeof rawItem.quantity === 'number' ? rawItem.quantity : 0,
-          price: typeof rawItem.unitPrice === 'number' ? rawItem.unitPrice : 0,
-          variantName,
-        };
-      });
-
-      await this.emailService.sendOrderConfirmation(user.email, {
-        orderNumber: order.orderNumber,
-
-        customerName:
-          `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
-          'Valued Customer',
-
-        customerEmail: user.email,
-
-        shippingAddress: order.shippingAddress ?? '',
-
-        totalAmount: order.totalAmount,
-
-        discountAmount: order.discountAmount,
-
-        discountCode: order.discountCode,
-
-        finalAmount: order.finalAmount,
-
-        currency: this.defaultCurrency,
-
-        createdAt: order.createdAt,
-
-        items,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to send order confirmation email for ${order.id}`,
-        error,
-      );
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2604,6 +2677,73 @@ export class OrdersService {
     } catch (error) {
       this.logger.error(
         `Failed to emit status event for order ${orderId}`,
+        error,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ORDER CONFIRMATION EMAIL
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Dispatches the official order confirmation email with generated PDF invoice.
+   *
+   * Crucial: This must only be invoked when payment has been successfully confirmed
+   * (e.g., transition to PROCESSING / payment SUCCESS), never during initial unpaid checkout.
+   */
+  async sendOrderConfirmationEmail(orderId: string): Promise<void> {
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          user: {
+            select: {
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          orderItems: {
+            include: {
+              product: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!order || !order.user) {
+        return;
+      }
+
+      const items = order.orderItems.map((item) => ({
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: Number(item.unitPrice),
+      }));
+
+      await this.emailService.sendOrderConfirmation(order.user.email, {
+        orderNumber: order.orderNumber,
+        customerName:
+          `${order.user.firstName ?? ''} ${order.user.lastName ?? ''}`.trim() ||
+          'Valued Customer',
+        customerEmail: order.user.email,
+        shippingAddress: order.shippingAddress ?? '',
+        totalAmount: Number(order.totalAmount),
+        discountAmount: Number(order.discountAmount),
+        discountCode: order.discountCode,
+        finalAmount: Number(order.finalAmount),
+        currency: this.defaultCurrency,
+        createdAt: order.createdAt,
+        items,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send order confirmation email for order ${orderId}`,
         error,
       );
     }

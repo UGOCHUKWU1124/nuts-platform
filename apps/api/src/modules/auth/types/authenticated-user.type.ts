@@ -6,4 +6,5 @@ export type AuthenticatedUser = {
   role: ROLE;
   firstName: string | null;
   lastName: string | null;
+  sessionId?: string;
 };

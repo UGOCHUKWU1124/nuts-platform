@@ -51,8 +51,10 @@ export default function AdminOrderPage() {
   const qc = useQueryClient();
   const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.admin.order, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminOrderService.list({
@@ -134,6 +136,27 @@ export default function AdminOrderPage() {
       ),
     },
     {
+      key: "platformFee",
+      header: "Platform Cut (15%)",
+      render: (r) => {
+        const gross = Number(r.finalAmount ?? r.totalAmount ?? 0);
+        const fee =
+          r.platformFee && r.platformFee > 0
+            ? r.platformFee
+            : Math.round(gross * 0.15 * 100) / 100;
+        return (
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm text-emerald-600 dark:text-emerald-400 font-mono">
+              +{formatPrice(fee)}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-medium">
+              15% fee
+            </span>
+          </div>
+        );
+      },
+    },
+    {
       key: "createdAt",
       header: "Placed At",
       render: (r) => (
@@ -190,7 +213,7 @@ export default function AdminOrderPage() {
           setSearch(v);
           setPage(1);
         }}
-        placeholder="Search order number or customer email..."
+        placeholder="Search order #, customer email/name, or product..."
         filterValue={status}
         onFilterChange={(v) => {
           setStatus(v);
@@ -203,12 +226,15 @@ export default function AdminOrderPage() {
           { value: "DELIVERED", label: "Delivered" },
           { value: "CANCELLED", label: "Cancelled" },
         ]}
+        onRefresh={() => qc.invalidateQueries({ queryKey: queryKey.admin.order })}
+        isLoading={isLoading || isFetching}
       />
 
       <DataTable
         columns={columns}
         data={Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []}
         isLoading={isLoading}
+        isFetching={isFetching}
         onRowClick={(row) => setSelectedOrder(row)}
         emptyMessage="No customer orders found."
         pagination={
@@ -216,7 +242,7 @@ export default function AdminOrderPage() {
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
                 hasNextPage: "hasNextPage" in data.meta ? data.meta.hasNextPage : undefined,
                 hasPrevPage: "hasPreviousPage" in data.meta ? data.meta.hasPreviousPage : undefined,
@@ -233,10 +259,14 @@ export default function AdminOrderPage() {
         onOpenChange={(v) => !v && setSelectedOrder(null)}
         allowedNextStatuses={allowedNext ? [allowedNext] : []}
         isUpdatingStatus={updateStatusMutation.isPending}
-        onUpdateStatus={(st) =>
-          selectedOrder &&
-          updateStatusMutation.mutate({ id: selectedOrder.id, status: st })
-        }
+        onUpdateStatus={(st) => {
+          if (selectedOrder) {
+            setStatusAdvanceTarget({
+              order: selectedOrder,
+              next: st as OrderStatus,
+            });
+          }
+        }}
       />
 
       {/* CONFIRM ADVANCE FULFILLMENT DIALOG */}

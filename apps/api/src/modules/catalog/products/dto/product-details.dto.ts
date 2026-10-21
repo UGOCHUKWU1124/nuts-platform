@@ -1,4 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
+
+export { CategoryRefDto as ProductCategoryInfoDto };
 
 class ProductImageDto {
   @ApiProperty({
@@ -13,26 +16,6 @@ class ProductImageDto {
     nullable: true,
   })
   altText!: string | null;
-}
-
-class ProductCategoryInfoDto {
-  @ApiProperty({
-    description: 'Unique identifier of the category',
-    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Display name of the category',
-    example: 'Leather Goods',
-  })
-  name!: string;
-
-  @ApiProperty({
-    description: 'URL-friendly category slug',
-    example: 'leather-goods',
-  })
-  slug!: string;
 }
 
 class ProductVendorInfoDto {
@@ -115,21 +98,21 @@ export class ProductDetailsDto {
 
   @ApiProperty({
     description: 'Category this product belongs to',
-    type: ProductCategoryInfoDto,
+    type: CategoryRefDto,
   })
-  category!: ProductCategoryInfoDto;
+  category!: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'Parent subcategory this product belongs to',
-    type: ProductCategoryInfoDto,
+    type: CategoryRefDto,
   })
-  parentSubcategory?: ProductCategoryInfoDto;
+  parentSubcategory?: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'Subcategory this product belongs to',
-    type: ProductCategoryInfoDto,
+    type: CategoryRefDto,
   })
-  subcategory?: ProductCategoryInfoDto;
+  subcategory?: CategoryRefDto;
 
   @ApiProperty({
     description: 'The vendor (store owner) who owns this product',

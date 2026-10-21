@@ -12,7 +12,7 @@ describe('CircuitBreakerService', () => {
     it('initializes all circuits in CLOSED state', () => {
       const status = service.getStatus();
       expect(status.paystack).toBe('CLOSED');
-      expect(status.smtp).toBe('CLOSED');
+      expect(status.email).toBe('CLOSED');
       expect(status.cloudinary).toBe('CLOSED');
     });
   });
@@ -47,6 +47,17 @@ describe('CircuitBreakerService', () => {
         BrokenCircuitError,
       );
       expect(failingFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('executeEmail', () => {
+    it('executes email provider calls normally', async () => {
+      const result = await service.executeEmail(() =>
+        Promise.resolve('email-ok'),
+      );
+
+      expect(result).toBe('email-ok');
+      expect(service.getStatus().email).toBe('CLOSED');
     });
   });
 });

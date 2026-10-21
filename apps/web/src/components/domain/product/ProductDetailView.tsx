@@ -4,17 +4,22 @@ import { RemoteImage } from "@/component/ui/RemoteImage";
 import { productService } from "@/api";
 import type { AddedFromType } from "@/api/dto/cart";
 import type { CategoryResponseDto } from "@/api/dto/category";
-import type { PublicProductResponseDto,PublicVariantSummaryDto } from "@/api/dto/product";
+import type {
+  PublicProductResponseDto,
+  PublicVariantSummaryDto,
+} from "@/api/dto/product";
 import type { ProductReviewsMetaDto, ReviewResponseDto } from "@/api/dto/review";
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
+import { ProductCard } from "@/component/product/ProductCard";
 import { ProductReviews } from "@/component/review/ProductReviews";
 import { Button } from "@/component/ui/button";
 import { useCart } from "@/hook/use-cart";
 import { useWishlist } from "@/hook/use-wishlist";
-import { findCategoryBreadcrumbs } from "@/lib/cart-path";
+import { findCategoryBreadcrumbs } from "@/lib/category-tree";
 import { queryKey } from "@/lib/query-key";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatPrice } from "@/lib/util";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { useAuthStore } from "@/zustand/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,13 +27,15 @@ ChevronDown,
 ChevronRight,
 ChevronUp,
 Heart,
+LayoutDashboard,
 Minus,
 Plus,
 Share2,
+Shield,
 ShoppingBag,
 Truck
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useMemo,useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -61,11 +68,17 @@ export function ProductDetailView({
   noLayout = false,
 }: ProductDetailViewProps) {
   const router = useRouter();
+  const { data: cachedCategories } = usePublicCategories(categories);
+  const productCategories = cachedCategories ?? categories;
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const capabilities = useAuthStore((state) => state.capabilities);
+  const canPurchase = capabilities ? capabilities.canPurchase : !isAuthenticated;
+  const canSell = capabilities?.canSell ?? false;
+  const isMerchantOrAdmin = isAuthenticated && !canPurchase;
+
   const {
     toggleItem,
     isInWishlist,
-    isTogglePending: isWishlistPending,
   } = useWishlist();
   const { addItem: addToCart } = useCart();
 
@@ -79,13 +92,45 @@ export function ProductDetailView({
 
   const { data: product, isLoading } = useQuery({
     queryKey: queryKey.product.detail(slug),
-    queryFn: async () => {
-      const { data } = await productService.getBySlug(slug);
+    queryFn: async ({ signal }) => {
+      const { data } = await productService.getBySlug(slug, signal);
       return data;
     },
     initialData: initialProduct || undefined,
     staleTime: 1000 * 60 * 5,
     enabled: !!slug,
+  });
+
+  const recommendationCategoryId =
+    product?.subcategory?.id ||
+    product?.parentSubcategory?.id ||
+    product?.category?.id;
+  const recommendationCategorySlug =
+    product?.subcategory?.slug ||
+    product?.parentSubcategory?.slug ||
+    product?.category?.slug;
+  const recommendationKey =
+    recommendationCategoryId ??
+    (product?.vendor?.id ? `vendor:${product.vendor.id}` : "");
+  const relatedProductsQuery = useQuery({
+    queryKey: queryKey.product.related(product?.id ?? "", recommendationKey),
+    queryFn: async ({ signal }) => {
+      if (!product) {
+        throw new Error("Cannot load related products without a product");
+      }
+
+      const params = {
+        ...(recommendationCategoryId
+          ? { categoryId: recommendationCategoryId }
+          : { vendorId: product.vendor.id }),
+        limit: 9,
+        sort: "newest",
+      };
+      const { data } = await productService.getCards(params, signal);
+      return data.filter((item) => item.id !== product.id).slice(0, 8);
+    },
+    enabled: Boolean(product && recommendationKey),
+    staleTime: 1000 * 60 * 5,
   });
 
   const getVariantLabel = (v?: PublicVariantSummaryDto | null) => {
@@ -193,15 +238,15 @@ export function ProductDetailView({
       product?.subcategory?.slug ||
       product?.parentSubcategory?.slug ||
       product?.category?.slug;
-    if (targetSlug && categories && categories.length > 0) {
+    if (targetSlug && productCategories && productCategories.length > 0) {
       const resolved = findCategoryBreadcrumbs(
         targetSlug,
-        categories
+        productCategories
       );
       if (resolved && resolved.length > 0) return resolved;
     }
     return undefined;
-  }, [breadcrumbs, product, categories]);
+  }, [breadcrumbs, product, productCategories]);
 
   if (isLoading) {
     const skeleton = (
@@ -217,7 +262,7 @@ export function ProductDetailView({
         </div>
       </div>
     );
-    return noLayout ? skeleton : <CustomerLayout categories={categories}>{skeleton}</CustomerLayout>;
+    return noLayout ? skeleton : <CustomerLayout categories={productCategories}>{skeleton}</CustomerLayout>;
   }
 
   if (!product) {
@@ -232,7 +277,7 @@ export function ProductDetailView({
         </Button>
       </div>
     );
-    return noLayout ? notFound : <CustomerLayout categories={categories}>{notFound}</CustomerLayout>;
+    return noLayout ? notFound : <CustomerLayout categories={productCategories}>{notFound}</CustomerLayout>;
   }
 
   const p = product;
@@ -291,7 +336,17 @@ export function ProductDetailView({
 
   function handleAddToCart() {
     if (!isAuthenticated) {
-      toast.error("Please sign in to add items to your cart");
+      toast.error("Please sign in to add items to your cart", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push("/auth/login"),
+        },
+      });
+      return;
+    }
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      toast.info("Your account type cannot make storefront purchases. Please sign in with a shopper account.");
       return;
     }
     if (p.hasVariants && !selectedVariant) {
@@ -340,6 +395,21 @@ export function ProductDetailView({
   }
 
   async function handleWishlist() {
+    if (!isAuthenticated) {
+      toast.error("Please sign in to save items to your wishlist", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push("/auth/login"),
+        },
+      });
+      return;
+    }
+    const canPurchase = useAuthStore.getState().capabilities?.canPurchase ?? false;
+    if (!canPurchase) {
+      toast.info("Your account type cannot maintain customer wishlists.");
+      return;
+    }
+
     try {
       const added = await toggleItem(
         {
@@ -369,10 +439,10 @@ export function ProductDetailView({
       : null)?.trim() || null;
 
   const content = (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-3 py-5 pb-8 sm:px-6 sm:py-8 lg:px-8">
       {/* Dynamic Breadcrumb Trail */}
       <nav
-        className="mb-8 flex flex-wrap items-center gap-2 sm:gap-2.5 text-sm sm:text-base"
+        className="mb-5 flex flex-wrap items-center gap-1.5 text-xs sm:mb-8 sm:gap-2.5 sm:text-base"
         aria-label="Breadcrumb"
       >
         <Link
@@ -415,7 +485,7 @@ export function ProductDetailView({
       </nav>
 
       {/* ─── Main Product Details Grid (Screenshot 6 Layout) ─── */}
-      <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
+      <div className="grid grid-cols-1 gap-6 sm:gap-10 lg:grid-cols-2 lg:gap-16">
         {/* Left Column: Image Viewport & Thumbnails */}
         <div className="flex flex-col gap-4">
           <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-[#f7f7f8] flex items-center justify-center">
@@ -497,30 +567,32 @@ export function ProductDetailView({
           {/* Right Column: Title, Actions, Price, Accordions (Screenshot 6) */}
           <div className="flex flex-col">
             {/* Header: Title & Action Icons */}
-            <div className="flex items-start justify-between gap-4">
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
+            <div className="flex items-start justify-between gap-2 sm:gap-4">
+              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
                 {p.name}
               </h1>
 
-              <div className="flex items-center gap-2 shrink-0 pt-1">
-                <button
-                  type="button"
-                  onClick={handleWishlist}
-                  aria-label="Save to wishlist"
-                  className="p-1.5 text-foreground hover:text-neutral-600 transition-colors"
-                >
-                  <Heart
-                    className={`h-5 w-5 ${
-                      isLiked ? "fill-black text-black" : "stroke-[1.6]"
-                    }`}
-                  />
-                </button>
+              <div className="flex shrink-0 items-center gap-1 pt-1 sm:gap-2">
+                {!isMerchantOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleWishlist}
+                    aria-label="Save to wishlist"
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary hover:text-neutral-600"
+                  >
+                    <Heart
+                      className={`h-5 w-5 ${
+                        isLiked ? "fill-black text-black" : "stroke-[1.6]"
+                      }`}
+                    />
+                  </button>
+                )}
 
                 <button
                   type="button"
                   onClick={handleShare}
                   aria-label="Share product"
-                  className="p-1.5 text-foreground hover:text-neutral-600 transition-colors"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary hover:text-neutral-600"
                 >
                   <Share2 className="h-5 w-5 stroke-[1.6]" />
                 </button>
@@ -623,45 +695,73 @@ export function ProductDetailView({
               </div>
             )}
 
-            {/* Quantity Stepper & Add to Cart Row (Screenshot 6) */}
-            <div className="mt-8 flex items-center gap-3">
-              {/* Stepper [- 1 +] */}
-              <div className="flex items-center rounded-xl bg-secondary p-1">
-                <button
-                  type="button"
-                  aria-label="Decrease quantity"
-                  disabled={quantity <= 1 || isOutOfStock}
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <span className="w-12 text-center text-base sm:text-lg font-bold text-foreground">
-                  {quantity}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Increase quantity"
-                  disabled={quantity >= stock || isOutOfStock}
-                  onClick={() => setQuantity((q) => Math.min(stock, q + 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+            {/* Quantity Stepper & Add to Cart Row or Merchant Preview Mode */}
+            {isMerchantOrAdmin ? (
+              <div className="mt-8 rounded-2xl border border-border bg-secondary/50 p-4">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                  {canSell ? (
+                    <LayoutDashboard className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Shield className="h-4 w-4 text-primary" />
+                  )}
+                  <span>
+                    {canSell ? "Vendor Catalog Preview" : "Administrator Preview"}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                  {canSell
+                    ? "You are previewing this product in merchant mode. Storefront purchasing and carts are reserved for customer shopper accounts."
+                    : "You are previewing this product in administrative mode. Storefront purchasing actions are disabled."}
+                </p>
+                {canSell && (
+                  <Link
+                    href="/vendor/product"
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                  >
+                    Manage Inventory in Vendor Dashboard &rarr;
+                  </Link>
+                )}
               </div>
+            ) : (
+              <div className="mt-8 flex items-center gap-3">
+                {/* Stepper [- 1 +] */}
+                <div className="flex items-center rounded-xl bg-secondary p-1">
+                  <button
+                    type="button"
+                    aria-label="Decrease quantity"
+                    disabled={quantity <= 1 || isOutOfStock}
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="w-12 text-center text-base sm:text-lg font-bold text-foreground">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Increase quantity"
+                    disabled={quantity >= stock || isOutOfStock}
+                    onClick={() => setQuantity((q) => Math.min(stock, q + 1))}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground hover:bg-card disabled:opacity-30 transition-all"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
 
-              {/* Add to Cart Pill Button */}
-              <Button
-                size="lg"
-                disabled={isOutOfStock || (p.hasVariants && !selectedVariant) || addToCart.isPending}
-                onClick={handleAddToCart}
-                className="flex-1 h-12 sm:h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-bold shadow-xs transition-all"
-              >
-                {isOutOfStock
-                  ? "Sold Out"
-                  : `Add to cart • ${formatPrice(basePrice * quantity)}`}
-              </Button>
-            </div>
+                {/* Add to Cart Pill Button */}
+                <Button
+                  size="lg"
+                  disabled={isOutOfStock || addToCart.isPending}
+                  onClick={handleAddToCart}
+                  className="flex-1 h-12 sm:h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-bold shadow-xs transition-all"
+                >
+                  {isOutOfStock
+                    ? "Sold Out"
+                    : `Add to cart • ${formatPrice(basePrice * quantity)}`}
+                </Button>
+              </div>
+            )}
 
             {/* ─── Expandable Accordions (Screenshot 6) ─── */}
             <div className="mt-10 divide-y divide-border/60 border-t border-border/60">
@@ -731,44 +831,90 @@ export function ProductDetailView({
           initialReviews={initialReviews}
         />
 
-        {/* ─── Sticky Mobile Add-to-Cart Bar (Instant Purchase on Mobile) ─── */}
-        <div className="lg:hidden fixed bottom-14 sm:bottom-0 left-0 right-0 z-30 border-t border-border/80 bg-background/95 backdrop-blur-md px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
-          <div className="mx-auto flex max-w-md items-center justify-between gap-3">
-            <div className="flex flex-col min-w-0">
-              <span className="text-[11px] text-muted-foreground truncate">{p.name}</span>
-              <span className="text-base font-bold text-foreground">
-                {formatPrice(basePrice * quantity)}
-              </span>
+        <section
+          className="mt-12 border-t border-border/60 pt-10 sm:mt-16 sm:pt-12"
+          aria-labelledby="related-products-heading"
+          aria-busy={relatedProductsQuery.isPending}
+        >
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Keep exploring
+              </p>
+              <h2
+                id="related-products-heading"
+                className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
+              >
+                You may also like
+              </h2>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleWishlist}
-                aria-label={isLiked ? "Remove from wishlist" : "Add to wishlist"}
-                disabled={isWishlistPending}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-secondary/80 text-foreground transition-colors hover:bg-secondary shrink-0"
+            {recommendationCategorySlug && (
+              <Link
+                href={`/category/${recommendationCategorySlug}`}
+                className="shrink-0 text-sm font-semibold text-primary hover:underline"
               >
-                <Heart
-                  className={`h-4.5 w-4.5 ${
-                    isLiked ? "fill-primary text-primary" : "stroke-[1.6]"
-                  } ${isWishlistPending ? "animate-pulse" : ""}`}
-                />
-              </button>
+                Browse category
+              </Link>
+            )}
+          </div>
 
+          {recommendationKey && relatedProductsQuery.isPending && (
+            <div
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
+              role="status"
+            >
+              <span className="sr-only">Loading similar products</span>
+              {Array.from({ length: 4 }, (_, index) => (
+                <div key={index} className="animate-pulse">
+                  <div className="aspect-[3/4] rounded-2xl bg-muted" />
+                  <div className="mt-3 h-4 w-3/4 rounded bg-muted" />
+                  <div className="mt-2 h-4 w-1/3 rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {relatedProductsQuery.isError && (
+            <div className="rounded-xl border border-border bg-card px-4 py-5 text-center">
+              <p className="text-sm text-muted-foreground">
+                Similar products could not be loaded.
+              </p>
               <Button
-                size="default"
-                disabled={isOutOfStock || (p.hasVariants && !selectedVariant) || addToCart.isPending}
-                onClick={handleAddToCart}
-                className="h-10 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs sm:text-sm font-bold px-4 shadow-xs transition-all shrink-0"
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => void relatedProductsQuery.refetch()}
               >
-                {isOutOfStock ? "Sold Out" : "Add to Cart"}
+                Try again
               </Button>
             </div>
-          </div>
-        </div>
+          )}
+
+          {relatedProductsQuery.isSuccess && relatedProductsQuery.data.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+              {relatedProductsQuery.data.map((relatedProduct) => (
+                <ProductCard
+                  key={relatedProduct.id}
+                  product={relatedProduct}
+                  aspectRatio="portrait"
+                  size="default"
+                  addedFrom="PRODUCT_PAGE"
+                />
+              ))}
+            </div>
+          )}
+
+          {(relatedProductsQuery.isSuccess && relatedProductsQuery.data.length === 0) ||
+          !recommendationKey ? (
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              No similar products are available right now.
+            </p>
+          ) : null}
+        </section>
+
       </div>
   );
 
-  return noLayout ? content : <CustomerLayout categories={categories}>{content}</CustomerLayout>;
+  return noLayout ? content : <CustomerLayout categories={productCategories}>{content}</CustomerLayout>;
 }

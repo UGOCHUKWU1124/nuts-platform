@@ -18,6 +18,7 @@ x-api-env: &api-env
 x-client-env: &client-env
   NODE_ENV: ${NODE_ENV:-development}
   INTERNAL_API_URL: http://api:3001
+  JWT_SECRET: ${JWT_SECRET:-9d8a7f6e5d4c3b2a10fe9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8e}
 
 services:
 
@@ -39,8 +40,8 @@ services:
       NODE_ENV: development
       SWAGGER_ENABLED: "true"
     volumes:
-      - ./apps/api/src:/app/src
-      - ./apps/api/prisma.config.ts:/app/prisma.config.ts:ro
+      - ./apps/api/src:/app/apps/api/src
+      - ./apps/api/prisma.config.ts:/app/apps/api/prisma.config.ts:ro
     networks:
       nuts_net:
         aliases:
@@ -62,13 +63,13 @@ services:
     image: nuts-api:latest
     container_name: nuts_api_migrate
     restart: "no"
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     entrypoint: ["dumb-init", "./docker-migrate.sh"]
     env_file:
       - ./apps/api/.env.production
     environment:
       <<: *api-env
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
     networks:
       - nuts_net
 
@@ -81,15 +82,16 @@ services:
     image: nuts-api:latest
     container_name: nuts_api
     restart: unless-stopped
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     expose:
       - "3001"
     env_file:
       - ./apps/api/.env.production
     environment:
       <<: *api-env
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       SWAGGER_ENABLED: "${SWAGGER_ENABLED:-false}"
+      AUTO_MIGRATE: "false"
     depends_on:
       api-migrate:
         condition: service_completed_successfully
@@ -131,19 +133,19 @@ services:
       NEXT_PUBLIC_BACKEND_URL: http://localhost:${API_PORT:-3001}
       NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-3001}/api/v1
     volumes:
-      - ./apps/web/src:/app/src
-      - ./apps/web/public:/app/public:ro
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public:ro
     depends_on:
       api:
         condition: service_healthy
     networks:
       - nuts_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
-      interval: 20s
-      timeout: 5s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 3s
       retries: 5
-      start_period: 20s
+      start_period: 15s
 
   # ── Next.js Client (Production) ────────────────────────────────────────────
   client-prod:
@@ -153,19 +155,19 @@ services:
       target: runner
       args:
         INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:3001}
-        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:?Set NEXT_PUBLIC_BACKEND_URL to the public HTTPS site origin}
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://api.nuts-commerce.com}
         NEXT_PUBLIC_API_URL: /api/v1
     image: nuts-client:latest
     container_name: nuts_client
     restart: unless-stopped
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     expose:
       - "3000"
     env_file:
       - ./apps/web/.env.production
     environment:
       <<: *client-env
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
     deploy:
       resources:
         limits:
@@ -180,18 +182,18 @@ services:
     networks:
       - nuts_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
-      interval: 30s
-      timeout: 5s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 3s
       retries: 3
-      start_period: 30s
+      start_period: 15s
 
   # ── Nginx Reverse Proxy (Production Only) ──────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
     container_name: nuts_nginx
     restart: unless-stopped
-    profiles: ["prod"]
+    profiles: ["prod", "staging"]
     ports:
       - "80:80"
       - "443:443"
@@ -211,7 +213,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the production hostname}
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-nuts-commerce.com}
       NGINX_ENVSUBST_FILTER: ^PUBLIC_DOMAIN$
     depends_on:
       api-prod:
@@ -221,7 +223,7 @@ services:
     networks:
       - nuts_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -kfsS https://localhost/api/v1/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost/healthz || curl -kfsS https://localhost/api/v1/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

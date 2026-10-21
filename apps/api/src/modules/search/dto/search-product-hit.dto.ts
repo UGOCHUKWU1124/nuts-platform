@@ -1,4 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryRefDto } from '@api/modules/shared/dto/category-ref.dto';
+
+export { CategoryRefDto as SearchProductCategoryDto };
 
 export class SearchProductVendorDto {
   @ApiProperty({
@@ -24,26 +27,6 @@ export class SearchProductVendorDto {
     example: 'Artisan Leather Co.',
   })
   businessName!: string;
-}
-
-export class SearchProductCategoryDto {
-  @ApiProperty({
-    description: 'Unique identifier of the category',
-    example: 'cat_leather_goods',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'URL-friendly category slug',
-    example: 'leather-goods',
-  })
-  slug!: string;
-
-  @ApiProperty({
-    description: 'Display name of the category',
-    example: 'Leather Goods',
-  })
-  name!: string;
 }
 
 export class SearchProductHitDto {
@@ -112,15 +95,15 @@ export class SearchProductHitDto {
 
   @ApiProperty({
     description: 'Category the product belongs to',
-    type: SearchProductCategoryDto,
+    type: CategoryRefDto,
   })
-  category!: SearchProductCategoryDto;
+  category!: CategoryRefDto;
 
   @ApiPropertyOptional({
     description: 'Subcategory the product belongs to (nullable)',
-    type: SearchProductCategoryDto,
+    type: CategoryRefDto,
   })
-  subcategory?: SearchProductCategoryDto | null;
+  subcategory?: CategoryRefDto | null;
 
   @ApiPropertyOptional({
     description: 'Section or department the product is listed under (nullable)',

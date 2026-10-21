@@ -2,8 +2,8 @@
 
 import type { AppNotification,NotificationType } from "@/api/notifications";
 import { useNotifications } from "@/hook/use-notifications";
-import { safeInternalPath } from "@/lib/safe-internal-path";
-import { useAuthStore } from "@/zustand/auth";
+import { notificationDetailPath, notificationListPath } from "@/lib/notification-path";
+import { useAuthStore, normalizeRole } from "@/zustand/auth";
 import {
 AlertTriangle,
 Bell,
@@ -12,10 +12,12 @@ CreditCard,
 DollarSign,
 Info,
 Package,
+SlidersHorizontal,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
+import { NotificationPreferencesDialog } from "@/components/domain/notification/NotificationPreferencesView";
 
 function getNotificationIcon(type: NotificationType) {
   switch (type) {
@@ -50,21 +52,27 @@ function formatRelativeTime(dateString: string): string {
   return `${days}d ago`;
 }
 
-export function NotificationBell() {
+export function NotificationBell({
+  placement = "header",
+}: {
+  placement?: "header" | "bottom";
+}) {
   const [open, setOpen] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { user, role, isAuthenticated } = useAuthStore();
   const {
     notifications,
     unreadCount,
+    isLoading,
     markAsRead,
     markAllAsRead,
     fetchNotifications,
     fetchUnreadCount,
   } = useNotifications();
 
-  // Lazy-load top 5 notifications only when the user opens the bell popover
+  // Fetch top 5 notifications only on-demand when user opens popover
   useEffect(() => {
     if (open) {
       void fetchUnreadCount();
@@ -88,13 +96,8 @@ export function NotificationBell() {
 
   if (!isAuthenticated) return null;
 
-  const userRole = (role ?? user?.role ?? "").toLowerCase();
-  const allNotificationsHref =
-    userRole === "admin"
-      ? "/admin/notifications"
-      : userRole === "vendor"
-      ? "/vendor/notifications"
-      : "/account/notifications";
+  const activeRole = normalizeRole(role ?? user?.role) ?? "user";
+  const allNotificationsHref = notificationListPath(activeRole);
 
   const recentNotifications = notifications.slice(0, 5);
 
@@ -103,20 +106,29 @@ export function NotificationBell() {
       await markAsRead(notif.id);
     }
     setOpen(false);
-    const actionPath = safeInternalPath(notif.actionUrl, "");
-    if (actionPath) router.push(actionPath);
+    router.push(notificationDetailPath(activeRole, notif.id));
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div
+      className={placement === "bottom" ? "relative flex min-w-0 justify-center" : "relative"}
+      ref={dropdownRef}
+    >
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus:outline-hidden"
+        className={`relative flex items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus:outline-hidden ${
+          placement === "bottom"
+            ? "min-h-11 w-full flex-col py-1"
+            : "h-9 w-9"
+        }`}
       >
         <Bell className="h-5 w-5" />
+        {placement === "bottom" && (
+          <span className="mt-1 text-[10px] tracking-tight">Alerts</span>
+        )}
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white shadow-xs animate-pulse">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -125,7 +137,20 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <>
+          {placement !== "bottom" && (
+            <div
+              className="fixed inset-0 z-40 bg-black/20 backdrop-blur-2xs sm:hidden"
+              onClick={() => setOpen(false)}
+            />
+          )}
+          <div
+            className={`${
+              placement === "bottom"
+                ? "fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-2 right-2 mx-auto w-auto max-w-sm sm:left-auto sm:right-4"
+                : "fixed inset-x-2 top-16 mx-auto w-[calc(100vw-1rem)] max-w-sm sm:max-w-md sm:w-96 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2"
+            } z-50 overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl animate-in fade-in zoom-in-95 duration-150`}
+          >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-secondary/30">
             <div className="flex items-center gap-2">
@@ -140,7 +165,7 @@ export function NotificationBell() {
               <button
                 type="button"
                 onClick={() => markAllAsRead()}
-                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 Mark all read
@@ -149,8 +174,20 @@ export function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-border/60">
-            {recentNotifications.length === 0 ? (
+          <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto divide-y divide-border/60 sm:max-h-80">
+            {isLoading && recentNotifications.length === 0 ? (
+              <div className="divide-y divide-border/40 p-2 space-y-2">
+                {[1, 2, 3].map((idx) => (
+                  <div key={idx} className="flex items-start gap-3 p-2.5 animate-pulse">
+                    <div className="h-8 w-8 rounded-full bg-muted/80 shrink-0" />
+                    <div className="flex-1 space-y-1.5 py-0.5">
+                      <div className="h-3 w-3/4 bg-muted/80 rounded" />
+                      <div className="h-2.5 w-full bg-muted/50 rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : recentNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
                 <Bell className="h-8 w-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm font-medium text-foreground">
@@ -164,7 +201,15 @@ export function NotificationBell() {
               recentNotifications.map((notif) => (
                 <div
                   key={notif.id}
-                  onClick={() => handleNotificationClick(notif)}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => void handleNotificationClick(notif)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void handleNotificationClick(notif);
+                    }
+                  }}
                   className={`flex items-start gap-3 p-3.5 transition-colors cursor-pointer hover:bg-secondary/60 ${
                     !notif.isRead ? "bg-primary/5" : ""
                   }`}
@@ -198,17 +243,34 @@ export function NotificationBell() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-border p-2 bg-secondary/20">
+          <div className="border-t border-border p-2 bg-secondary/20 flex items-center justify-between gap-2 px-3">
             <Link
               href={allNotificationsHref}
               onClick={() => setOpen(false)}
-              className="flex w-full items-center justify-center rounded-xl py-2 text-xs font-semibold text-primary hover:bg-secondary transition-colors"
+              className="flex-1 text-center rounded-xl py-1.5 text-xs font-semibold text-primary hover:bg-secondary transition-colors"
             >
               View all notifications
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setIsPreferencesOpen(true);
+              }}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-xl hover:bg-secondary transition-colors cursor-pointer shrink-0"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+              <span>Preferences</span>
+            </button>
           </div>
         </div>
+        </>
       )}
+
+      <NotificationPreferencesDialog
+        open={isPreferencesOpen}
+        onOpenChange={setIsPreferencesOpen}
+      />
     </div>
   );
 }

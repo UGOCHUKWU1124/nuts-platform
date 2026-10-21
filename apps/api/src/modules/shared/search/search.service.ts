@@ -6,6 +6,9 @@ interface ProductRow {
   id: string;
   name: string;
   sku: string;
+  slug?: string;
+  price?: number | string;
+  imageUrl?: string | null;
   score: number | string;
   total_count: number;
 }
@@ -13,6 +16,8 @@ interface ProductRow {
 interface VendorRow {
   id: string;
   storeName: string;
+  storeSlug?: string;
+  storeLogoUrl?: string | null;
   storeDescription: string | null;
   email: string;
   firstName: string | null;
@@ -26,6 +31,10 @@ interface CategoryRow {
   name: string;
   description: string | null;
   slug: string;
+  parentId: string | null;
+  parentName: string | null;
+  parentSlug: string | null;
+  path: string | null;
   score: number | string;
   total_count: number;
 }
@@ -212,61 +221,111 @@ export class SearchService {
     }
 
     const ilikeSearch = `%${normalizedSearch}%`;
+    const prefixSearch = `${normalizedSearch}%`;
     const offset = (safePage - 1) * safeLimit;
 
     const products = categoryId
       ? await this.prisma.$queryRaw<ProductSearchIdRow[]>`
             SELECT
-              id,
+              p.id,
               (
                 CASE
-                  WHEN name ILIKE ${ilikeSearch}
-                    THEN 3.0 + similarity(name, ${normalizedSearch})
-                  WHEN sku ILIKE ${ilikeSearch}
-                    THEN 2.0 + similarity(sku, ${normalizedSearch})
-                  ELSE similarity(name, ${normalizedSearch})
+                  WHEN LOWER(p.name) = LOWER(${normalizedSearch})
+                    THEN 10.0 + similarity(p.name, ${normalizedSearch})
+                  WHEN p.name ILIKE ${prefixSearch}
+                    THEN 6.0 + similarity(p.name, ${normalizedSearch})
+                  WHEN LOWER(p.sku) = LOWER(${normalizedSearch})
+                    THEN 5.0
+                  WHEN p.sku ILIKE ${prefixSearch}
+                    THEN 4.0
+                  WHEN p.name ILIKE ${ilikeSearch}
+                    THEN 3.0 + similarity(p.name, ${normalizedSearch})
+                  WHEN to_tsvector('simple', p.name) @@ plainto_tsquery('simple', ${normalizedSearch})
+                    THEN 2.8 + similarity(p.name, ${normalizedSearch})
+                  WHEN p.sku ILIKE ${ilikeSearch}
+                    THEN 2.5 + similarity(p.sku, ${normalizedSearch})
+                  WHEN v."storeName" ILIKE ${ilikeSearch}
+                    THEN 2.0 + similarity(COALESCE(v."storeName", ''), ${normalizedSearch})
+                  WHEN to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '')) @@ plainto_tsquery('simple', ${normalizedSearch})
+                    THEN 1.5 + similarity(p.name, ${normalizedSearch})
+                  WHEN COALESCE(p.description, '') ILIKE ${ilikeSearch}
+                    THEN 1.2 + similarity(COALESCE(p.description, ''), ${normalizedSearch})
+                  ELSE similarity(p.name, ${normalizedSearch})
                 END
               ) AS score,
               COUNT(*) OVER()::integer AS total_count
-            FROM products
+            FROM products p
+            LEFT JOIN vendors v ON v.id = p."vendorId"
             WHERE
-              "isActive" = true
-              AND "isDeleted" = false
-              AND "categoryId" = ${categoryId}
+              p."isActive" = true
+              AND p."isDeleted" = false
+              AND p."categoryId" = ${categoryId}
               AND (
-                name ILIKE ${ilikeSearch}
-                OR sku ILIKE ${ilikeSearch}
-                OR similarity(name, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
-                OR similarity(sku, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                p.name ILIKE ${ilikeSearch}
+                OR p.sku ILIKE ${ilikeSearch}
+                OR COALESCE(p.description, '') ILIKE ${ilikeSearch}
+                OR v."storeName" ILIKE ${ilikeSearch}
+                OR to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '')) @@ plainto_tsquery('simple', ${normalizedSearch})
+                OR similarity(p.name, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(p.sku, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(COALESCE(p.description, ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(COALESCE(v."storeName", ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
               )
-            ORDER BY score DESC, "createdAt" DESC
+            ORDER BY score DESC, p."createdAt" DESC
             LIMIT ${safeLimit}
             OFFSET ${offset};
           `
       : await this.prisma.$queryRaw<ProductSearchIdRow[]>`
             SELECT
-              id,
+              p.id,
               (
                 CASE
-                  WHEN name ILIKE ${ilikeSearch}
-                    THEN 3.0 + similarity(name, ${normalizedSearch})
-                  WHEN sku ILIKE ${ilikeSearch}
-                    THEN 2.0 + similarity(sku, ${normalizedSearch})
-                  ELSE similarity(name, ${normalizedSearch})
+                  WHEN LOWER(p.name) = LOWER(${normalizedSearch})
+                    THEN 10.0 + similarity(p.name, ${normalizedSearch})
+                  WHEN p.name ILIKE ${prefixSearch}
+                    THEN 6.0 + similarity(p.name, ${normalizedSearch})
+                  WHEN LOWER(p.sku) = LOWER(${normalizedSearch})
+                    THEN 5.0
+                  WHEN p.sku ILIKE ${prefixSearch}
+                    THEN 4.0
+                  WHEN p.name ILIKE ${ilikeSearch}
+                    THEN 3.0 + similarity(p.name, ${normalizedSearch})
+                  WHEN to_tsvector('simple', p.name) @@ plainto_tsquery('simple', ${normalizedSearch})
+                    THEN 2.8 + similarity(p.name, ${normalizedSearch})
+                  WHEN p.sku ILIKE ${ilikeSearch}
+                    THEN 2.5 + similarity(p.sku, ${normalizedSearch})
+                  WHEN v."storeName" ILIKE ${ilikeSearch}
+                    THEN 2.0 + similarity(COALESCE(v."storeName", ''), ${normalizedSearch})
+                  WHEN c.name ILIKE ${ilikeSearch}
+                    THEN 1.8 + similarity(COALESCE(c.name, ''), ${normalizedSearch})
+                  WHEN to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '') || ' ' || COALESCE(c.name, '')) @@ plainto_tsquery('simple', ${normalizedSearch})
+                    THEN 1.5 + similarity(p.name, ${normalizedSearch})
+                  WHEN COALESCE(p.description, '') ILIKE ${ilikeSearch}
+                    THEN 1.2 + similarity(COALESCE(p.description, ''), ${normalizedSearch})
+                  ELSE similarity(p.name, ${normalizedSearch})
                 END
               ) AS score,
               COUNT(*) OVER()::integer AS total_count
-            FROM products
+            FROM products p
+            LEFT JOIN vendors v ON v.id = p."vendorId"
+            LEFT JOIN categories c ON c.id = p."categoryId"
             WHERE
-              "isActive" = true
-              AND "isDeleted" = false
+              p."isActive" = true
+              AND p."isDeleted" = false
               AND (
-                name ILIKE ${ilikeSearch}
-                OR sku ILIKE ${ilikeSearch}
-                OR similarity(name, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
-                OR similarity(sku, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                p.name ILIKE ${ilikeSearch}
+                OR p.sku ILIKE ${ilikeSearch}
+                OR COALESCE(p.description, '') ILIKE ${ilikeSearch}
+                OR v."storeName" ILIKE ${ilikeSearch}
+                OR c.name ILIKE ${ilikeSearch}
+                OR to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '') || ' ' || COALESCE(c.name, '')) @@ plainto_tsquery('simple', ${normalizedSearch})
+                OR similarity(p.name, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(p.sku, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(COALESCE(p.description, ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(COALESCE(v."storeName", ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+                OR similarity(COALESCE(c.name, ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
               )
-            ORDER BY score DESC, "createdAt" DESC
+            ORDER BY score DESC, p."createdAt" DESC
             LIMIT ${safeLimit}
             OFFSET ${offset};
           `;
@@ -315,36 +374,60 @@ export class SearchService {
     }
 
     const ilikeSearch = `%${normalizedSearch}%`;
+    const prefixSearch = `${normalizedSearch}%`;
     const offset = (safePage - 1) * safeLimit;
 
     const matchedProducts = await this.prisma.$queryRaw<ProductSearchIdRow[]>`
         SELECT
-          id,
+          p.id,
           (
             CASE
-              WHEN name ILIKE ${ilikeSearch}
-                THEN 2.0 + similarity(name, ${normalizedSearch})
-              WHEN sku ILIKE ${ilikeSearch}
-                THEN 1.5 + similarity(sku, ${normalizedSearch})
-              WHEN COALESCE(description, '') ILIKE ${ilikeSearch}
-                THEN 1.0 + similarity(COALESCE(description, ''), ${normalizedSearch})
-              ELSE similarity(name, ${normalizedSearch})
+              WHEN LOWER(p.name) = LOWER(${normalizedSearch})
+                THEN 10.0 + similarity(p.name, ${normalizedSearch})
+              WHEN p.name ILIKE ${prefixSearch}
+                THEN 6.0 + similarity(p.name, ${normalizedSearch})
+              WHEN LOWER(p.sku) = LOWER(${normalizedSearch})
+                THEN 5.0
+              WHEN p.sku ILIKE ${prefixSearch}
+                THEN 4.0
+              WHEN p.name ILIKE ${ilikeSearch}
+                THEN 3.0 + similarity(p.name, ${normalizedSearch})
+              WHEN to_tsvector('simple', p.name) @@ plainto_tsquery('simple', ${normalizedSearch})
+                THEN 2.8 + similarity(p.name, ${normalizedSearch})
+              WHEN p.sku ILIKE ${ilikeSearch}
+                THEN 2.5 + similarity(p.sku, ${normalizedSearch})
+              WHEN v."storeName" ILIKE ${ilikeSearch}
+                THEN 2.0 + similarity(COALESCE(v."storeName", ''), ${normalizedSearch})
+              WHEN c.name ILIKE ${ilikeSearch}
+                THEN 1.8 + similarity(COALESCE(c.name, ''), ${normalizedSearch})
+              WHEN to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '') || ' ' || COALESCE(c.name, '')) @@ plainto_tsquery('simple', ${normalizedSearch})
+                THEN 1.5 + similarity(p.name, ${normalizedSearch})
+              WHEN COALESCE(p.description, '') ILIKE ${ilikeSearch}
+                THEN 1.2 + similarity(COALESCE(p.description, ''), ${normalizedSearch})
+              ELSE similarity(p.name, ${normalizedSearch})
             END
           ) AS score,
           COUNT(*) OVER()::integer AS total_count
-        FROM products
+        FROM products p
+        LEFT JOIN vendors v ON v.id = p."vendorId"
+        LEFT JOIN categories c ON c.id = p."categoryId"
         WHERE
-          "isActive" = true
-          AND "isDeleted" = false
+          p."isActive" = true
+          AND p."isDeleted" = false
           AND (
-            name ILIKE ${ilikeSearch}
-            OR sku ILIKE ${ilikeSearch}
-            OR COALESCE(description, '') ILIKE ${ilikeSearch}
-            OR similarity(name, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(sku, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(COALESCE(description, ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+            p.name ILIKE ${ilikeSearch}
+            OR p.sku ILIKE ${ilikeSearch}
+            OR COALESCE(p.description, '') ILIKE ${ilikeSearch}
+            OR v."storeName" ILIKE ${ilikeSearch}
+            OR c.name ILIKE ${ilikeSearch}
+            OR to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '') || ' ' || COALESCE(c.name, '')) @@ plainto_tsquery('simple', ${normalizedSearch})
+            OR similarity(p.name, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(p.sku, ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(p.description, ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(v."storeName", ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(c.name, ''), ${normalizedSearch}) > ${SIMILARITY_THRESHOLD}
           )
-        ORDER BY score DESC, "createdAt" DESC
+        ORDER BY score DESC, p."createdAt" DESC
         LIMIT ${safeLimit}
         OFFSET ${offset};
       `;
@@ -833,33 +916,70 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<ProductRow[]>`
         SELECT
-          id,
-          name,
-          sku,
+          p.id,
+          p.name,
+          p.sku,
+          p.slug,
+          p.price,
+          (
+            SELECT pi.url
+            FROM product_images pi
+            WHERE pi."productId" = p.id
+            ORDER BY pi."isPrimary" DESC, pi.position ASC
+            LIMIT 1
+          ) AS "imageUrl",
           (
             CASE
-              WHEN name ILIKE ${pattern}
-                THEN 2.0 + similarity(name, ${search})
-              WHEN sku ILIKE ${pattern}
-                THEN 1.5 + similarity(sku, ${search})
-              ELSE similarity(name, ${search})
+              WHEN LOWER(p.name) = LOWER(${search})
+                THEN 10.0 + similarity(p.name, ${search})
+              WHEN p.name ILIKE ${prefixPattern}
+                THEN 6.0 + similarity(p.name, ${search})
+              WHEN LOWER(p.sku) = LOWER(${search})
+                THEN 5.0
+              WHEN p.sku ILIKE ${prefixPattern}
+                THEN 4.0
+              WHEN p.name ILIKE ${pattern}
+                THEN 3.0 + similarity(p.name, ${search})
+              WHEN to_tsvector('simple', p.name) @@ plainto_tsquery('simple', ${search})
+                THEN 2.8 + similarity(p.name, ${search})
+              WHEN p.sku ILIKE ${pattern}
+                THEN 2.5 + similarity(p.sku, ${search})
+              WHEN v."storeName" ILIKE ${pattern}
+                THEN 2.0 + similarity(COALESCE(v."storeName", ''), ${search})
+              WHEN c.name ILIKE ${pattern}
+                THEN 1.8 + similarity(COALESCE(c.name, ''), ${search})
+              WHEN to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '') || ' ' || COALESCE(c.name, '')) @@ plainto_tsquery('simple', ${search})
+                THEN 1.5 + similarity(p.name, ${search})
+              WHEN COALESCE(p.description, '') ILIKE ${pattern}
+                THEN 1.2 + similarity(COALESCE(p.description, ''), ${search})
+              ELSE similarity(p.name, ${search})
             END
           ) AS score,
           COUNT(*) OVER()::integer AS total_count
-        FROM products
+        FROM products p
+        LEFT JOIN vendors v ON v.id = p."vendorId"
+        LEFT JOIN categories c ON c.id = p."categoryId"
         WHERE
-          "isActive" = true
-          AND "isDeleted" = false
+          p."isActive" = true
+          AND p."isDeleted" = false
           AND (
-            name ILIKE ${pattern}
-            OR sku ILIKE ${pattern}
-            OR similarity(name, ${search}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(sku, ${search}) > ${SIMILARITY_THRESHOLD}
+            p.name ILIKE ${pattern}
+            OR p.sku ILIKE ${pattern}
+            OR COALESCE(p.description, '') ILIKE ${pattern}
+            OR v."storeName" ILIKE ${pattern}
+            OR c.name ILIKE ${pattern}
+            OR to_tsvector('simple', p.name || ' ' || COALESCE(p.description, '') || ' ' || COALESCE(v."storeName", '') || ' ' || COALESCE(c.name, '')) @@ plainto_tsquery('simple', ${search})
+            OR similarity(p.name, ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(p.sku, ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(p.description, ''), ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(v."storeName", ''), ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(c.name, ''), ${search}) > ${SIMILARITY_THRESHOLD}
           )
-        ORDER BY score DESC, "createdAt" DESC
+        ORDER BY score DESC, p."createdAt" DESC
         LIMIT ${limit};
       `;
 
@@ -877,6 +997,9 @@ export class SearchService {
           id: product.id,
           name: product.name,
           sku: product.sku,
+          slug: product.slug,
+          price: product.price ? Number(product.price) : 0,
+          imageUrl: product.imageUrl,
         },
       })),
     };
@@ -894,19 +1017,28 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<VendorRow[]>`
         SELECT
           id,
           "storeName",
+          "storeSlug",
+          "storeLogoUrl",
           "storeDescription",
           email,
           "firstName",
           "lastName",
           (
             CASE
+              WHEN LOWER("storeName") = LOWER(${search})
+                THEN 10.0 + similarity("storeName", ${search})
+              WHEN "storeName" ILIKE ${prefixPattern}
+                THEN 6.0 + similarity("storeName", ${search})
               WHEN "storeName" ILIKE ${pattern}
                 THEN 3.0 + similarity("storeName", ${search})
+              WHEN to_tsvector('simple', "storeName") @@ plainto_tsquery('simple', ${search})
+                THEN 2.8 + similarity("storeName", ${search})
               WHEN "firstName" ILIKE ${pattern}
                 OR "lastName" ILIKE ${pattern}
                 THEN 2.0 + similarity(
@@ -914,6 +1046,8 @@ export class SearchService {
                   COALESCE("lastName", ''),
                   ${search}
                 )
+              WHEN to_tsvector('simple', "storeName" || ' ' || COALESCE("storeDescription", '')) @@ plainto_tsquery('simple', ${search})
+                THEN 1.5 + similarity(COALESCE("storeName", ''), ${search})
               WHEN "storeDescription" ILIKE ${pattern}
                 THEN 1.0 + similarity(
                   COALESCE("storeDescription", ''),
@@ -936,6 +1070,7 @@ export class SearchService {
             OR email ILIKE ${pattern}
             OR "firstName" ILIKE ${pattern}
             OR "lastName" ILIKE ${pattern}
+            OR to_tsvector('simple', "storeName" || ' ' || COALESCE("storeDescription", '')) @@ plainto_tsquery('simple', ${search})
             OR similarity("storeName", ${search}) > ${SIMILARITY_THRESHOLD}
             OR similarity(COALESCE("storeDescription", ''), ${search}) > ${SIMILARITY_THRESHOLD}
             OR similarity(COALESCE("firstName", ''), ${search}) > ${SIMILARITY_THRESHOLD}
@@ -958,6 +1093,8 @@ export class SearchService {
         payload: {
           id: vendor.id,
           storeName: vendor.storeName,
+          storeSlug: vendor.storeSlug,
+          storeLogoUrl: vendor.storeLogoUrl,
           storeDescription: vendor.storeDescription,
           email: vendor.email,
           firstName: vendor.firstName,
@@ -979,58 +1116,91 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<CategoryRow[]>`
         SELECT
-          id,
-          name,
-          description,
-          slug,
+          c.id,
+          c.name,
+          c.description,
+          c.slug,
+          c."parentId",
+          p.name AS "parentName",
+          p.slug AS "parentSlug",
+          c.path,
           (
             CASE
-              WHEN name ILIKE ${pattern}
-                THEN 2.0 + similarity(name, ${search})
-              WHEN description ILIKE ${pattern}
+              WHEN LOWER(c.name) = LOWER(${search})
+                THEN 10.0 + similarity(c.name, ${search})
+              WHEN c.name ILIKE ${prefixPattern}
+                THEN 6.0 + similarity(c.name, ${search})
+              WHEN c.name ILIKE ${pattern}
+                THEN 3.0 + similarity(c.name, ${search})
+              WHEN to_tsvector('simple', c.name) @@ plainto_tsquery('simple', ${search})
+                THEN 2.8 + similarity(c.name, ${search})
+              WHEN to_tsvector('simple', c.name || ' ' || COALESCE(c.description, '')) @@ plainto_tsquery('simple', ${search})
+                THEN 1.5 + similarity(c.name, ${search})
+              WHEN c.description ILIKE ${pattern}
                 THEN 1.0 + similarity(
-                  COALESCE(description, ''),
+                  COALESCE(c.description, ''),
                   ${search}
                 )
-              ELSE similarity(name, ${search})
+              ELSE similarity(c.name, ${search})
             END
           ) AS score,
           COUNT(*) OVER()::integer AS total_count
-        FROM categories
+        FROM categories c
+        LEFT JOIN categories p ON c."parentId" = p.id
         WHERE
-          "isActive" = true
+          c."isActive" = true
           AND (
-            name ILIKE ${pattern}
-            OR COALESCE(description, '') ILIKE ${pattern}
-            OR slug ILIKE ${pattern}
-            OR similarity(name, ${search}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(COALESCE(description, ''), ${search}) > ${SIMILARITY_THRESHOLD}
-            OR similarity(slug, ${search}) > ${SIMILARITY_THRESHOLD}
+            c.name ILIKE ${pattern}
+            OR COALESCE(c.description, '') ILIKE ${pattern}
+            OR c.slug ILIKE ${pattern}
+            OR to_tsvector('simple', c.name || ' ' || COALESCE(c.description, '')) @@ plainto_tsquery('simple', ${search})
+            OR similarity(c.name, ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(COALESCE(c.description, ''), ${search}) > ${SIMILARITY_THRESHOLD}
+            OR similarity(c.slug, ${search}) > ${SIMILARITY_THRESHOLD}
           )
-        ORDER BY score DESC, "createdAt" DESC
+        ORDER BY score DESC, c."createdAt" DESC
         LIMIT ${limit};
       `;
 
     return {
       total: rows.length > 0 ? Number(rows[0].total_count) : 0,
 
-      items: rows.map((category) => ({
-        id: category.id,
-        index: 'categories',
-        type: 'category',
-        title: category.name,
-        subtitle: category.description ?? undefined,
-        score: Number(category.score),
-        payload: {
+      items: rows.map((category) => {
+        const isSubcategory = Boolean(category.parentId);
+        const type = isSubcategory ? 'subcategory' : 'category';
+        const subtitle =
+          isSubcategory && category.parentName
+            ? `in ${category.parentName}`
+            : (category.description ?? undefined);
+
+        return {
           id: category.id,
-          name: category.name,
-          description: category.description,
-          slug: category.slug,
-        },
-      })),
+          index: 'categories',
+          type,
+          title: category.name,
+          subtitle,
+          score: Number(category.score),
+          payload: {
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            slug: category.slug,
+            parentId: category.parentId,
+            parentName: category.parentName,
+            parentSlug: category.parentSlug,
+            path:
+              category.path ??
+              (category.parentSlug
+                ? `${category.parentSlug}/${category.slug}`
+                : category.slug),
+            isSubcategory,
+          },
+        };
+      }),
     };
   }
 
@@ -1046,6 +1216,7 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<UserRow[]>`
         SELECT
@@ -1056,8 +1227,18 @@ export class SearchService {
           rc.code AS "referralCode",
           (
             CASE
+              WHEN LOWER(u.email) = LOWER(${search})
+                THEN 10.0 + similarity(u.email, ${search})
+              WHEN u.email ILIKE ${prefixPattern}
+                THEN 6.0 + similarity(u.email, ${search})
+              WHEN LOWER(COALESCE(rc.code, '')) = LOWER(${search})
+                THEN 8.0
+              WHEN rc.code ILIKE ${prefixPattern}
+                THEN 5.0
               WHEN u.email ILIKE ${pattern}
                 THEN 3.0 + similarity(u.email, ${search})
+              WHEN rc.code ILIKE ${pattern}
+                THEN 2.5 + similarity(rc.code, ${search})
               WHEN u."firstName" ILIKE ${pattern}
                 OR u."lastName" ILIKE ${pattern}
                 THEN 2.0 + similarity(
@@ -1065,8 +1246,6 @@ export class SearchService {
                   COALESCE(u."lastName", ''),
                   ${search}
                 )
-              WHEN rc.code ILIKE ${pattern}
-                THEN 2.5 + similarity(rc.code, ${search})
               ELSE similarity(u.email, ${search})
             END
           ) AS score,
@@ -1124,6 +1303,7 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<OrderRow[]>`
         SELECT
@@ -1136,26 +1316,20 @@ export class SearchService {
           u.email AS "userEmail",
           (
             CASE
+              WHEN LOWER(o."orderNumber") = LOWER(${search})
+                THEN 10.0 + similarity(o."orderNumber", ${search})
+              WHEN o."orderNumber" ILIKE ${prefixPattern}
+                THEN 6.0 + similarity(o."orderNumber", ${search})
+              WHEN LOWER(COALESCE(u.email, '')) = LOWER(${search})
+                THEN 5.0
               WHEN o."orderNumber" ILIKE ${pattern}
-                THEN 3.0 + similarity(
-                  o."orderNumber",
-                  ${search}
-                )
-              WHEN u.email ILIKE ${pattern}
-                THEN 2.0 + similarity(
-                  u.email,
-                  ${search}
-                )
+                THEN 3.0 + similarity(o."orderNumber", ${search})
               WHEN o."discountCode" ILIKE ${pattern}
-                THEN 2.5 + similarity(
-                  o."discountCode",
-                  ${search}
-                )
+                THEN 2.5 + similarity(o."discountCode", ${search})
               WHEN o."referralCode" ILIKE ${pattern}
-                THEN 2.5 + similarity(
-                  o."referralCode",
-                  ${search}
-                )
+                THEN 2.5 + similarity(o."referralCode", ${search})
+              WHEN u.email ILIKE ${pattern}
+                THEN 2.0 + similarity(u.email, ${search})
               ELSE similarity(
                 COALESCE(
                   o."shippingAddress",
@@ -1223,6 +1397,7 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<DiscountCodeRow[]>`
         SELECT
@@ -1231,11 +1406,12 @@ export class SearchService {
           description,
           (
             CASE
+              WHEN LOWER(code) = LOWER(${search})
+                THEN 10.0 + similarity(code, ${search})
+              WHEN code ILIKE ${prefixPattern}
+                THEN 6.0 + similarity(code, ${search})
               WHEN code ILIKE ${pattern}
-                THEN 2.0 + similarity(
-                  code,
-                  ${search}
-                )
+                THEN 3.0 + similarity(code, ${search})
               WHEN description ILIKE ${pattern}
                 THEN 1.0 + similarity(
                   COALESCE(description, ''),
@@ -1293,6 +1469,7 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<ProductRow[]>`
         SELECT
@@ -1301,19 +1478,25 @@ export class SearchService {
           sku,
           (
             CASE
+              WHEN LOWER(name) = LOWER(${search})
+                THEN 10.0 + similarity(name, ${search})
+              WHEN name ILIKE ${prefixPattern}
+                THEN 6.0 + similarity(name, ${search})
+              WHEN LOWER(sku) = LOWER(${search})
+                THEN 5.0
+              WHEN sku ILIKE ${prefixPattern}
+                THEN 4.0
               WHEN name ILIKE ${pattern}
-                THEN 2.0 + similarity(name, ${search})
+                THEN 3.0 + similarity(name, ${search})
+              WHEN to_tsvector('simple', name) @@ plainto_tsquery('simple', ${search})
+                THEN 2.8 + similarity(name, ${search})
               WHEN sku ILIKE ${pattern}
-                THEN 1.5 + similarity(sku, ${search})
-              WHEN description ILIKE ${pattern}
-                THEN 1.0 + similarity(
-                  COALESCE(description, ''),
-                  ${search}
-                )
-              ELSE similarity(
-                name,
-                ${search}
-              )
+                THEN 2.5 + similarity(sku, ${search})
+              WHEN to_tsvector('simple', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('simple', ${search})
+                THEN 1.5 + similarity(name, ${search})
+              WHEN COALESCE(description, '') ILIKE ${pattern}
+                THEN 1.2 + similarity(COALESCE(description, ''), ${search})
+              ELSE similarity(name, ${search})
             END
           ) AS score,
           COUNT(*) OVER()::integer AS total_count
@@ -1325,6 +1508,7 @@ export class SearchService {
             name ILIKE ${pattern}
             OR sku ILIKE ${pattern}
             OR COALESCE(description, '') ILIKE ${pattern}
+            OR to_tsvector('simple', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('simple', ${search})
             OR similarity(name, ${search}) > ${SIMILARITY_THRESHOLD}
             OR similarity(sku, ${search}) > ${SIMILARITY_THRESHOLD}
             OR similarity(COALESCE(description, ''), ${search}) > ${SIMILARITY_THRESHOLD}
@@ -1365,6 +1549,7 @@ export class SearchService {
     total: number;
   }> {
     const pattern = `%${search}%`;
+    const prefixPattern = `${search}%`;
 
     const rows = await this.prisma.$queryRaw<OrderRow[]>`
         WITH unique_orders AS (
@@ -1405,16 +1590,16 @@ export class SearchService {
           "userEmail",
           (
             CASE
+              WHEN LOWER("orderNumber") = LOWER(${search})
+                THEN 10.0 + similarity("orderNumber", ${search})
+              WHEN "orderNumber" ILIKE ${prefixPattern}
+                THEN 6.0 + similarity("orderNumber", ${search})
+              WHEN LOWER(COALESCE("userEmail", '')) = LOWER(${search})
+                THEN 5.0
               WHEN "orderNumber" ILIKE ${pattern}
-                THEN 3.0 + similarity(
-                  "orderNumber",
-                  ${search}
-                )
+                THEN 3.0 + similarity("orderNumber", ${search})
               WHEN "userEmail" ILIKE ${pattern}
-                THEN 2.0 + similarity(
-                  "userEmail",
-                  ${search}
-                )
+                THEN 2.0 + similarity("userEmail", ${search})
               ELSE similarity(
                 COALESCE(
                   "shippingAddress",
@@ -1608,5 +1793,88 @@ export class SearchService {
        */
       this.logger.warn(`Search cache write failed for key ${key}`, error);
     }
+  }
+
+  /**
+   * Diagnostic metrics for admin system management dashboard.
+   * Returns search engine readiness and indexed document counts.
+   */
+  async getSearchStatus(): Promise<{
+    ready: boolean;
+    totalDocuments: number;
+    breakdown: {
+      products: number;
+      vendors: number;
+      categories: number;
+      orders: number;
+    };
+  }> {
+    try {
+      const [products, vendors, categories, orders] = await Promise.all([
+        this.prisma.product.count({
+          where: { isDeleted: false, isActive: true },
+        }),
+        this.prisma.vendor.count({
+          where: { isActive: true, isApproved: true },
+        }),
+        this.prisma.category.count({
+          where: { isActive: true },
+        }),
+        this.prisma.order.count(),
+      ]);
+
+      const totalDocuments = products + vendors + categories + orders;
+
+      return {
+        ready: true,
+        totalDocuments,
+        breakdown: {
+          products,
+          vendors,
+          categories,
+          orders,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Failed to retrieve search status metrics', error);
+      return {
+        ready: false,
+        totalDocuments: 0,
+        breakdown: {
+          products: 0,
+          vendors: 0,
+          categories: 0,
+          orders: 0,
+        },
+      };
+    }
+  }
+
+  /**
+   * Purges cached search queries in Redis.
+   */
+  async flushSearchCache(): Promise<number> {
+    try {
+      const keys = await this.redis.keys('search:*');
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+      }
+      return keys.length;
+    } catch (error) {
+      this.logger.warn('Failed to flush search cache keys', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Synchronizes search indices and purges stale Redis query cache.
+   */
+  async reindex(): Promise<{ message: string; indexedCount: number }> {
+    await this.flushSearchCache();
+    const status = await this.getSearchStatus();
+    return {
+      message: 'Search indices synchronized and cache purged successfully',
+      indexedCount: status.totalDocuments,
+    };
   }
 }

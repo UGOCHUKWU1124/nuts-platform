@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/api/core/client";
+import { publicApi } from "@/api/core/client";
 import type {
 RegisterResponseDto,
 VerifyOtpResponseDto
@@ -8,10 +8,11 @@ VerifyOtpResponseDto
 import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
 import { Button } from "@/component/ui/button";
+import { SegmentedOtpInput } from "@/component/ui/SegmentedOtpInput";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosError } from "axios";
 import { RefreshCw,Send,Store } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
 import { FormProvider,useForm,useWatch } from "react-hook-form";
@@ -47,10 +48,12 @@ export default function VendorRegisterPage() {
   const {
     handleSubmit,
     trigger,
-    formState: { isSubmitting },
+    setValue,
+    formState: { isSubmitting, errors },
   } = methods;
 
   const currentEmail = useWatch({ control: methods.control, name: "email" });
+  const currentOtp = useWatch({ control: methods.control, name: "otpCode" });
 
   useEffect(() => {
     if (resendTimer > 0) {
@@ -70,16 +73,33 @@ export default function VendorRegisterPage() {
 
     setIsSendingOtp(true);
     try {
-      await api.post<VerifyOtpResponseDto>("/vendors/auth/otp/request", {
+      await publicApi.post<VerifyOtpResponseDto>("/vendors/auth/otp/request", {
         email: currentEmail,
       });
       setOtpSent(true);
       setResendTimer(60);
       toast.success("Verification code sent to your vendor email!");
     } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        retryAfter?: number;
+        error?: { retryAfter?: number };
+      }>;
+      const data = axiosErr?.response?.data;
+      const retryAfter =
+        (typeof data?.retryAfter === "number" && data.retryAfter) ||
+        (typeof data?.error?.retryAfter === "number" && data.error.retryAfter) ||
+        null;
       const msg =
-        (err as AxiosError<{ message: string }>)?.response?.data?.message ?? "Failed to send verification code. Please try again.";
-      toast.error(msg);
+        data?.message ?? "Failed to send verification code. Please try again.";
+
+      if (retryAfter && retryAfter > 0) {
+        setResendTimer(retryAfter);
+        setOtpSent(true);
+        toast.info(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }
@@ -87,7 +107,7 @@ export default function VendorRegisterPage() {
 
   async function onSubmit(data: VendorRegisterFormData) {
     try {
-      await api.post<RegisterResponseDto>("/vendors/auth/register", {
+      await publicApi.post<RegisterResponseDto>("/vendors/auth/register", {
         storeName: data.storeName,
         email: data.email,
         password: data.password,
@@ -153,15 +173,22 @@ export default function VendorRegisterPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <FormInput
-                name="otpCode"
-                label="6-Digit Verification Code"
-                placeholder="123456"
-                className="font-mono tracking-widest text-center"
+            <div className="space-y-2">
+              <label
+                htmlFor="vendor-otp-input"
+                className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 block uppercase tracking-wider"
+              >
+                6-Digit Verification Code
+              </label>
+              <SegmentedOtpInput
+                id="vendor-otp-input"
+                value={currentOtp || ""}
+                onChange={(clean) => setValue("otpCode", clean, { shouldValidate: true })}
+                error={errors.otpCode?.message}
+                disabled={isSubmitting}
               />
               {otpSent && (
-                <p className="text-xs text-emerald-600 font-medium">
+                <p className="text-xs text-emerald-600 font-medium text-center">
                   ✓ Verification code sent to {currentEmail}
                 </p>
               )}

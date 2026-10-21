@@ -3,21 +3,12 @@
 import { getApiErrorMessage } from "@/api/core/error";
 import type { InitializePaymentResponseDto } from "@/api/dto/payment";
 import type { UserResponseDto } from "@/api/dto/user";
-import { orderService,type CheckoutPayload } from "@/api/order";
+import { orderService, type CheckoutPayload } from "@/api/order";
 import { paymentService } from "@/api/payment";
 import { Button } from "@/component/ui/button";
-import {
-Dialog,
-DialogContent,
-DialogDescription,
-DialogFooter,
-DialogHeader,
-DialogTitle,
-} from "@/component/ui/dialog";
-import { Input } from "@/component/ui/input";
-import { Label } from "@/component/ui/label";
+import { clearClientCart } from "@/lib/cart-cleanup";
 import { safePaystackCheckoutUrl } from "@/lib/safe-paystack-url";
-import { CreditCard } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,9 +20,7 @@ interface CheckoutFlowProps {
 
 export function CheckoutFlow({ onOrderCreated, user }: CheckoutFlowProps) {
   const router = useRouter();
-  const [otpOpen, setOtpOpen] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
 
   const handleCheckout = async () => {
@@ -47,17 +36,31 @@ export function CheckoutFlow({ onOrderCreated, user }: CheckoutFlowProps) {
         shippingAddress: { fullName, phone, street, city, state, country },
       } as CheckoutPayload);
       const orderId = order.id;
-      setPendingOrderId(orderId);
+      clearClientCart(queryClient);
       onOrderCreated?.(orderId);
 
-      // Request payment OTP
+      // Initialize Paystack payment directly (Paystack handles 3DS/card/bank verification)
       try {
-        void await paymentService.requestOtp(orderId);
-        toast("A payment OTP has been sent to your email.");
-      } catch {
-        // OTP maybe already verified or not required — just show OTP dialog
+        const { data: res }: { data: InitializePaymentResponseDto } =
+          await paymentService.initialize(orderId);
+
+        if (res.authorizationUrl) {
+          const checkoutUrl = safePaystackCheckoutUrl(res.authorizationUrl);
+          if (checkoutUrl) {
+            window.location.assign(checkoutUrl);
+            return;
+          }
+        }
+      } catch (initErr: unknown) {
+        toast.error(
+          getApiErrorMessage(
+            initErr,
+            "Order created, but payment gateway could not be opened. Please retry from your order details."
+          )
+        );
       }
-      setOtpOpen(true);
+
+      router.push(`/order/${encodeURIComponent(orderId)}`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, "Checkout failed"));
     } finally {
@@ -65,53 +68,13 @@ export function CheckoutFlow({ onOrderCreated, user }: CheckoutFlowProps) {
     }
   };
 
-  const handlePay = async () => {
-    if (!pendingOrderId || !otp) return;
-    try {
-      const { data: res }: { data: InitializePaymentResponseDto } = await paymentService.initialize(
-pendingOrderId, otp);
-      if (res.authorizationUrl) {
-        const checkoutUrl = safePaystackCheckoutUrl(res.authorizationUrl);
-        if (!checkoutUrl) throw new Error("Invalid Paystack checkout URL");
-        window.location.assign(checkoutUrl);
-      } else {
-        toast.success("Payment initialized");
-        router.push("/order");
-      }
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, "Payment failed"));
-    }
-  };
-
   return (
-    <>
-      <Button className="w-full" onClick={handleCheckout} disabled={loading || !user}>
-        {loading ? "Processing..." : "Proceed to Pay"}
-      </Button>
-
-      <Dialog open={otpOpen} onOpenChange={setOtpOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Complete Payment</DialogTitle>
-            <DialogDescription>
-              Enter the OTP sent to your email to complete payment.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Label htmlFor="otp">OTP Code</Label>
-            <Input id="otp" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOtpOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handlePay} disabled={!otp}>
-              <CreditCard className="h-4 w-4" />
-              Pay Now
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Button
+      className="w-full"
+      onClick={handleCheckout}
+      disabled={loading || !user}
+    >
+      {loading ? "Processing..." : "Proceed to Pay"}
+    </Button>
   );
 }

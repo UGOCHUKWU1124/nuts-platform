@@ -44,8 +44,10 @@ export default function DashboardOrderPage() {
   const qc = useQueryClient();
   const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.vendor.order, debouncedSearch, status, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await dashboardOrderService.list({
@@ -182,12 +184,15 @@ export default function DashboardOrderPage() {
           { value: "DELIVERED", label: "Delivered" },
           { value: "CANCELLED", label: "Cancelled" },
         ]}
+        onRefresh={() => qc.invalidateQueries({ queryKey: queryKey.vendor.order })}
+        isLoading={isLoading || isFetching}
       />
 
       <DataTable
         columns={columns}
         data={orderList}
         isLoading={isLoading}
+        isFetching={isFetching}
         onRowClick={(row) => setSelectedOrder(row)}
         emptyMessage="No customer orders found."
         pagination={
@@ -195,8 +200,10 @@ export default function DashboardOrderPage() {
             ? {
                 page: meta.page ?? page,
                 limit: meta.limit ?? 25,
-                total: meta.total,
+                total: meta.totalItems ?? meta.total ?? 0,
                 totalPages: meta.totalPages,
+                hasNextPage: meta.hasNextPage,
+                hasPrevPage: meta.hasPreviousPage,
                 onPageChange: (newPage) => setPage(newPage),
               }
             : undefined
@@ -210,10 +217,11 @@ export default function DashboardOrderPage() {
         onOpenChange={(v) => !v && setSelectedOrder(null)}
         allowedNextStatuses={allowedNext ? [allowedNext] : []}
         isUpdatingStatus={updateStatusMutation.isPending}
-        onUpdateStatus={(st) =>
-          selectedOrder &&
-          updateStatusMutation.mutate({ id: selectedOrder.id, status: st })
-        }
+        onUpdateStatus={(st) => {
+          if (selectedOrder) {
+            setAdvanceTarget({ order: selectedOrder, next: st });
+          }
+        }}
       />
 
       {/* CONFIRM ADVANCE FULFILLMENT DIALOG */}

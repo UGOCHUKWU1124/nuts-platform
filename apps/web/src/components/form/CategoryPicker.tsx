@@ -278,6 +278,8 @@ export function CategoryPicker({
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
+                id="category-picker-search"
+                name="categoryPickerSearch"
                 type="text"
                 value={searchQuery}
                 onFocus={() => setIsSearchOpen(true)}
@@ -349,6 +351,9 @@ export function CategoryPicker({
                   <span>{dropdown.label}</span>
                 </label>
                 <select
+                  id={`category-cascade-${dropdown.levelIndex}`}
+                  name={`categoryLevel_${dropdown.levelIndex}`}
+                  aria-label={dropdown.label}
                   value={dropdown.selectedValue}
                   onChange={(e) =>
                     handleSelectCascade(dropdown.levelIndex, e.target.value)

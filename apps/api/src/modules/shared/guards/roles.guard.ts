@@ -65,6 +65,12 @@ export class RolesGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
+      // Global guards run before route-scoped auth guards, including on public
+      // refresh routes. Defer their role check until request.user is available.
+      if (isPublic) {
+        return true;
+      }
+
       this.logger.warn(
         {
           event: 'authorization_denied',

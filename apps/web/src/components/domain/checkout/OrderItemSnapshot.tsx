@@ -1,11 +1,11 @@
 import { cn } from "@/lib/util";
 
 const STATUS: Record<string, { label: string; className: string }> = {
-  PENDING: { label: "Pending", className: "bg-amber-100 text-amber-800" },
-  PROCESSING: { label: "Processing", className: "bg-blue-100 text-blue-800" },
-  SHIPPED: { label: "Shipped", className: "bg-indigo-100 text-indigo-800" },
-  DELIVERED: { label: "Delivered", className: "bg-green-100 text-green-800" },
-  CANCELLED: { label: "Cancelled", className: "bg-red-100 text-red-800" },
+  PENDING: { label: "Pending", className: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20" },
+  PROCESSING: { label: "Processing", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/20" },
+  SHIPPED: { label: "Shipped", className: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20" },
+  DELIVERED: { label: "Delivered", className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20" },
+  CANCELLED: { label: "Cancelled", className: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/20" },
 };
 
 export function OrderStatusBadge({ status }: { status: string }) {

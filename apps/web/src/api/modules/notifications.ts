@@ -1,4 +1,9 @@
-import { api } from "@/api/core/client";
+import {
+  adminApi,
+  userApi,
+  vendorApi,
+} from "@/api/core/client";
+import type { AuthRole } from "../core/token-storage";
 
 export type NotificationType =
   | "ORDER_PLACED"
@@ -7,6 +12,7 @@ export type NotificationType =
   | "ORDER_DELIVERED"
   | "ORDER_CANCELLED"
   | "PAYMENT_RECEIVED"
+  | "PAYMENT_FAILED"
   | "PAYOUT_PROCESSED"
   | "LOW_STOCK_ALERT"
   | "SYSTEM_ANNOUNCEMENT";
@@ -33,43 +39,130 @@ export interface ListNotificationsParams {
   limit?: number;
   unreadOnly?: boolean;
   type?: NotificationType;
+  category?: "orders" | "payments";
 }
 
-export interface CursorPaginationMeta {
-  limit: number;
-  hasNextPage: boolean;
-  nextCursor: string | null;
-}
+import type { CursorPaginationMeta } from "../core/types";
 
 export interface NotificationsListResponse {
   data: AppNotification[];
   meta: CursorPaginationMeta;
 }
 
-export const notificationsApi = {
-  list(params?: ListNotificationsParams) {
-    return api.get<AppNotification[], CursorPaginationMeta>("/notifications", {
-      params,
-    });
-  },
+export interface NotificationPreferences {
+  id: string;
+  userId: string;
+  role: string;
+  emailEnabled: boolean;
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  orderUpdates: boolean;
+  paymentAlerts: boolean;
+  inventoryAlerts: boolean;
+  marketingPromos: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
-  getUnreadCount() {
-    return api.get<{ count: number }>("/notifications/unread-count");
-  },
+export type UpdateNotificationPreferencesDto = Partial<
+  Pick<
+    NotificationPreferences,
+    | "emailEnabled"
+    | "inAppEnabled"
+    | "pushEnabled"
+    | "orderUpdates"
+    | "paymentAlerts"
+    | "inventoryAlerts"
+    | "marketingPromos"
+  >
+>;
 
-  markAsRead(id: string) {
-    return api.patch<AppNotification>(`/notifications/${id}/read`);
-  },
+export interface PushSubscriptionDto {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  userAgent?: string;
+}
 
-  markAllAsRead() {
-    return api.patch<{ updated: number }>("/notifications/mark-all-read");
-  },
+function createNotificationsApi(client: typeof userApi) {
+  return {
+    list(params?: ListNotificationsParams, signal?: AbortSignal) {
+      const cleanParams: Record<string, unknown> = {};
+      if (params?.cursor) cleanParams.cursor = params.cursor;
+      if (params?.limit !== undefined && params?.limit !== null) cleanParams.limit = params.limit;
+      if (params?.unreadOnly !== undefined && params?.unreadOnly !== null) cleanParams.unreadOnly = params.unreadOnly;
+      if (params?.type) cleanParams.type = params.type;
+      if (params?.category) cleanParams.category = params.category;
 
-  delete(id: string) {
-    return api.delete<void>(`/notifications/${id}`);
-  },
+      return client.get<AppNotification[], CursorPaginationMeta>("/notifications", {
+        params: cleanParams,
+        signal,
+      });
+    },
 
-  clearAll() {
-    return api.delete<{ count: number }>("/notifications/clear-all");
-  },
-};
+    getById(id: string, signal?: AbortSignal) {
+      return client.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`, {
+        signal,
+      });
+    },
+
+    getUnreadCount() {
+      return client.get<{ count: number }>("/notifications/unread-count");
+    },
+
+    markAsRead(id: string) {
+      return client.patch<AppNotification>(`/notifications/${id}/read`);
+    },
+
+    markAllAsRead() {
+      return client.patch<{ count: number; updated?: number }>("/notifications/mark-all-read");
+    },
+
+    delete(id: string) {
+      return client.delete<void>(`/notifications/${id}`);
+    },
+
+    clearAll() {
+      return client.delete<{ count: number }>("/notifications/clear-all");
+    },
+
+    getVapidKey() {
+      return client.get<{ publicKey: string }>("/notifications/push/vapid-key");
+    },
+
+    subscribePush(dto: PushSubscriptionDto) {
+      return client.post<{ id: string; endpoint: string }>("/notifications/push/subscribe", dto);
+    },
+
+    unsubscribePush(endpoint: string) {
+      return client.post<{ success: boolean }>("/notifications/push/unsubscribe", { endpoint });
+    },
+
+    sendTestPush() {
+      return client.post<{ delivered: number; message: string }>("/notifications/push/test");
+    },
+
+    getPreferences() {
+      return client.get<NotificationPreferences>("/notifications/preferences");
+    },
+
+    updatePreferences(dto: UpdateNotificationPreferencesDto) {
+      return client.patch<NotificationPreferences>("/notifications/preferences", dto);
+    },
+  };
+}
+
+export function notificationsApiForRole(role?: AuthRole | string | null) {
+  const normalized = String(role || "").toLowerCase();
+  switch (normalized) {
+    case "admin":
+      return createNotificationsApi(adminApi);
+    case "vendor":
+      return createNotificationsApi(vendorApi);
+    case "user":
+    default:
+      return createNotificationsApi(userApi);
+  }
+}

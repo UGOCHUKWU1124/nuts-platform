@@ -76,14 +76,42 @@ describe('AdminAuthService', () => {
       resetAttempts: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockRefreshSession = {
+      issueAdminSession: jest.fn().mockResolvedValue({
+        user: {
+          id: 'admin-1',
+          email: 'admin@nuts.dev',
+          firstName: 'Admin',
+          lastName: 'User',
+        },
+        tokens: {
+          accessToken: 'signed-jwt',
+          refreshToken: 'refresh-jwt',
+          refreshId: 'rid',
+        },
+      }),
+      refresh: jest.fn().mockResolvedValue({
+        user: {
+          id: 'admin-1',
+          email: 'admin@nuts.dev',
+          firstName: 'Admin',
+          lastName: 'User',
+        },
+        tokens: {
+          accessToken: 'signed-jwt',
+          refreshToken: 'refresh-jwt',
+          refreshId: 'rid',
+        },
+      }),
+      revokeSession: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new AdminAuthService(
       mockPrisma,
-      {
-        signAsync: jest.fn().mockResolvedValue('signed-jwt'),
-      } as unknown as JwtService,
       mockConfig,
       mockAudit,
       mockAccountLock,
+      mockRefreshSession as any,
     );
   });
 

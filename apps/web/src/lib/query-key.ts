@@ -4,6 +4,8 @@ export const queryKey = {
     all: ["product"] as const,
     list: (params?: Record<string, unknown>) => ["product", "list", params] as const,
     detail: (slug: string) => ["product", "detail", slug] as const,
+    related: (productId: string, recommendationKey: string) =>
+      ["product", "related", productId, recommendationKey] as const,
     review: (productId: string) => ["product", "review", productId] as const,
   },
   category: {
@@ -30,6 +32,13 @@ export const queryKey = {
     detail: (id: string) => ["order", "detail", id] as const,
   },
   wishlist: ["wishlist"] as const,
+  notification: {
+    all: ["notification"] as const,
+    preferences: (userId?: string) =>
+      ["notification", "preferences", userId ?? "me"] as const,
+    detail: (sessionKey: string, id: string) =>
+      ["notification", "detail", sessionKey, id] as const,
+  },
   wallet: ["wallet"] as const,
   review: {
     all: ["review"] as const,

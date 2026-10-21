@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import {
 AlertTriangle,
+Bell,
 Check,
 CheckCircle2,
 Copy,
@@ -29,18 +30,24 @@ Trash2,
 User,
 Wallet
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useState } from "react";
 import { FormProvider,useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { NotificationPreferencesContent } from "@/components/domain/notification/NotificationPreferencesView";
 
 // --- Validation Schemas ---
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  phone: z.string().min(6, "Valid phone number is required"),
+  phone: z
+    .string()
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Phone number must include international country code (e.g. +2349064786655)",
+    ),
   email: z.string().email("Valid email is required"),
 });
 
@@ -59,7 +66,7 @@ const passwordSchema = z
 
 type PasswordForm = z.infer<typeof passwordSchema>;
 
-type SettingsTab = "profile" | "appearance" | "referral" | "security" | "danger";
+type SettingsTab = "profile" | "appearance" | "notifications" | "referral" | "security" | "danger";
 
 export default function AccountSettingPage() {
   const qc = useQueryClient();
@@ -70,7 +77,8 @@ export default function AccountSettingPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Deactivate OTP Dialog State
+  // Deactivate Account Dialog State
+  const [isConfirmDeactivateOpen, setIsConfirmDeactivateOpen] = useState(false);
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
   const [isRequestingOtp, setIsRequestingOtp] = useState(false);
 
@@ -84,6 +92,8 @@ export default function AccountSettingPage() {
       const res = await userService.me();
       return res.data;
     },
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 15,
   });
 
   // Referral stats — fetched only when the referral tab is active
@@ -91,6 +101,8 @@ export default function AccountSettingPage() {
     queryKey: ["referral", "stats"],
     queryFn: async () => (await referralService.getStats()).data,
     enabled: activeTab === "referral",
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 
   // 2. Profile Form
@@ -170,12 +182,13 @@ export default function AccountSettingPage() {
   });
 
   // Deactivate Account Handlers
-  const handleInitiateDeactivation = async () => {
+  const handleConfirmDeactivation = async () => {
     try {
       setIsRequestingOtp(true);
       await userService.requestDeactivateOtp();
-      toast.success("A 6-digit verification code has been sent to your email.");
+      setIsConfirmDeactivateOpen(false);
       setIsDeactivateOpen(true);
+      toast.success("A 6-digit verification code has been sent to your email.");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Failed to send verification code."));
     } finally {
@@ -190,7 +203,7 @@ export default function AccountSettingPage() {
       toast.success(
         res.data?.message || "Account deactivated. You can sign in within the grace period to reactivate."
       );
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) => {
       toast.error(getApiErrorMessage(err, "Account deactivation failed. Check your OTP code."));
@@ -203,7 +216,7 @@ export default function AccountSettingPage() {
     onSuccess: async () => {
       setIsDeleteOpen(false);
       toast.success("Your account has been permanently deleted.");
-      await logout({ redirectTo: "/auth/login" });
+      await logout({ skipApi: true, redirectTo: "/auth/login" });
     },
     onError: (err: unknown) => {
       toast.error(getApiErrorMessage(err, "Failed to permanently delete account."));
@@ -276,6 +289,19 @@ export default function AccountSettingPage() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("notifications")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+            activeTab === "notifications"
+              ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs"
+              : "text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900"
+          }`}
+        >
+          <Bell className="h-4 w-4" />
+          <span>Notification Preferences</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("referral")}
           className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
             activeTab === "referral"
@@ -335,7 +361,7 @@ export default function AccountSettingPage() {
                     <FormInput name="lastName" label="Last Name" placeholder="e.g. Doe" />
                   </div>
                   <FormInput name="email" label="Email Address" type="email" placeholder="name@domain.com" />
-                  <FormInput name="phone" label="Primary Phone Number" placeholder="+234..." />
+                  <FormInput name="phone" label="Primary Phone Number" placeholder="+2349064786655" />
 
                   <div className="pt-2">
                     <Button
@@ -367,6 +393,13 @@ export default function AccountSettingPage() {
               <ThemeSelector showTitle={false} />
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Tab: Notification Preferences */}
+      {activeTab === "notifications" && (
+        <div className="mt-6 max-w-2xl">
+          <NotificationPreferencesContent />
         </div>
       )}
 
@@ -414,7 +447,7 @@ export default function AccountSettingPage() {
 
               {/* Code Box */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Your Unique Referral Code</label>
+                <span className="text-sm font-medium text-foreground block">Your Unique Referral Code</span>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-4 py-3 font-mono font-bold tracking-widest text-lg text-foreground select-all">
                     {referralCode}
@@ -442,9 +475,13 @@ export default function AccountSettingPage() {
 
               {/* Shareable Link Box */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Direct Invite Link</label>
+                <label htmlFor="direct-invite-link" className="text-xs font-semibold text-foreground">
+                  Direct Invite Link
+                </label>
                 <div className="flex items-center gap-2">
                   <input
+                    id="direct-invite-link"
+                    name="referralLink"
                     type="text"
                     readOnly
                     value={referralLink}
@@ -583,10 +620,10 @@ export default function AccountSettingPage() {
                 type="button"
                 variant="outline"
                 disabled={isRequestingOtp}
-                onClick={handleInitiateDeactivation}
+                onClick={() => setIsConfirmDeactivateOpen(true)}
                 className="rounded-xl border-amber-300 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-300 text-xs font-semibold"
               >
-                {isRequestingOtp ? "Sending OTP..." : "Request Deactivation OTP"}
+                Deactivate Account
               </Button>
             </CardContent>
           </Card>
@@ -625,16 +662,34 @@ export default function AccountSettingPage() {
         </div>
       )}
 
-      {/* Otp Dialog for Deactivation */}
+      {/* Step 1: Confirmation Card Popup before sending OTP */}
+      <ConfirmDialog
+        open={isConfirmDeactivateOpen}
+        onOpenChange={setIsConfirmDeactivateOpen}
+        title="Are you sure you want to deactivate your account?"
+        description="Deactivating your account will temporarily disable your profile and log you out of all active sessions. You will have a 60-day grace period to sign back in and reactivate before permanent deletion. If you proceed, a 6-digit verification code will be sent to your email."
+        confirmText="Yes, Deactivate"
+        cancelText="Cancel"
+        variant="warning"
+        isLoading={isRequestingOtp}
+        onConfirm={handleConfirmDeactivation}
+      />
+
+      {/* Step 2: Otp Dialog for Deactivation with countdown timer */}
       <OtpPromptDialog
         open={isDeactivateOpen}
         onOpenChange={setIsDeactivateOpen}
         title="Confirm Account Deactivation"
         description="Enter the 6-digit security verification code sent to your email to deactivate your account."
         codeLabel="Verification Code"
-        codeSubtitle="Sent to your email"
+        codeSubtitle="Check your inbox"
         confirmText="Confirm Deactivation"
         isLoading={deactivateMutation.isPending}
+        initialCooldown={60}
+        onRequestOtp={async () => {
+          await userService.requestDeactivateOtp();
+          toast.success("Verification code resent to your email.");
+        }}
         onSubmit={({ otpCode }) => deactivateMutation.mutate(otpCode)}
       />
 

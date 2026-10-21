@@ -24,8 +24,12 @@ export class PaystackIpMiddleware implements NestMiddleware {
   }
 
   use(req: Request, res: Response, next: NextFunction): void {
-    // In development, allow all IPs for testing
-    if (!this.isProduction) {
+    const isTestKey = this.configService
+      .get<string>('PAYSTACK_SECRET_KEY')
+      ?.startsWith('sk_test_');
+
+    // In non-production or when using test keys for learning/staging, allow all IPs for testing
+    if (!this.isProduction || isTestKey) {
       return next();
     }
 

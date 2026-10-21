@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Response } from 'express';
 
 import {
+  AUTH_ACCESS_COOKIE,
+  AUTH_REFRESH_COOKIE,
   AUTH_COOKIE_PATH,
-  authCookieNames,
-  AuthCookieRole,
 } from '../constants/auth-cookies.constants';
 import type { AuthTokens } from '../types/auth.types';
 
@@ -17,36 +17,50 @@ export class AuthCookieService {
 
   constructor(private readonly config: ConfigService) {
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    const isStaging = this.config.get<string>('NODE_ENV') === 'staging';
 
-    const sameSiteConfig = this.config.get<string>('COOKIE_SAME_SITE', 'lax');
+    const configuredSameSite =
+      this.config.get<string>('COOKIE_SAME_SITE') ||
+      this.config.get<string>('AUTH_COOKIE_SAME_SITE');
 
-    if (!['lax', 'strict', 'none'].includes(sameSiteConfig)) {
+    const defaultSameSite = isProduction || isStaging ? 'none' : 'lax';
+    const effectiveSameSite = (configuredSameSite?.toLowerCase() ||
+      defaultSameSite) as 'lax' | 'strict' | 'none';
+
+    if (!['lax', 'strict', 'none'].includes(effectiveSameSite)) {
       throw new Error('COOKIE_SAME_SITE must be lax, strict, or none');
     }
 
-    /**
-     * SameSite=None requires Secure.
-     *
-     * Do not enable cross-site cookies accidentally.
-     */
-    const secure = isProduction || sameSiteConfig === 'none';
+    const isSecureConfig =
+      this.config.get<string | boolean>('AUTH_COOKIE_SECURE') ??
+      this.config.get<string | boolean>('COOKIE_SECURE');
 
-    if (sameSiteConfig === 'none' && !secure) {
+    /**
+     * SameSite=None strictly requires Secure per RFC 6265bis.
+     * Enforce secure in production/staging or when SameSite is None.
+     */
+    const secure =
+      isSecureConfig !== undefined
+        ? String(isSecureConfig) === 'true'
+        : effectiveSameSite === 'none' || isProduction || isStaging;
+
+    if (effectiveSameSite === 'none' && !secure) {
       throw new Error('SameSite=None cookies require Secure');
     }
 
     this.baseOptions = {
       httpOnly: true,
       secure,
-      sameSite: sameSiteConfig as CookieOptions['sameSite'],
+      sameSite: effectiveSameSite,
     };
 
-    const sanitizedDomain = this.sanitizeDomain(
-      this.config.get<string>('COOKIE_DOMAIN'),
-    );
+    const rawDomain =
+      this.config.get<string>('COOKIE_DOMAIN') ||
+      this.config.get<string>('AUTH_COOKIE_DOMAIN');
+    const sanitizedDomain = this.sanitizeDomain(rawDomain);
 
-    // Production auth cookies stay host-only. A parent-domain cookie would
-    // expose credentials to every sibling subdomain and enable cookie tossing.
+    // Host-Only cookies by default (domain undefined).
+    // Only bind domain when explicitly configured in non-production environments.
     if (sanitizedDomain && !isProduction) {
       this.baseOptions.domain = sanitizedDomain;
     }
@@ -60,65 +74,39 @@ export class AuthCookieService {
     );
   }
 
-  setAuthCookies(
-    res: Response,
-    tokens: AuthTokens,
-    role: AuthCookieRole,
-  ): void {
-    const names = authCookieNames(role);
-
-    /**
-     * httpOnly prevents browser JavaScript from reading the credential.
-     *
-     * The cookie is scoped to the API because the frontend does not need
-     * direct access to the JWT.
-     */
-    res.cookie(names.access, tokens.accessToken, {
+  setAuthCookies(res: Response, tokens: AuthTokens): void {
+    // 1. Standard HttpOnly accessToken cookie
+    res.cookie(AUTH_ACCESS_COOKIE, tokens.accessToken, {
       ...this.baseOptions,
       maxAge: this.accessMaxAge,
       path: AUTH_COOKIE_PATH,
     });
 
-    /**
-     * Refresh credentials are also API-only.
-     */
-    res.cookie(names.refresh, tokens.refreshToken, {
+    // 2. Standard HttpOnly refreshToken cookie
+    res.cookie(AUTH_REFRESH_COOKIE, tokens.refreshToken, {
       ...this.baseOptions,
       maxAge: this.refreshMaxAge,
       path: AUTH_COOKIE_PATH,
-    });
-
-    /**
-     * This is intentionally NOT an authentication credential.
-     *
-     * Frontend JavaScript may read it as a "session probably exists"
-     * convenience indicator, but the backend never trusts it.
-     */
-    res.cookie(names.session, '1', {
-      ...this.baseOptions,
-      httpOnly: false,
-      maxAge: this.refreshMaxAge,
-      path: '/',
     });
   }
 
-  clearAuthCookies(res: Response, role: AuthCookieRole): void {
-    const names = authCookieNames(role);
-
-    res.clearCookie(names.access, {
+  clearAuthCookies(res: Response): void {
+    res.clearCookie(AUTH_ACCESS_COOKIE, {
       ...this.baseOptions,
       path: AUTH_COOKIE_PATH,
     });
-
-    res.clearCookie(names.refresh, {
+    res.clearCookie(AUTH_REFRESH_COOKIE, {
       ...this.baseOptions,
       path: AUTH_COOKIE_PATH,
     });
-
-    res.clearCookie(names.session, {
+    // Clear legacy snake_case cookie names if present
+    res.clearCookie('access_token', {
       ...this.baseOptions,
-      httpOnly: false,
-      path: '/',
+      path: AUTH_COOKIE_PATH,
+    });
+    res.clearCookie('refresh_token', {
+      ...this.baseOptions,
+      path: AUTH_COOKIE_PATH,
     });
   }
 

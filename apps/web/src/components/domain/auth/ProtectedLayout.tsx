@@ -1,39 +1,17 @@
-"use client";
+import { type ReactNode } from "react";
+import { getServerSession } from "@/lib/server-auth.ts";
+import { ClientAuthBoundary } from "./ClientAuthBoundary";
 
-import { useAuthStore } from "@/zustand/auth";
-import { useHydrated } from "../../../hook/use-hydrated";
-import { useRouter } from "next/navigation";
-import { useEffect,type ReactNode } from "react";
+export async function ProtectedLayout({ children }: { children: ReactNode }) {
+  const session = await getServerSession();
 
-function hasUserSessionCookie() {
-  if (typeof document === "undefined") return false;
+  if (session.isAuthenticated && session.role === "user") {
+    return <>{children}</>;
+  }
 
-  const cookies = document.cookie.split(";").map((cookie) => cookie.trim());
-  return cookies.some(
-    (cookie) =>
-      cookie.startsWith("user_session=") ||
-      cookie.startsWith("user_access_token=") ||
-      cookie.startsWith("user_refresh_token=")
+  return (
+    <ClientAuthBoundary requiredRole="user" loginPath="/auth/login">
+      {children}
+    </ClientAuthBoundary>
   );
-}
-
-export function ProtectedLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
-  const router = useRouter();
-  const isReady = useHydrated();
-
-  useEffect(() => {
-    if (!isReady) return;
-
-    const hasSession = isAuthenticated || hasUserSessionCookie();
-
-    if (!hasSession) {
-      router.replace("/auth/login");
-    }
-  }, [isAuthenticated, isReady, router]);
-
-  if (!isReady) return null;
-  if (!isAuthenticated && !hasUserSessionCookie()) return null;
-
-  return <>{children}</>;
 }

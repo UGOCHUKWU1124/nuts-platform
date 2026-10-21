@@ -82,4 +82,13 @@ export interface CartResponseDto {
   cartItems: CartItemResponseDto[];
 }
 
+export interface AddToCartResponseDto {
+  cart: CartMetadataDto;
+  addedItem: CartItemResponseDto;
+}
+
+export interface RemoveCartItemResponseDto {
+  cart: CartResponseDto;
+}
+
 export type AddedFromType = "CATEGORY_PAGE" | "PRODUCT_PAGE";

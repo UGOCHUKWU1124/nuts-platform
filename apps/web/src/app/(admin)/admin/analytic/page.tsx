@@ -27,6 +27,9 @@ export default function AdminAnalyticsPage() {
 
   const { data: summary } = useQuery({
     queryKey: ["admin", "analytics", "summary", period],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminAnalyticsService.summary(queryParams);
       return res.data;
@@ -35,6 +38,9 @@ export default function AdminAnalyticsPage() {
 
   const { data: topProducts = [] } = useQuery({
     queryKey: ["admin", "analytics", "topProducts", period],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminAnalyticsService.topProducts(queryParams);
       return res.data;
@@ -43,6 +49,9 @@ export default function AdminAnalyticsPage() {
 
   const { data: topVendors = [] } = useQuery({
     queryKey: ["admin", "analytics", "topVendors", period],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminAnalyticsService.topVendors(queryParams);
       return res.data;
@@ -51,6 +60,9 @@ export default function AdminAnalyticsPage() {
 
   const { data: topCategories = [] } = useQuery({
     queryKey: ["admin", "analytics", "topCategories", period],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminAnalyticsService.topCategories(queryParams);
       return res.data;
@@ -59,6 +71,9 @@ export default function AdminAnalyticsPage() {
 
   const { data: payments } = useQuery({
     queryKey: ["admin", "analytics", "payments", period],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminAnalyticsService.payments(queryParams);
       return res.data;
@@ -67,6 +82,9 @@ export default function AdminAnalyticsPage() {
 
   const { data: discounts } = useQuery({
     queryKey: ["admin", "analytics", "discounts", period],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const res = await adminAnalyticsService.discounts(queryParams);
       return res.data;

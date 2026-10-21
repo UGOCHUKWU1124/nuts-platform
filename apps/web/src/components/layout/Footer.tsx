@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { usePathname } from "next/navigation";
 
 export function Footer() {
@@ -15,7 +15,7 @@ export function Footer() {
     <footer className="border-t border-border/70 bg-card/60 pt-12 pb-10 text-foreground">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Footer Navigation Columns */}
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5 pb-10 border-b border-border/60">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 pb-10 border-b border-border/60">
           {/* Brand Column */}
           <div className="lg:col-span-2 space-y-4">
             <Link href="/" className="inline-block text-2xl font-bold tracking-tight text-foreground group">
@@ -87,63 +87,6 @@ export function Footer() {
                   }`}
                 >
                   Vendor Login
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Customer Support */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground/90">
-              Customer Care
-            </h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link
-                  href="/order"
-                  className={`transition-colors duration-150 ${
-                    isLinkActive("/order")
-                      ? "font-semibold text-primary"
-                      : "text-muted-foreground hover:text-primary"
-                  }`}
-                >
-                  Track My Order
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/wishlist"
-                  className={`transition-colors duration-150 ${
-                    isLinkActive("/wishlist")
-                      ? "font-semibold text-primary"
-                      : "text-muted-foreground hover:text-primary"
-                  }`}
-                >
-                  Saved Wishlist
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/cart"
-                  className={`transition-colors duration-150 ${
-                    isLinkActive("/cart")
-                      ? "font-semibold text-primary"
-                      : "text-muted-foreground hover:text-primary"
-                  }`}
-                >
-                  Shopping Cart
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/account"
-                  className={`transition-colors duration-150 ${
-                    isLinkActive("/account")
-                      ? "font-semibold text-primary"
-                      : "text-muted-foreground hover:text-primary"
-                  }`}
-                >
-                  Account Settings
                 </Link>
               </li>
             </ul>

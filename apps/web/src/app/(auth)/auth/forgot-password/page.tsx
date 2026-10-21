@@ -6,13 +6,15 @@ import { PublicOnlyLayout } from "@/component/auth/PublicOnlyLayout";
 import { FormInput } from "@/component/form/FormInput";
 import { Button } from "@/component/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AxiosError } from "axios";
 import { ArrowLeft,KeyRound,Mail,RefreshCw } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
-import { FormProvider,useForm } from "react-hook-form";
+import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { SegmentedOtpInput } from "@/components/ui/SegmentedOtpInput";
 
 // Schema for Step 1: Request OTP
 const requestOtpSchema = z.object({
@@ -65,6 +67,8 @@ export default function ForgotPasswordPage() {
     },
   });
 
+  const otpCodeValue = useWatch({ control: resetMethods.control, name: "otpCode" }) || "";
+
   // Countdown timer for OTP resend
   useEffect(() => {
     if (resendTimer > 0) {
@@ -86,7 +90,27 @@ export default function ForgotPasswordPage() {
       setResendTimer(60);
       toast.success("Password reset code sent to your email!");
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, "Failed to send reset code. Please try again."));
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        retryAfter?: number;
+        error?: { retryAfter?: number };
+      }>;
+      const respData = axiosErr?.response?.data;
+      const retryAfter =
+        (typeof respData?.retryAfter === "number" && respData.retryAfter) ||
+        (typeof respData?.error?.retryAfter === "number" && respData.error.retryAfter) ||
+        null;
+      const msg = getApiErrorMessage(err, "Failed to send reset code. Please try again.");
+
+      if (retryAfter && retryAfter > 0) {
+        setTargetEmail(data.email);
+        resetMethods.setValue("email", data.email);
+        setStep("verify");
+        setResendTimer(retryAfter);
+        toast.info(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }
@@ -101,7 +125,24 @@ export default function ForgotPasswordPage() {
       setResendTimer(60);
       toast.success("New verification code sent!");
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, "Failed to resend code. Please try again."));
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        retryAfter?: number;
+        error?: { retryAfter?: number };
+      }>;
+      const respData = axiosErr?.response?.data;
+      const retryAfter =
+        (typeof respData?.retryAfter === "number" && respData.retryAfter) ||
+        (typeof respData?.error?.retryAfter === "number" && respData.error.retryAfter) ||
+        null;
+      const msg = getApiErrorMessage(err, "Failed to resend code. Please try again.");
+
+      if (retryAfter && retryAfter > 0) {
+        setResendTimer(retryAfter);
+        toast.info(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }
@@ -182,23 +223,25 @@ export default function ForgotPasswordPage() {
 
             <FormProvider {...resetMethods}>
               <form onSubmit={resetMethods.handleSubmit(onResetPassword)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <FormInput
-                    name="otpCode"
-                    label="6-Digit Verification Code"
-                    placeholder="123456"
-                    className="tracking-widest font-mono text-center text-lg"
-                    required
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 text-center">
+                    6-Digit Verification Code
+                  </label>
+                  <SegmentedOtpInput
+                    value={otpCodeValue}
+                    onChange={(val) => resetMethods.setValue("otpCode", val, { shouldValidate: true })}
+                    error={resetMethods.formState.errors.otpCode?.message}
+                    autoFocus
                   />
-                  <div className="flex justify-end">
+                  <div className="flex justify-center pt-1">
                     <button
                       type="button"
                       onClick={handleResendOtp}
                       disabled={resendTimer > 0 || isSendingOtp}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 disabled:text-neutral-400 hover:underline"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white disabled:text-neutral-400 dark:disabled:text-neutral-600 transition-colors"
                     >
                       <RefreshCw className={`h-3 w-3 ${isSendingOtp ? "animate-spin" : ""}`} />
-                      {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend Code"}
+                      {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Didn't receive code? Resend"}
                     </button>
                   </div>
                 </div>

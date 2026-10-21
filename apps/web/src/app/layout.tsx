@@ -1,6 +1,7 @@
 import { PaystackScript } from "@/components/paystack-script";
+import { RouteProgressBar } from "@/components/feedback/RouteProgressBar";
 import { Provider } from "@/provider";
-import type { Metadata,Viewport } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
@@ -9,7 +10,6 @@ const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "500", "600", "700"],
 });
 
 export const viewport: Viewport = {
@@ -39,6 +39,9 @@ export default function RootLayout({
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>
       <body className={`${inter.variable} font-sans antialiased text-foreground bg-background`}>
+        <Suspense fallback={null}>
+          <RouteProgressBar />
+        </Suspense>
         <Suspense fallback={null}>
           <PaystackScript />
         </Suspense>

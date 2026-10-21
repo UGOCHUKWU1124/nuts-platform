@@ -9,6 +9,7 @@ import { CategoryFilterDrawer } from "@/component/category/CategoryFilterDrawer"
 import { CustomerLayout } from "@/component/layout/CustomerLayout";
 import { ProductCard } from "@/component/product/ProductCard";
 import { ProductGridSkeleton } from "@/component/product/ProductGridSkeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import {
 ArrowLeft,
@@ -20,7 +21,7 @@ SlidersHorizontal,
 Store,
 X,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/navigation/AppLink";
 import { useParams } from "next/navigation";
 import { useMemo,useRef,useState } from "react";
 import { toast } from "sonner";
@@ -37,7 +38,7 @@ function getStoreInitials(name: string): string {
   return ((first[0] ?? "") + (second[0] ?? "")).toUpperCase() || "CR";
 }
 
-interface SubcategoryGroup {
+interface RootCategoryGroup {
   id: string;
   name: string;
   slug: string;
@@ -103,24 +104,35 @@ export function VendorStoreView({
   // Categories delivered directly via RSC props
   const categoryTree = initialCategories;
 
-  // Flattened Category Map for infallible subcategory name resolution
-  const categoryMap = useMemo(() => {
+  // Flattened Map resolving every child/descendant category to its top-level Root Category
+  const rootCategoryMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string; slug: string }>();
-    function traverse(nodes: CategoryResponseDto[]) {
-      for (const node of nodes) {
-        if (node.id && node.name) {
-          map.set(node.id, { id: node.id, name: node.name, slug: node.slug || node.id });
-        }
-        if (node.slug && node.name) {
-          map.set(node.slug, { id: node.id || node.slug, name: node.name, slug: node.slug });
-        }
-        const children = node.children || node.subCategories || [];
-        if (Array.isArray(children) && children.length > 0) {
-          traverse(children);
+
+    function registerDescendants(
+      node: CategoryResponseDto,
+      root: { id: string; name: string; slug: string }
+    ) {
+      if (node.id) map.set(node.id, root);
+      if (node.slug) map.set(node.slug, root);
+
+      const children = node.children || node.subCategories || [];
+      if (Array.isArray(children)) {
+        for (const child of children) {
+          registerDescendants(child, root);
         }
       }
     }
-    traverse(categoryTree);
+
+    for (const rootNode of categoryTree) {
+      if (!rootNode.id && !rootNode.slug) continue;
+      const rootInfo = {
+        id: rootNode.id || rootNode.slug,
+        name: rootNode.name,
+        slug: rootNode.slug || rootNode.id,
+      };
+      registerDescendants(rootNode, rootInfo);
+    }
+
     return map;
   }, [categoryTree]);
 
@@ -130,28 +142,48 @@ export function VendorStoreView({
     [productsData, initialProducts],
   );
 
-  // Group products by subcategory
-  const subcategoryGroups: SubcategoryGroup[] = useMemo(() => {
+  // Group products strictly by Root Category
+  const rootCategoryGroups: RootCategoryGroup[] = useMemo(() => {
     if (!rawProducts.length) return [];
 
-    const groupMap = new Map<string, SubcategoryGroup>();
+    const groupMap = new Map<string, RootCategoryGroup>();
 
     for (const product of rawProducts) {
-      const cat = product.category;
-      let groupKey = "uncategorized";
-      let groupName = "Other Products";
-      let groupSlug = "other";
+      // Trace category hierarchy: category, subcategory, parentSubcategory
+      const categoryRefs = [
+        product.category,
+        product.subcategory,
+        product.parentSubcategory,
+      ].filter(Boolean);
 
-      if (cat?.id && categoryMap.has(cat.id)) {
-        const resolved = categoryMap.get(cat.id)!;
-        groupKey = resolved.id;
-        groupName = resolved.name;
-        groupSlug = resolved.slug;
-      } else if (cat?.name) {
-        groupKey = cat.id || cat.slug || cat.name;
-        groupName = cat.name;
-        groupSlug = cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-");
+      let rootInfo: { id: string; name: string; slug: string } | null = null;
+
+      for (const cat of categoryRefs) {
+        if (!cat) continue;
+        if (cat.id && rootCategoryMap.has(cat.id)) {
+          rootInfo = rootCategoryMap.get(cat.id)!;
+          break;
+        }
+        if (cat.slug && rootCategoryMap.has(cat.slug)) {
+          rootInfo = rootCategoryMap.get(cat.slug)!;
+          break;
+        }
       }
+
+      if (!rootInfo) {
+        const cat = product.category || product.subcategory || product.parentSubcategory;
+        if (cat?.name) {
+          rootInfo = {
+            id: cat.id || cat.slug || cat.name,
+            name: cat.name,
+            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-"),
+          };
+        }
+      }
+
+      const groupKey = rootInfo?.id || "uncategorized";
+      const groupName = rootInfo?.name || "Other Products";
+      const groupSlug = rootInfo?.slug || "other";
 
       if (!groupMap.has(groupKey)) {
         groupMap.set(groupKey, {
@@ -165,11 +197,22 @@ export function VendorStoreView({
     }
 
     return Array.from(groupMap.values());
-  }, [rawProducts, categoryMap]);
+  }, [rawProducts, rootCategoryMap]);
 
-  // Filter & sort products within each group
+  // Main root categories where this vendor actually has active products
+  const vendorMainCategories = useMemo(() => {
+    return rootCategoryGroups
+      .filter((g) => g.products.length > 0 && g.id !== "uncategorized")
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        slug: g.slug,
+      }));
+  }, [rootCategoryGroups]);
+
+  // Filter & sort products within each root category group
   const filteredGroups = useMemo(() => {
-    return subcategoryGroups
+    return rootCategoryGroups
       .map((group) => {
         let prods = [...group.products];
 
@@ -214,12 +257,8 @@ export function VendorStoreView({
         return { ...group, products: prods };
       })
       .filter((g) => g.products.length > 0);
-  }, [subcategoryGroups, searchInput, inStock, minPrice, maxPrice, sortBy]);
+  }, [rootCategoryGroups, searchInput, inStock, minPrice, maxPrice, sortBy]);
 
-  const totalFilteredCount = useMemo(
-    () => filteredGroups.reduce((acc, g) => acc + g.products.length, 0),
-    [filteredGroups]
-  );
 
   const activeFilterCount = useMemo(() => {
     let c = 0;
@@ -258,9 +297,9 @@ export function VendorStoreView({
     }
   };
 
-  const scrollToSubcategory = (subcatSlug: string) => {
-    setActiveTab(subcatSlug);
-    const element = document.getElementById(`subcat-${subcatSlug}`);
+  const scrollToCategory = (catSlug: string) => {
+    setActiveTab(catSlug);
+    const element = document.getElementById(`cat-${catSlug}`);
     if (element) {
       const yOffset = -120;
       const y =
@@ -275,7 +314,7 @@ export function VendorStoreView({
     return (
       <CustomerLayout categories={categoryTree}>
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="h-52 w-full animate-pulse rounded-3xl bg-neutral-100 mb-8" />
+          <Skeleton className="h-52 w-full rounded-3xl mb-8" />
           <ProductGridSkeleton />
         </div>
       </CustomerLayout>
@@ -357,18 +396,14 @@ export function VendorStoreView({
               </div>
 
               {/* Badges / Stats */}
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-                  <ShoppingBag className="h-3.5 w-3.5" />
-                  {rawProducts.length} {rawProducts.length === 1 ? "Product" : "Products"}
-                </span>
-                {store.isVerified && (
+              {store.isVerified && (
+                <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Verified Vendor
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Store Name & Description */}
@@ -385,6 +420,20 @@ export function VendorStoreView({
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   {store.storeDescription}
                 </p>
+              )}
+              {vendorMainCategories.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {vendorMainCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => scrollToCategory(cat.slug)}
+                      className="inline-flex items-center rounded-full bg-secondary/80 px-2.5 py-0.5 text-xs font-medium text-foreground border border-border/50 hover:bg-secondary hover:border-primary/40 transition-colors cursor-pointer"
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -429,7 +478,7 @@ export function VendorStoreView({
           </button>
         </div>
 
-        {/* Subcategory Navigation Pill Tabs */}
+        {/* Root Category Navigation Pill Tabs */}
         {filteredGroups.length > 1 && (
           <div className="mb-8 border-b border-border/60 pb-4">
             <div
@@ -448,7 +497,7 @@ export function VendorStoreView({
                     : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200"
                 }`}
               >
-                All Sections
+                All Departments
               </button>
               {filteredGroups.map((group) => {
                 const isSelected = activeTab === group.slug;
@@ -456,7 +505,7 @@ export function VendorStoreView({
                   <button
                     key={group.id}
                     type="button"
-                    onClick={() => scrollToSubcategory(group.slug)}
+                    onClick={() => scrollToCategory(group.slug)}
                     className={`rounded-full px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                       isSelected
                         ? "bg-black text-white dark:bg-white dark:text-black"
@@ -568,20 +617,22 @@ export function VendorStoreView({
           </div>
         ) : (
           <div className="space-y-12 sm:space-y-16">
-            {filteredGroups.map((group) => (
+            {filteredGroups.map((group, groupIndex) => (
               <section
                 key={group.id}
-                id={`subcat-${group.slug}`}
+                id={`cat-${group.slug}`}
                 className="scroll-mt-28"
               >
-                {/* Subcategory Heading */}
-                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground mb-6">
-                  {group.name}
-                </h2>
+                {/* Root Category Heading */}
+                <div className="mb-6 flex items-center justify-between border-b border-border/40 pb-3">
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                    {group.name}
+                  </h2>
+                </div>
 
                 {/* Product Grid */}
                 <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-x-6 sm:gap-y-10">
-                  {group.products.map((product) => (
+                  {group.products.map((product, pIdx) => (
                     <ProductCard
                       key={product.id}
                       product={{
@@ -598,6 +649,7 @@ export function VendorStoreView({
                         subcategory: product.subcategory,
                       }}
                       addedFrom="PRODUCT_PAGE"
+                      priority={groupIndex === 0 && pIdx < 4}
                     />
                   ))}
                 </div>
@@ -620,7 +672,6 @@ export function VendorStoreView({
           sortBy={sortBy}
           onSortByChange={setSortBy}
           onReset={handleResetFilters}
-          totalResults={totalFilteredCount}
         />
       </div>
     </CustomerLayout>

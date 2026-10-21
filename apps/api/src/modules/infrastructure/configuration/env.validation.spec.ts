@@ -21,10 +21,7 @@ describe('validateEnv', () => {
         PAYSTACK_CALLBACK_URL: 'https://example.com/order-success',
         ADMIN_SETUP_SECRET: '12345678901234567890123456789012',
         EMAIL_FROM: 'test@example.com',
-        SMTP_HOST: 'smtp.example.com',
-        SMTP_PORT: '587',
-        SMTP_USER: 'user@example.com',
-        SMTP_PASS: 'secret',
+        BREVO_API_KEY: 'brevo-api-key',
         OTP_PEPPER: '12345678901234567890123456789012',
       }),
     ).not.toThrow();
@@ -52,10 +49,7 @@ describe('validateEnv', () => {
         ADMIN_SETUP_SECRET: 'admin-bootstrap-secret-at-least-32-chars',
         OTP_PEPPER: 'otp-pepper-secret-which-is-at-least-32-characters',
         EMAIL_FROM: 'support@nuts.example',
-        SMTP_HOST: 'smtp.example.com',
-        SMTP_PORT: '587',
-        SMTP_USER: 'support@nuts.example',
-        SMTP_PASS: 'smtp-app-password',
+        BREVO_API_KEY: 'brevo-api-key',
       }),
     ).toThrow(
       /ALLOWED_ORIGINS must contain only exact HTTPS storefront origins/,
@@ -84,10 +78,33 @@ describe('validateEnv', () => {
         ADMIN_SETUP_SECRET: 'admin-bootstrap-secret-at-least-32-chars',
         OTP_PEPPER: 'otp-pepper-secret-which-is-at-least-32-characters',
         EMAIL_FROM: 'support@nuts.example',
-        SMTP_HOST: 'smtp.example.com',
-        SMTP_PORT: '587',
-        SMTP_USER: 'support@nuts.example',
-        SMTP_PASS: 'smtp-app-password',
+        BREVO_API_KEY: 'brevo-api-key',
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts sk_test_ Paystack keys in production for test and learning environments', () => {
+    expect(() =>
+      validateEnv({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'access-secret-which-is-at-least-32-characters',
+        JWT_REFRESH_SECRET: 'refresh-secret-which-is-at-least-32-characters',
+        JWT_ISSUER: 'nuts',
+        JWT_ACCESS_AUDIENCE: 'nuts-api',
+        JWT_REFRESH_AUDIENCE: 'nuts-api',
+        JWT_ACCESS_EXPIRES_IN: '15m',
+        JWT_REFRESH_EXPIRES_IN: '7d',
+        DATABASE_URL:
+          'postgresql://app:db-pass@db.example:5432/nuts?sslmode=verify-full',
+        REDIS_URL: 'rediss://app:redis-pass@redis.example:6379',
+        RABBITMQ_URL: 'amqps://app:rabbit-pass@rabbit.example:5671',
+        ALLOWED_ORIGINS: 'https://shop.example.com',
+        PAYSTACK_SECRET_KEY: 'sk_test_valid-test-secret',
+        PAYSTACK_CALLBACK_URL: 'https://shop.example.com/order-success',
+        ADMIN_SETUP_SECRET: 'admin-bootstrap-secret-at-least-32-chars',
+        OTP_PEPPER: 'otp-pepper-secret-which-is-at-least-32-characters',
+        EMAIL_FROM: 'support@nuts.example',
+        BREVO_API_KEY: 'brevo-api-key',
       }),
     ).not.toThrow();
   });

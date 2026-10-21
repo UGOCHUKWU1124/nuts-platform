@@ -2,7 +2,7 @@
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
 import { adminCategoryService } from "@/api";
-import { api } from "@/api/core/client";
+import { adminApi } from "@/api/core/client";
 import type { CategoryResponseDto } from "@/api/dto/category";
 import type { AdminVariantResponseDto } from "@/api/dto/variant";
 import { ManagementToolbar } from "@/component/common/ManagementToolbar";
@@ -122,6 +122,10 @@ export default function AdminProductPage() {
   const [editingProduct, setEditingProduct] = useState<AdminProductItem | null>(null);
   const [stockProduct, setStockProduct] = useState<AdminProductItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminProductItem | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<{
+    product: AdminProductItem;
+    active: boolean;
+  } | null>(null);
   const [variantsList, setVariantsList] = useState<ProductVariantItem[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -133,8 +137,10 @@ export default function AdminProductPage() {
   const initialCatId = searchParams.get("categoryId") || "ALL";
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCatId);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [...queryKey.admin.product, debouncedSearch, status, selectedCategory, page],
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {
@@ -147,15 +153,17 @@ export default function AdminProductPage() {
       if (status === "inactive") params.isActive = false;
       if (selectedCategory && selectedCategory !== "ALL") params.categoryId = selectedCategory;
 
-      const res = await api.get<AdminProductItem[]>("/admin/products", { params });
+      const res = await adminApi.get<AdminProductItem[]>("/admin/products", { params });
       return res;
     },
   });
 
   const { data: vendorsData } = useQuery({
     queryKey: queryKey.admin.vendor,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
-      const res = await api.get<{ id: string; storeName: string; email: string }[]>(
+      const res = await adminApi.get<{ id: string; storeName: string; email: string }[]>(
         "/admin/vendors",
         { params: { page: 1, limit: 100 } }
       );
@@ -165,6 +173,8 @@ export default function AdminProductPage() {
 
   const { data: categoriesData } = useQuery({
     queryKey: queryKey.admin.category,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
     queryFn: async () => {
       const res = await adminCategoryService.get();
       return res.data;
@@ -188,7 +198,7 @@ export default function AdminProductPage() {
   const createMutation = useMutation({
     mutationFn: (values: ProductFormData) => {
       if (!values.vendorId) throw new Error("Vendor store is required");
-      return api.post("/admin/products", {
+      return adminApi.post("/admin/products", {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -214,7 +224,7 @@ export default function AdminProductPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, values }: { id: string; values: ProductFormData }) =>
-      api.patch(`/admin/products/${id}`, {
+      adminApi.patch(`/admin/products/${id}`, {
         name: values.name.trim(),
         sku: values.sku.trim().toUpperCase(),
         price: values.price,
@@ -237,7 +247,7 @@ export default function AdminProductPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/products/${id}`),
+    mutationFn: (id: string) => adminApi.delete(`/admin/products/${id}`),
     onSuccess: () => {
       toast.success("Product deleted successfully!");
       refreshProducts();
@@ -249,10 +259,11 @@ export default function AdminProductPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      api.patch(`/admin/products/${id}/${active ? "deactivate" : "reactivate"}`),
+      adminApi.patch(`/admin/products/${id}/${active ? "deactivate" : "reactivate"}`),
     onSuccess: () => {
       toast.success("Product status updated");
       refreshProducts();
+      setToggleActiveTarget(null);
     },
     onError: (err: AxiosError<{ message: string }>) =>
       toast.error(err?.response?.data?.message ?? "Failed to update status"),
@@ -268,7 +279,7 @@ export default function AdminProductPage() {
       quantity: number;
       description?: string;
     }) =>
-      api.patch(`/admin/products/${id}/stock`, {
+      adminApi.patch(`/admin/products/${id}/stock`, {
         quantity,
         ...(description ? { description } : {}),
       }),
@@ -306,7 +317,7 @@ export default function AdminProductPage() {
 
     if (product.hasVariants) {
       try {
-        const res = await api.get<{ variants?: AdminVariantResponseDto[] }>(`/admin/products/${product.id}`);
+        const res = await adminApi.get<{ variants?: AdminVariantResponseDto[] }>(`/admin/products/${product.id}`);
         const list = res.data?.variants || [];
         setVariantsList(
           list.map((v) => ({
@@ -481,7 +492,7 @@ export default function AdminProductPage() {
               r.isActive ? "text-amber-500 hover:text-amber-600" : "text-emerald-500 hover:text-emerald-600"
             }`}
             onClick={() =>
-              toggleActiveMutation.mutate({ id: r.id, active: !!r.isActive })
+              setToggleActiveTarget({ product: r, active: !!r.isActive })
             }
           >
             {r.isActive ? <Ban className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
@@ -559,13 +570,18 @@ export default function AdminProductPage() {
               setPage(1);
             }}
             filters={[
-              { value: "active", label: "Active Products" },
-              { value: "inactive", label: "Inactive Products" },
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
             ]}
+            onRefresh={refreshProducts}
+            isLoading={isLoading || isFetching}
           />
         </div>
 
         <select
+          id="admin-product-category-filter"
+          name="categoryFilter"
+          aria-label="Filter products by category"
           value={selectedCategory}
           onChange={(e) => {
             setSelectedCategory(e.target.value);
@@ -605,13 +621,14 @@ export default function AdminProductPage() {
         columns={columns}
         data={Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []}
         isLoading={isLoading}
+        isFetching={isFetching}
         emptyMessage="No products matched your search criteria."
         pagination={
           data?.meta
             ? {
                 page: data.meta.page ?? page,
                 limit: data.meta.limit ?? 25,
-                total: data.meta.total,
+                total: data.meta.totalItems ?? data.meta.total ?? 0,
                 totalPages: data.meta.totalPages,
                 hasNextPage: "hasNextPage" in data.meta ? data.meta.hasNextPage : undefined,
                 hasPrevPage: "hasPreviousPage" in data.meta ? data.meta.hasPreviousPage : undefined,
@@ -691,6 +708,7 @@ export default function AdminProductPage() {
                 </div>
                 <input
                   id="adminHasVariants"
+                  name="hasVariants"
                   type="checkbox"
                   checked={Boolean(hasVariants)}
                   onChange={(e) => {
@@ -713,6 +731,7 @@ export default function AdminProductPage() {
               {/* Variant builder section */}
               {hasVariants && (
                 <ProductVariantBuilder
+                  authRole="admin"
                   variants={variantsList}
                   onChange={setVariantsList}
                 />
@@ -730,6 +749,7 @@ export default function AdminProductPage() {
               <CategoryPicker categories={categoriesData ?? []} />
 
               <ImageUpload
+                authRole="admin"
                 name="imageUrls"
                 label="Product Showcase Images (up to 6)"
                 aspectHint="square or portrait"
@@ -855,6 +875,35 @@ export default function AdminProductPage() {
         variant="destructive"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* CONFIRM TOGGLE ACTIVE DIALOG */}
+      <ConfirmDialog
+        open={Boolean(toggleActiveTarget)}
+        onOpenChange={(v) => !v && setToggleActiveTarget(null)}
+        title={toggleActiveTarget?.active ? "Deactivate Product" : "Reactivate Product"}
+        description={
+          toggleActiveTarget?.active ? (
+            <>
+              Are you sure you want to deactivate <strong>&quot;{toggleActiveTarget?.product.name}&quot;</strong>? It will be immediately hidden from customer storefront searches and catalog browsing.
+            </>
+          ) : (
+            <>
+              Are you sure you want to reactivate <strong>&quot;{toggleActiveTarget?.product.name}&quot;</strong>? It will become visible and purchasable by customers immediately.
+            </>
+          )
+        }
+        confirmText={toggleActiveTarget?.active ? "Deactivate Product" : "Reactivate Product"}
+        variant={toggleActiveTarget?.active ? "warning" : "default"}
+        isLoading={toggleActiveMutation.isPending}
+        onConfirm={() => {
+          if (toggleActiveTarget) {
+            toggleActiveMutation.mutate({
+              id: toggleActiveTarget.product.id,
+              active: toggleActiveTarget.active,
+            });
+          }
+        }}
       />
     </div>
   );

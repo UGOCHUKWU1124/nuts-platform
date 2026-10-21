@@ -1,12 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { OutboxStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { OutboxRelay } from './outbox.relay';
 
 @Injectable()
 export class OutboxService {
   private readonly logger = new Logger(OutboxService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly outboxRelay?: OutboxRelay,
+  ) {}
 
   /**
    * Appends an outbox event inside an ongoing database transaction.
@@ -28,5 +32,7 @@ export class OutboxService {
         status: OutboxStatus.PENDING,
       },
     });
+
+    this.outboxRelay?.notifyNewEvent();
   }
 }

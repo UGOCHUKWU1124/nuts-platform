@@ -38,13 +38,11 @@ import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
 import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
-import { RolesGuard } from '@api/modules/shared/guards/roles.guard';
 import {
   extractIpAddress,
   extractUserAgent,
 } from '@api/modules/shared/utils/request.util';
 import { AdminAuthService } from './admin-auth.service';
-import { AdminJwtAuthGuard } from './admin-jwt-auth.guard';
 import { AdminAuthResponseDto } from './dto/admin-auth-response.dto';
 import { AdminAuthUserDto } from './dto/admin-auth-user.dto';
 import { AdminRegisterDto } from './dto/admin-register.dto';
@@ -97,11 +95,13 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
-      user: session.user,
+      admin: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
@@ -145,25 +145,27 @@ export class AdminAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
-      user: session.user,
+      admin: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
   @Public()
   @RefreshTokenThrottle()
-  @UseGuards(JwtRefreshGuard, RolesGuard)
+  @UseGuards(JwtRefreshGuard)
   @Roles(ROLE.ADMIN)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @Message('Admin token refreshed successfully')
+  @Message('Tokens refreshed successfully')
   @ApiOperation({
     summary: 'Rotate admin access and refresh tokens',
     description:
-      'Uses the httpOnly refresh_token cookie to issue a new access + ' +
+      'Uses the httpOnly refreshToken cookie to issue a new access + ' +
       'refresh token pair. The previous refresh token is invalidated ' +
       '(rotation). Requires a valid refresh token and the ADMIN role.',
   })
@@ -186,15 +188,16 @@ export class AdminAuthController {
       payload.refreshId,
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'admin');
+    this.authCookies.setAuthCookies(res, session.tokens);
 
     return {
-      user: session.user,
+      admin: session.user,
       accessToken: session.tokens.accessToken,
+      tokenType: session.tokens.tokenType,
+      expiresIn: session.tokens.expiresIn,
     };
   }
 
-  @UseGuards(AdminJwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
   @Get('me')
   @HttpCode(HttpStatus.OK)
@@ -223,7 +226,6 @@ export class AdminAuthController {
     return this.adminAuthService.me(adminId);
   }
 
-  @UseGuards(AdminJwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
   @Patch('me')
   @HttpCode(HttpStatus.OK)
@@ -251,7 +253,6 @@ export class AdminAuthController {
     return this.adminAuthService.updateProfile(adminId, dto);
   }
 
-  @UseGuards(AdminJwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
@@ -284,7 +285,7 @@ export class AdminAuthController {
       extractIpAddress(req),
       extractUserAgent(req),
     );
-    this.authCookies.clearAuthCookies(res, 'admin');
+    this.authCookies.clearAuthCookies(res);
     return null;
   }
 }

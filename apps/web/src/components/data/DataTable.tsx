@@ -17,6 +17,7 @@ export interface DataTablePagination {
   page?: number;
   limit?: number;
   total?: number;
+  totalItems?: number;
   totalPages?: number;
   onPageChange?: (newPage: number) => void;
   cursor?: string | null;
@@ -24,6 +25,7 @@ export interface DataTablePagination {
   prevCursor?: string | null;
   hasNextPage?: boolean;
   hasPrevPage?: boolean;
+  hasPreviousPage?: boolean;
   onNextPage?: () => void;
   onPrevPage?: () => void;
 }
@@ -33,6 +35,7 @@ interface DataTableProps<T> {
   data: T[] | { data: T[]; meta?: unknown } | null | undefined;
   keyField?: keyof T | string;
   isLoading?: boolean;
+  isFetching?: boolean;
   emptyMessage?: string;
   emptyIcon?: ReactNode;
   pagination?: DataTablePagination;
@@ -45,6 +48,7 @@ export function DataTable<T extends object>({
   data,
   keyField = "id",
   isLoading,
+  isFetching,
   emptyMessage = "No records found matching your filters.",
   emptyIcon,
   pagination,
@@ -91,7 +95,12 @@ export function DataTable<T extends object>({
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs transition-all", className)}>
+    <div className={cn("relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs transition-all", className)}>
+      {isFetching && (
+        <div className="absolute top-0 left-0 right-0 z-20 h-0.5 bg-primary/20 overflow-hidden">
+          <div className="h-full bg-primary w-1/3 animate-[pulse_1s_infinite] transition-all" />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm border-collapse">
           <thead>
@@ -106,7 +115,7 @@ export function DataTable<T extends object>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/50">
+          <tbody className={cn("divide-y divide-border/50 transition-opacity duration-150", isFetching && "opacity-50 pointer-events-none")}>
             {safeData.map((row, i) => {
               const rowValues = row as Record<string, unknown>;
               const rowKey = String(rowValues[String(keyField)] ?? i);
@@ -136,72 +145,84 @@ export function DataTable<T extends object>({
       </div>
 
       {/* Pagination Footer */}
-      {pagination && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/70 px-4 py-3 bg-muted/15 text-xs text-muted-foreground">
-          <div>
-            <span>
-              {pagination.page !== undefined ? (
-                <>
-                  Showing Page <strong className="text-foreground font-bold">{pagination.page}</strong>
-                  {pagination.totalPages ? (
-                    <> of <strong className="text-foreground font-bold">{pagination.totalPages}</strong></>
-                  ) : null}
-                </>
-              ) : (
-                <>Showing <strong className="text-foreground font-bold">{safeData.length}</strong> items</>
-              )}
-              {pagination.total !== undefined ? (
-                <> ({pagination.total} total items)</>
-              ) : null}
-            </span>
-          </div>
+      {pagination && (() => {
+        const totalCount = pagination.total ?? pagination.totalItems;
+        const computedTotalPages =
+          pagination.totalPages ??
+          (totalCount !== undefined && pagination.limit && pagination.limit > 0
+            ? Math.ceil(totalCount / pagination.limit)
+            : undefined);
+        const currentPage = pagination.page ?? 1;
 
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
-              disabled={
-                pagination.hasPrevPage !== undefined
-                  ? !pagination.hasPrevPage
-                  : (pagination.page ?? 1) <= 1
-              }
-              onClick={() => {
-                if (pagination.onPrevPage) {
-                  pagination.onPrevPage();
-                } else if (pagination.onPageChange && pagination.page !== undefined) {
-                  pagination.onPageChange(pagination.page - 1);
+        return (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/70 px-4 py-3 bg-muted/15 text-xs text-muted-foreground">
+            <div>
+              <span>
+                {pagination.page !== undefined ? (
+                  <>
+                    Showing Page <strong className="text-foreground font-bold">{currentPage}</strong>
+                    {computedTotalPages ? (
+                      <> of <strong className="text-foreground font-bold">{computedTotalPages}</strong></>
+                    ) : null}
+                  </>
+                ) : (
+                  <>Showing <strong className="text-foreground font-bold">{safeData.length}</strong> items</>
+                )}
+                {totalCount !== undefined ? (
+                  <> ({totalCount} total {totalCount === 1 ? "item" : "items"})</>
+                ) : null}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
+                disabled={
+                  pagination.hasPreviousPage !== undefined
+                    ? !pagination.hasPreviousPage
+                    : pagination.hasPrevPage !== undefined
+                    ? !pagination.hasPrevPage
+                    : currentPage <= 1
                 }
-              }}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
-              disabled={
-                pagination.hasNextPage !== undefined
-                  ? !pagination.hasNextPage
-                  : pagination.totalPages !== undefined
-                  ? (pagination.page ?? 1) >= pagination.totalPages
-                  : false
-              }
-              onClick={() => {
-                if (pagination.onNextPage) {
-                  pagination.onNextPage();
-                } else if (pagination.onPageChange && pagination.page !== undefined) {
-                  pagination.onPageChange(pagination.page + 1);
+                onClick={() => {
+                  if (pagination.onPrevPage) {
+                    pagination.onPrevPage();
+                  } else if (pagination.onPageChange) {
+                    pagination.onPageChange(currentPage - 1);
+                  }
+                }}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-lg px-2.5 text-xs font-semibold gap-1 disabled:opacity-40"
+                disabled={
+                  pagination.hasNextPage !== undefined
+                    ? !pagination.hasNextPage
+                    : computedTotalPages !== undefined
+                    ? currentPage >= computedTotalPages
+                    : false
                 }
-              }}
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+                onClick={() => {
+                  if (pagination.onNextPage) {
+                    pagination.onNextPage();
+                  } else if (pagination.onPageChange) {
+                    pagination.onPageChange(currentPage + 1);
+                  }
+                }}
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -19,17 +20,22 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { ROLE } from '@prisma/client';
 import { AuthCookieService } from '@api/modules/auth/cookies/auth-cookie.service';
 import { RequestOtpDto } from '@api/modules/auth/dto/request-otp.dto';
 import { OtpService } from '@api/modules/auth/otp/otp.service';
+import type { RefreshJwtPayload } from '@api/modules/auth/types/refresh-jwt-payload.type';
 import { AccountLockGuard } from '@api/modules/security/guards/account-lock.guard';
 import {
   RefreshTokenThrottle,
   StrictThrottle,
 } from '@api/modules/shared/decorators/custom-throttler.decorator';
+import { GetUser } from '@api/modules/shared/decorators/get-user.decorator';
 import { GetVendor } from '@api/modules/shared/decorators/get-vendor.decorator';
+import { JwtRefreshGuard } from '@api/modules/auth/guards/jwt-refresh.guard';
 import { Message } from '@api/modules/shared/decorators/message.decorator';
 import { Public } from '@api/modules/shared/decorators/public.decorator';
+import { Roles } from '@api/modules/shared/decorators/role.decorator';
 import { ApiResponseDto } from '@api/modules/shared/dto/api-response.dto';
 import {
   extractIpAddress,
@@ -39,10 +45,6 @@ import { CreateVendorDto } from './dto/create-vendor.dto';
 import { VendorLoginDto } from './dto/update-vendor.dto';
 import { VendorResetPasswordDto } from './dto/vendor-reset-password.dto';
 import { VendorResponseDto } from './dto/vendor-response.dto';
-import {
-  VendorJwtAuthGuard,
-  VendorRefreshGuard,
-} from './guards/vendor-auth.guard';
 import { VendorsService } from './vendors.service';
 
 @ApiTags('VENDORS - AUTH')
@@ -74,7 +76,7 @@ export class VendorAuthController {
     type: ApiResponseDto<null>,
   })
   async requestOtp(@Body() dto: RequestOtpDto): Promise<null> {
-    await this.otpService.createOtp(dto.email, 'registration');
+    await this.otpService.createOtp(dto.email, 'vendor:registration');
     return null;
   }
 
@@ -107,18 +109,28 @@ export class VendorAuthController {
     @Body() dto: CreateVendorDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ vendor: VendorResponseDto; accessToken?: string }> {
+  ): Promise<{
+    vendor: VendorResponseDto;
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+  }> {
     const session = await this.vendorsService.register(
       dto,
       extractIpAddress(req),
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'vendor');
+    // Unapproved vendors do not receive session tokens
+    if (session.tokens) {
+      this.authCookies.setAuthCookies(res, session.tokens);
+    }
 
     return {
       vendor: session.profile,
-      accessToken: session.tokens.accessToken,
+      accessToken: session.tokens?.accessToken,
+      tokenType: session.tokens?.tokenType,
+      expiresIn: session.tokens?.expiresIn,
     };
   }
 
@@ -148,18 +160,26 @@ export class VendorAuthController {
     @Body() dto: VendorLoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ vendor: VendorResponseDto; accessToken?: string }> {
+  ): Promise<{
+    vendor: VendorResponseDto;
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+  }> {
     const session = await this.vendorsService.login(
       dto,
       extractIpAddress(req),
       extractUserAgent(req),
     );
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'vendor');
+    // Login always produces tokens (only register can return null)
+    this.authCookies.setAuthCookies(res, session.tokens!);
 
     return {
       vendor: session.profile,
-      accessToken: session.tokens.accessToken,
+      accessToken: session.tokens!.accessToken,
+      tokenType: session.tokens!.tokenType,
+      expiresIn: session.tokens!.expiresIn,
     };
   }
 
@@ -169,7 +189,7 @@ export class VendorAuthController {
 
   @Public()
   @RefreshTokenThrottle()
-  @UseGuards(VendorRefreshGuard)
+  @UseGuards(JwtRefreshGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @Message('Tokens refreshed successfully')
@@ -185,17 +205,31 @@ export class VendorAuthController {
     description: 'Invalid, expired, or revoked refresh token',
   })
   async refresh(
-    @GetVendor('id') vendorId: string,
-    @GetVendor('refreshId') refreshId: string,
+    @GetUser() payload: RefreshJwtPayload,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ vendor: VendorResponseDto; accessToken?: string }> {
-    const session = await this.vendorsService.refresh(vendorId, refreshId);
+  ): Promise<{
+    vendor: VendorResponseDto;
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+  }> {
+    if (payload.role !== ROLE.VENDOR) {
+      throw new UnauthorizedException('Invalid token role');
+    }
 
-    this.authCookies.setAuthCookies(res, session.tokens, 'vendor');
+    const session = await this.vendorsService.refresh(
+      payload.sub,
+      payload.refreshId,
+    );
+
+    // Refresh always produces tokens
+    this.authCookies.setAuthCookies(res, session.tokens!);
 
     return {
       vendor: session.profile,
-      accessToken: session.tokens.accessToken,
+      accessToken: session.tokens!.accessToken,
+      tokenType: session.tokens!.tokenType,
+      expiresIn: session.tokens!.expiresIn,
     };
   }
 
@@ -203,10 +237,10 @@ export class VendorAuthController {
   // LOGOUT
   // ---------------------------------------------------------------------------
 
-  @UseGuards(VendorJwtAuthGuard)
+  @Roles(ROLE.VENDOR)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @Message('Successfully logged out')
+  @Message('Logged out successfully')
   @ApiOperation({
     summary: 'Log out the current vendor session',
   })
@@ -225,7 +259,7 @@ export class VendorAuthController {
       extractUserAgent(req),
     );
 
-    this.authCookies.clearAuthCookies(res, 'vendor');
+    this.authCookies.clearAuthCookies(res);
 
     return null;
   }

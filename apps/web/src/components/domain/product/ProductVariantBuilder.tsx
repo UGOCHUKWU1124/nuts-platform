@@ -1,7 +1,7 @@
 "use client";
 
 import { RemoteImage } from "@/component/ui/RemoteImage";
-import { api } from "@/api/core/client";
+import { adminApi, vendorApi } from "@/api/core/client";
 import { Button } from "@/component/ui/button";
 import { Input } from "@/component/ui/input";
 import { Label } from "@/component/ui/label";
@@ -31,6 +31,7 @@ export interface ProductVariantItem {
 }
 
 interface ProductVariantBuilderProps {
+  authRole: "admin" | "vendor";
   variants: ProductVariantItem[];
   onChange: (variants: ProductVariantItem[]) => void;
   className?: string;
@@ -39,10 +40,12 @@ interface ProductVariantBuilderProps {
 const COMMON_ATTRIBUTES = ["Size", "Color", "Material", "Style", "Flavour", "Weight"];
 
 export function ProductVariantBuilder({
+  authRole,
   variants,
   onChange,
   className,
 }: ProductVariantBuilderProps) {
+  const api = authRole === "admin" ? adminApi : vendorApi;
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadVariantIndex, setActiveUploadVariantIndex] = useState<number | null>(null);
@@ -231,6 +234,8 @@ export function ProductVariantBuilder({
       {/* Hidden file input for variant image upload */}
       <input
         ref={fileInputRef}
+        id="variant-image-file-input"
+        name="variantImageFile"
         type="file"
         accept="image/jpeg,image/png,image/webp,image/jpg"
         className="hidden"
@@ -296,6 +301,9 @@ export function ProductVariantBuilder({
                       {variant.options.map((option, oIdx) => (
                         <div key={oIdx} className="flex items-center gap-2">
                           <Input
+                            id={`variant_${vIdx}_attr_${oIdx}_name`}
+                            name={`variant_${vIdx}_attr_${oIdx}_name`}
+                            aria-label={`Variant ${vIdx + 1} Attribute Name`}
                             placeholder="Attribute (e.g. Size)"
                             value={option.name}
                             onChange={(e) =>
@@ -304,6 +312,9 @@ export function ProductVariantBuilder({
                             className="h-8.5 rounded-lg text-xs w-1/2 bg-card"
                           />
                           <Input
+                            id={`variant_${vIdx}_attr_${oIdx}_val`}
+                            name={`variant_${vIdx}_attr_${oIdx}_val`}
+                            aria-label={`Variant ${vIdx + 1} Attribute Value`}
                             placeholder="Value (e.g. XL, Blue)"
                             value={option.value}
                             onChange={(e) =>
@@ -359,6 +370,9 @@ export function ProductVariantBuilder({
                       Stock Count
                     </Label>
                     <Input
+                      id={`variant_${vIdx}_stock`}
+                      name={`variant_${vIdx}_stock`}
+                      aria-label={`Variant ${vIdx + 1} Stock Count`}
                       type="number"
                       min={0}
                       value={variant.stock}
