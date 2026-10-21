@@ -15,6 +15,7 @@ import { formatDate,formatPrice } from "@/lib/util";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import {
 ArrowLeft,
+Clock,
 CreditCard,
 Edit2,
 MapPin,
@@ -37,6 +38,7 @@ export default function OrderDetailPage() {
   const [isEditShippingOpen, setIsEditShippingOpen] = useState(false);
   const [shippingAddressText, setShippingAddressText] = useState("");
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   // 1. Fetch Order
   const { data: order, isLoading } = useQuery({
@@ -81,6 +83,39 @@ export default function OrderDetailPage() {
       cancelled = true;
     };
   }, [order, id, qc]);
+
+  // Reservation countdown timer for PENDING orders
+  const isOrderPending = order?.status === "PENDING";
+  const expiresAtMs =
+    isOrderPending && order
+      ? order.paymentExpiresAt
+        ? new Date(order.paymentExpiresAt).getTime()
+        : new Date(order.createdAt).getTime() + 15 * 60 * 1000
+      : null;
+
+  useEffect(() => {
+    if (!isOrderPending || expiresAtMs === null) return;
+
+    const interval = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (expiresAtMs - current <= 0) {
+        qc.invalidateQueries({ queryKey: queryKey.order.detail(id) });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOrderPending, expiresAtMs, id, qc]);
+
+  const timeLeftMs =
+    expiresAtMs !== null ? Math.max(0, expiresAtMs - now) : null;
+
+  const formatTimeLeft = (ms: number) => {
+    const totalSecs = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   // Cancel Mutation
   const cancelMutation = useMutation({
@@ -216,11 +251,33 @@ export default function OrderDetailPage() {
                 className="flex-1 sm:flex-none rounded-xl text-xs h-9 font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <CreditCard className="h-3.5 w-3.5" />
-                <span>{isInitializingPayment ? "Connecting..." : "Pay with Paystack"}</span>
+                <span>{isInitializingPayment ? "Connecting..." : "Proceed to Payment"}</span>
               </Button>
             </div>
           )}
         </div>
+
+        {/* Pending Order Stock Reservation Banner */}
+        {isPending && timeLeftMs !== null && (
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-900 dark:text-amber-200 shadow-xs">
+            <Clock className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="text-xs sm:text-sm font-medium">
+              {timeLeftMs > 0 ? (
+                <span>
+                  Items are reserved for you. Complete payment within{" "}
+                  <strong className="font-extrabold text-amber-950 dark:text-amber-100 font-mono">
+                    {formatTimeLeft(timeLeftMs)}
+                  </strong>{" "}
+                  to secure your order before stock is released back into inventory.
+                </span>
+              ) : (
+                <span>
+                  Your reservation window has elapsed. Unpaid orders are automatically cancelled and reserved stock is restored.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Order Header Card */}
         <div className="rounded-2xl sm:rounded-3xl border border-border bg-card p-4 sm:p-6 lg:p-8 shadow-xs">
@@ -450,7 +507,7 @@ export default function OrderDetailPage() {
                 className="h-10 rounded-xl px-5 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <CreditCard className="h-3.5 w-3.5" />
-                <span>{isInitializingPayment ? "Connecting..." : "Pay Now"}</span>
+                <span>{isInitializingPayment ? "Connecting..." : "Proceed to Payment"}</span>
               </Button>
             </div>
           </div>
