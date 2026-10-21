@@ -203,15 +203,17 @@ NUTS Platform implements comprehensive defense-in-depth against top web vulnerab
   - Multi-cart evaluation in-memory selects the active cart with items (\`cartItems.length > 0\`), pruning empty orphan carts and evicting Redis cache (\`user:cart:v3:\${userId}\`).
 
 - **Inventory Matrix & Deadlock Prevention:**
-  - Stock decrements execute atomically: \`UPDATE products SET stock = stock - :qty WHERE stock >= :qty\`.
-  - Multiple items in a batch are sorted lexicographically by ID prior to row acquisition, eliminating circular deadlock cycles (\`SQLSTATE 40P01\`).
+  - Stock decrements execute atomically across \`products\` and \`product_variants\`: \`UPDATE ... SET stock = stock - :qty WHERE stock >= :qty\`.
+  - Batch items are sorted lexicographically by ID (\`variantId ?? productId\`) prior to row acquisition, eliminating circular deadlock cycles (\`SQLSTATE 40P01\`).
+  - Stock shortfalls aggregate into an HTTP \`409 Conflict\` (\`INSUFFICIENT_STOCK\`) listing all affected items and available stock counts.
+  - Architectural decision: No distributed Redis lock is placed around checkout inventory; PostgreSQL's atomic conditional update provides ACID guarantees without the failure modes of distributed lock expiration or network partitions.
 
 - **Signed Asynchronous Payment Settlement:**
   - Paystack HMAC-SHA512 signed webhooks authoritatively settle \`PENDING\` orders to \`PROCESSING\` even if client redirect fails or network latency disrupts callback queries.
   - Metadata fallback resolves payments by \`orderId\` when reference strings differ.
 
 - **Automated Unpaid Order Sweeper (\`UnpaidOrdersCron\`):**
-  - Distributed cron running every 5 minutes under atomic Redis lock (\`cron:lock:unpaid-orders\`). Sweeps orders in \`PENDING\` state older than 30 minutes, restoring inventory stock and setting status to \`CANCELLED\`.
+  - Distributed cron running every minute under an atomic token-validated Redis lock (\`cron:lock:unpaid-orders\`). Sweeps orders in \`PENDING\` state older than the configured TTL (\`UNPAID_ORDER_TTL_MINUTES\`, default 15 minutes), restoring inventory stock and setting status to \`CANCELLED\`.
 
 ---
 

@@ -466,8 +466,8 @@ Located in [`apps/web/src/proxy.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src
   - **Nonce Propagation:** Injects `x-nonce` into internal request headers, allowing React Server Components to access nonces via `headers().get('x-nonce')` for Paystack and dynamic inline scripts.
 - **Server Component Layout Auth Boundaries (Filesystem as Source of Truth):**
   - **Decentralized Route Group Isolation:** Rather than centralized, brittle URL pattern matching, route protection is enforced at the layout boundary of each route group:
-    - **Platform Admin:** [`apps/web/src/app/(admin)/admin/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(admin)/admin/layout.tsx) validates active admin sessions via `enforceAuth('admin', '/auth/admin/login')`. Any new page added under `(admin)/admin` is automatically protected.
-    - **Vendor Merchant Portal:** [`apps/web/src/app/(vendor)/vendor/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(vendor)/vendor/layout.tsx) validates active merchant sessions via `enforceAuth('vendor', '/auth/vendor/login')`.
+    - **Platform Admin:** [`apps/web/src/app/(admin)/admin/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28admin%29/admin/layout.tsx) validates active admin sessions via `enforceAuth('admin', '/auth/admin/login')`. Any new page added under `(admin)/admin` is automatically protected.
+    - **Vendor Merchant Portal:** [`apps/web/src/app/(vendor)/vendor/layout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28vendor%29/vendor/layout.tsx) validates active merchant sessions via `enforceAuth('vendor', '/auth/vendor/login')`.
     - **Customer Protected Areas:** [`apps/web/src/components/domain/auth/ProtectedLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/domain/auth/ProtectedLayout.tsx) automatically gates `/account`, `/checkout`, `/order`, `/wallet`, and `/review`.
   - **Cryptographic Token Verification (`edge-jwt`):**
     - The server authentication helper ([`server-auth.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/lib/server-auth.ts)) reads HTTP-only cookies securely via `cookies()` and verifies HMAC-SHA256 signatures with Web Crypto API (`crypto.subtle`).
@@ -510,7 +510,7 @@ The platform enforces a strict separation between consumer self-service lifecycl
    - When a suspended user attempts to log in with valid credentials:
      - If the temporary suspension duration has **elapsed**, the system automatically reactivates the account (`isActive = true`), removes the suspension reason, publishes an audit event (`USER_AUTO_UNSUSPEND_EXPIRED`), and authenticates the user seamlessly.
      - If the suspension is **active** (or indefinite), the login pipeline blocks authentication and returns a structured `ACCOUNT_SUSPENDED` payload containing the human-readable remaining time, exact expiration timestamp, and administrative reason.
-   - **Contextual Login Warning Banner:** [`login/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(auth)/auth/login/page.tsx) renders an alert banner detailing the suspension reason, countdown timer, and direct support contact links.
+   - **Contextual Login Warning Banner:** [`login/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28auth%29/auth/login/page.tsx) renders an alert banner detailing the suspension reason, countdown timer, and direct support contact links.
 
 4. **Production-Grade Account Deletion (`DELETE /admin/users/:id`):**
    - High-security administrative operation protected by 2FA OTP prompt.
@@ -524,7 +524,7 @@ The platform enforces a strict separation between consumer self-service lifecycl
   - Features 6 discrete visual cells with animated pulsing focus carets, full keyboard navigation (Backspace auto-rewind, Arrow keys, automatic forward advancing), clipboard paste auto-splitting, and native mobile virtual numeric keyboard overlay.
 - **Context-Aware Domain Email Copywriting ([`EmailService.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/infrastructure/mail/email.service.ts)):**
   - Completely eliminates generic or misaligned email headers. OTP emails automatically tailor subject lines, eyebrow badges, titles, and body descriptions to the explicit security purpose (`account-deactivation`, `admin:action`, `password-reset`, `vendor:password-reset`, `vendor:registration`, `payment`, `registration`).
-- **Two-Phase Confirmation & Cooldown Account Deactivation ([`account/setting/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(storefront)/account/setting/page.tsx)):**
+- **Two-Phase Confirmation & Cooldown Account Deactivation ([`account/setting/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28storefront%29/account/setting/page.tsx)):**
   - Replaces premature OTP dispatches with an explicit **Deactivate Account** trigger opening a warning confirmation dialog detailing the 60-day recovery grace period.
   - Upon user confirmation, dispatches an `account-deactivation` OTP, immediately transitions to the segmented OTP verification dialog, and initiates an automatic 60-second resend countdown timer.
 - **Strict 6-Digit Numeric OTP Validation (`VerifyOtpDto` & `OtpService`):**
@@ -543,18 +543,18 @@ The platform enforces a strict separation between consumer self-service lifecycl
   - Normalizes codes to uppercase, validates referrer account presence, and rejects self-referral attempts before account creation.
 
 ### Multi-Step Identity Onboarding & Lifecycle Workflows
-Located across [`apps/web/src/app/(auth)`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(auth)) and [`apps/api/src/modules/identity/users`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/identity/users):
+Located across [`apps/web/src/app/(auth)`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28auth%29) and [`apps/api/src/modules/identity/users`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/identity/users):
 
-1. **Consumer 3-Step Registration Wizard ([`RegisterPage`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(auth)/auth/register/page.tsx)):**
+1. **Consumer 3-Step Registration Wizard ([`RegisterPage`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28auth%29/auth/register/page.tsx)):**
    - **Step 1 — Profile & Referral Validation:** Collects personal information, enforces 12+ character enterprise password complexity (`/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#]).*$/`), and triggers real-time pre-registration referral code validation.
    - **Step 2 — Numeric OTP Verification:** Dispatches a 6-digit numeric verification code to the prospective customer's email. Enforces an active countdown timer to prevent resend spamming and verifies the OTP before committing account creation.
    - **Step 3 — Shipping Address Configuration:** Captures the customer's primary delivery address (`fullName`, `phone`, `street`, `city`, `state`, `country`) immediately upon verification, establishing initial logistics readiness before the shopper enters the catalog.
 
-2. **Merchant Self-Service Onboarding ([`VendorRegisterPage`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(auth)/auth/vendor/register/page.tsx)):**
+2. **Merchant Self-Service Onboarding ([`VendorRegisterPage`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28auth%29/auth/vendor/register/page.tsx)):**
    - Streamlined registration for prospective store owners requiring business name, merchant email, and strong password.
    - Dispatches a 6-digit merchant verification OTP directly to the vendor's email address with resend cooldown timers and form error synchronization.
 
-3. **Two-Stage Password Recovery ([`ForgotPasswordPage`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(auth)/auth/forgot-password/page.tsx)):**
+3. **Two-Stage Password Recovery ([`ForgotPasswordPage`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28auth%29/auth/forgot-password/page.tsx)):**
    - **Stage 1 (Code Request):** Accepts user email, enforces rate limits, and triggers an OTP email dispatch.
    - **Stage 2 (Verification & Password Reset):** Combines OTP verification with a compliant 12+ character replacement password. On successful reset, the backend invalidates all active user sessions and refresh tokens, terminating stale browser sessions across all devices.
 
@@ -596,9 +596,9 @@ Located in [`apps/web/src/components/domain/vendor`](file:///c:/MY%20PROJECT/NUT
   - **In-Store Search & Faceted Filtering:** Instant client-side search filtering within the seller's catalog, minimum/maximum price boundaries, and stock availability toggles.
   - **Horizontal Category Tab Scroll:** Dynamically segments merchant products into top-level taxonomy groups with smooth horizontal scrolling tabs.
 
-#### Storefront Operator Surface & Back-Office Privilege Isolation (`StorefrontOperatorBar.tsx`)
-Located in [`apps/web/src/components/layout/StorefrontOperatorBar.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/layout/StorefrontOperatorBar.tsx):
-- **Role-Aware Floating Operator Surface:** Whenever an authenticated Administrator or Merchant navigates the public storefront, the system automatically injects a persistent operator bar at the top of [`CustomerLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/layout/CustomerLayout.tsx).
+#### Storefront Operator Surface & Back-Office Privilege Isolation (`Navbar.tsx` & `CustomerLayout.tsx`)
+Located in [`apps/web/src/components/navbar/Navbar.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/navbar/Navbar.tsx) and [`apps/web/src/components/layout/CustomerLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/layout/CustomerLayout.tsx):
+- **Role-Aware Operator Header Surface:** Whenever an authenticated Administrator or Merchant navigates the public storefront, the top navigation (`Navbar.tsx`) and mobile bottom dock (`BottomNav.tsx`) automatically render contextual operator controls, role pills, and one-click back-office navigation within [`CustomerLayout.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/components/layout/CustomerLayout.tsx).
 - **Strict Cart & Checkout Privilege Isolation:** Administrative and Merchant accounts are strictly isolated from customer purchasing workflows. Carts, quantity steppers, and checkout buttons are disabled for operator accounts to prevent cross-account ledger contamination and artificial order creation.
 - **Contextual Role Badging & Quick Back-Office Jumps:**
   - **Admin Mode (`canAdminister`):** Renders an **Administrator Preview** badge with direct one-click navigation back to **Admin Console** (`/admin`), **Catalog** (`/admin/product`), **Users** (`/admin/user`), **Orders** (`/admin/order`), and **Settings** (`/admin/setting`).
@@ -645,7 +645,7 @@ All state-altering, financial, lifecycle, and destructive actions across both th
    - **Products Service ([`products.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/catalog/products/products.service.ts)):** Product catalog queries match product names, SKUs, slugs, body descriptions, related vendor store details (`vendor.storeName`, `vendor.email`), and assigned category names (`category.name`).
    - **Vendors Service ([`admin-vendors.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/identity/admin/manage-vendors/admin-vendors.service.ts)):** Vendor directory search evaluates store names, store slugs, store descriptions, personal first/last names, account emails, business emails, business phone numbers, and contact phones.
    - **Users Service ([`users.service.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/identity/users/users.service.ts)):** Customer queries match first names, last names, emails, and phone numbers.
-2. **Recursive Taxonomy Tree Search & Dynamic Branch Expansion ([`admin/category/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(admin)/admin/category/page.tsx)):**
+2. **Recursive Taxonomy Tree Search & Dynamic Branch Expansion ([`admin/category/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28admin%29/admin/category/page.tsx)):**
    - Implements a recursive pruning and auto-expansion search engine (`filteredTree`).
    - When an operator searches a category keyword or selects status filters, non-matching branches are cleanly pruned while all matching nodes and their ancestor branches are dynamically kept and automatically expanded in the visual Tree View.
 
@@ -718,36 +718,39 @@ The checkout pipeline is architected to guarantee absolute consistency, zero ove
 ```mermaid
 sequenceDiagram
     autonumber
-    actor UserA as Shopper A (Hits "Buy" @ T0)
-    actor UserB as Shopper B (Hits "Buy" @ T0)
+    actor UserA as Shopper A (Hits "Proceed to Payment" @ T0)
+    actor UserB as Shopper B (Hits "Proceed to Payment" @ T0)
     participant API as OrdersService (executeCheckout)
     participant DB as PostgreSQL (Single Item Stock = 1)
 
     Note over UserA,UserB: Both shoppers checkout simultaneously for the last item (Stock: 1)
     par Simultaneous Checkout Requests
-        UserA->>API: POST /api/v1/checkout (Idempotency-Key: key-A)
+        UserA->>API: POST /api/v1/orders/checkout (Idempotency-Key: key-A)
     and
-        UserB->>API: POST /api/v1/checkout (Idempotency-Key: key-B)
+        UserB->>API: POST /api/v1/orders/checkout (Idempotency-Key: key-B)
     end
 
-    Note over API,DB: Transaction A acquires RowExclusiveLock first
+    Note over API,DB: Tx A acquires exclusive row tuple lock first
     API->>DB: Tx A: UPDATE "products" SET stock = stock - 1 WHERE id = $id AND stock >= 1 RETURNING ...
     activate DB
-    Note over DB: Tx A lock acquired. Stock: 1 -> 0. Returns 1 row.
-    DB-->>API: Tx A: rows.length = 1 (Success)
-    deactivate DB
+    Note over DB: Tx A lock acquired. Stock: 1 -> 0.
 
-    Note over API,DB: Transaction B evaluates after Tx A updates
+    Note over API,DB: Tx B attempts UPDATE on the same row tuple
     API->>DB: Tx B: UPDATE "products" SET stock = stock - 1 WHERE id = $id AND stock >= 1 RETURNING ...
+    Note over DB: Tx B BLOCKS, waiting for Tx A to commit or roll back
+
+    Note over API,DB: Tx A completes: creates Order, OrderItems, Payment, StockHistory
+    DB-->>API: Tx A commits: rows.length = 1 (Success)
+    deactivate DB
+    API-->>UserA: HTTP 201 Created: Order Confirmed (Tx A Committed)
+
     activate DB
-    Note over DB: Tx B inspects live row: stock is 0. Condition (0 >= 1) is FALSE. Returns 0 rows.
+    Note over DB: Tx A released row lock. Tx B unblocks under Read Committed.<br/>Postgres re-evaluates WHERE stock >= 1 against live row (stock = 0).<br/>Condition is FALSE. Returns 0 rows.
     DB-->>API: Tx B: rows.length = 0 (Empty)
     deactivate DB
 
-    Note over API: Tx B catches rows.length !== 1 & throws BadRequestException
-    API-->>UserB: HTTP 400 Bad Request: "Insufficient stock for product." (Tx B Rolled Back)
-    Note over API,DB: Tx A completes: Creates Order, StockAudit, and CheckoutIdempotency
-    API-->>UserA: HTTP 201 Created: Order Confirmed (Tx A Committed)
+    Note over API: Tx B catches shortfall & throws InsufficientStockException
+    API-->>UserB: HTTP 409 Conflict: INSUFFICIENT_STOCK (Tx B Rolled Back)
 ```
 
 #### Concurrency & Edge-Case Engineering Guarantees
@@ -762,14 +765,14 @@ sequenceDiagram
 │ Flash-Sale Inventory Deplete │ Overselling / Deadlock 40P01│ Lexicographical Lock Sort│
 │ Multi-Tab Checkout Collision │ Duplicate Order Creation    │ Row-Level FOR UPDATE     │
 │ Webhook vs. Client Redirect  │ Orphaned PENDING Order      │ Signed Webhook Settlement│
-│ Unpaid Order Stock Hold      │ Abandoned Inventory Lock    │ Redis-Locked Cron Sweeper│
+│ Unpaid Order Stock Hold      │ Abandoned Inventory Lock    │ Token-Locked Cron Sweeper│
 │ SSE Stream Leak              │ Server File Descriptor Drain│ Heartbeat Stamp Pings    │
 └──────────────────────────────┴─────────────────────────────┴──────────────────────────┘
 ```
 
 1. **The "Last Item" (Stock = 1) Overselling Prevention:**
-   - **The Problem:** In standard naive e-commerce systems (`findProduct() -> check stock > 0 -> updateProduct()`), two shoppers querying at the same millisecond both read `stock = 1`, both succeed, and inventory drops to `-1` (overselling).
-   - **The NUTS Implementation:** Stock deductions in [`OrdersService.executeCheckout`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/orders/orders.service.ts) execute as an atomic conditional SQL operation with a `RETURNING` clause:
+   - **The Problem:** In naive e-commerce systems (`findProduct() -> check stock > 0 -> updateProduct()`), two shoppers querying at the same millisecond both read `stock = 1`, both succeed, and inventory drops to `-1` (overselling).
+   - **The NUTS Implementation:** Stock deductions in [`OrdersService.executeCheckout`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/orders/orders.service.ts) execute as an atomic conditional SQL operation with a `RETURNING` clause across both `products` and `product_variants`:
      ```sql
      UPDATE "products"
      SET "stock" = "stock" - :quantity, "updatedAt" = NOW()
@@ -779,8 +782,24 @@ sequenceDiagram
        AND "stock" >= :quantity
      RETURNING "id", ("stock" + :quantity) AS "oldStock", "stock" AS "newStock";
      ```
-   - **Execution Flow:** PostgreSQL enforces an exclusive row-level lock (`RowExclusiveLock`). The first transaction to acquire the lock decrements the stock from `1` to `0` and receives `rows.length === 1`. The second transaction evaluates the row *after* the update, finds `stock = 0`, fails the `stock >= 1` predicate, and returns `rows.length === 0`.
-   - **Rollback:** When `rows.length !== 1`, `OrdersService` immediately throws `BadRequestException("Insufficient stock...")`, causing PostgreSQL to execute an **atomic transaction rollback**. No order row is generated, no payment is initialized, and inventory never drops below zero.
+   - **Execution Flow:** PostgreSQL enforces an exclusive row-level tuple lock during the update. The first transaction decrements stock from `1` to `0` and receives `rows.length === 1`. The second transaction blocks on that row lock until the first transaction commits. Under PostgreSQL's Read Committed evaluation rules, the second transaction re-evaluates the `WHERE stock >= :quantity` clause against the newly committed tuple, discovers `stock = 0`, matches zero rows, and returns `rows.length === 0`.
+   - **Rollback & Structured 409 Conflict:** When `rows.length !== 1`, `OrdersService` aggregates all failing lines and throws `InsufficientStockException` (`HTTP 409 Conflict`, code `INSUFFICIENT_STOCK`). This triggers an immediate, atomic database rollback: no order row is persisted, no payment is initiated, and inventory never drops below zero. The client receives a structured payload containing every item that fell short along with its live available quantity.
+
+#### Architectural Decision Record (ADR): Why PostgreSQL Row Locks Over Redis Inventory Locking
+
+| Dimension | Redis Mutex (`SET NX PX` / Redlock) | Redis Pre-Deduct Admission Gate | PostgreSQL Conditional `UPDATE` (NUTS Architecture) |
+|---|---|---|---|
+| **Primary Guarantee** | Mutual exclusion outside the DB | Fast memory counter | ACID transaction engine + row tuple lock |
+| **Overselling Prevention** | ❌ **Insufficient on its own** | ⚠️ Only if reconciled with DB | ✅ **Guaranteed by database engine** |
+| **Failure Modes** | Lock TTL expiry mid-transaction, network partitions, split-brain | Redis/DB drift, sync loss on node restart, complex rollback compensation | Zero external dependency; rolling back transaction automatically reverts stock |
+| **Latency & Overhead** | Extra network round-trips per product before DB call | Extremely fast in-memory decrement | Single atomic SQL query executed within the checkout transaction |
+| **Operational Complexity** | Distributed lock timeout tuning, dead-letter cleanups | Dual-write reconciliation, cache warming, background sync workers | Zero extra infrastructure; standard PostgreSQL ACID semantics |
+
+**Why we rejected an external Redis lock for checkout:**
+A distributed Redis lock does not eliminate the need for the database guard. If an API pod takes an external lock with a 5-second TTL, a garbage-collection pause or database connection stall could allow the lock to expire before the transaction completes. Another worker pod would acquire the lock, resulting in concurrent execution regardless. Because PostgreSQL's `UPDATE ... WHERE stock >= :quantity` is strictly necessary as the authoritative safeguard, placing a Redis lock in front of it adds latency and creates a single point of failure without adding correctness.
+
+**When a Redis admission gate would be introduced:**
+For ultra-high-volume flash sales (e.g. >5,000 checkout attempts/second on a single hot SKU), thousands of transactions would queue on the same PostgreSQL row lock, exhausting the database connection pool. In that specific scenario, an atomic Redis Lua script (`DECRBY` with floor check) acts as an **admission gate** to reject doomed requests before they touch PostgreSQL. For normal-to-high commerce traffic, PostgreSQL's row-level locking handles concurrent checkouts with complete consistency and lower operational risk.
 
 2. **Deterministic Row Lock Sorting (PostgreSQL Deadlock Prevention — `SQLSTATE 40P01`):**
    - **The Problem:** If Shopper A's cart contains `[Item 1, Item 2]` and Shopper B's cart contains `[Item 2, Item 1]`, concurrent checkouts can cause Shopper A to lock Item 1 and wait for Item 2, while Shopper B locks Item 2 and waits for Item 1. This triggers a cyclic transaction deadlock in PostgreSQL (`SQLSTATE 40P01: deadlock detected`).
@@ -797,7 +816,7 @@ sequenceDiagram
 3. **Active Cart Concurrency Guard & Candidate Cart Resolution (`SELECT ... FOR UPDATE`):**
    - **The Problem:** A customer clicks "Pay" twice in rapid succession, or has two tabs open with items in one tab and an empty cart in another. Naive checkout picking the newest cart selects the empty cart, throwing a false error, or creates duplicate orders.
    - **The Mechanics:**
-     1. `OrdersService.checkout` initiates an atomic PostgreSQL transaction with serializable isolation semantics.
+     1. `OrdersService.checkout` initiates an atomic PostgreSQL transaction.
      2. Executes pessimistic row-level locking across all open candidate carts for the user:
         ```sql
         SELECT "id" FROM "carts"
@@ -827,13 +846,14 @@ sequenceDiagram
 6. **Automated Unpaid Order Sweeper & Stock Restoration (`UnpaidOrdersCron`):**
    - **The Problem:** Shoppers initialize checkout, reserve inventory, but abandon the Paystack payment modal. Without cleanup, inventory remains permanently locked, preventing other shoppers from purchasing.
    - **The Mechanics:**
-     1. `UnpaidOrdersCron` runs every 5 minutes (`UNPAID_ORDER_EXPIRATION.CRON_SCHEDULE = '*/5 * * * *'`).
-     2. **Distributed Locking:** Uses Redis `SET cron:lock:unpaid-orders "1" EX 240 NX` to ensure that in multi-instance horizontal deployments, only one API pod executes the sweep.
-     3. Queries for orders in `PENDING` state created more than 30 minutes ago (`createdAt < NOW() - 30 minutes`).
+     1. `UnpaidOrdersCron` runs every minute (`UNPAID_ORDER_EXPIRATION.CRON_SCHEDULE = '* * * * *'`).
+     2. **Distributed Locking:** Uses Redis `SET cron:lock:unpaid-orders <randomUUID> PX 55000 NX` to ensure that in multi-instance horizontal deployments, only one API pod executes the sweep. The lock is released in a `finally` block using an atomic compare-and-delete Lua script, guaranteeing that pod A never deletes pod B's lock if a sweep exceeds the TTL.
+     3. Queries for orders in `PENDING` state created longer ago than the configured window (`UNPAID_ORDER_TTL_MINUTES`, default 15 minutes, configurable via environment).
      4. For each expired order, an atomic transaction:
-        - Updates order status to `CANCELLED` with cancellation reason `Auto-cancelled due to payment timeout`.
+        - Updates order status to `CANCELLED` with note `Payment window expired after N minutes`.
         - Updates associated payment records to `FAILED`.
         - Iterates through line items and restores stock directly to products and variants (`restoreOrderStock`).
+        - Sets `stockRestored = true` as an idempotency safeguard against double-restoration.
         - Appends an audit trail entry in `OrderStatusHistory`.
 
 7. **Real-Time SSE Stream Resilience & Zombie Connection Mitigation:**
@@ -862,7 +882,7 @@ sequenceDiagram
    - **Gateway Handoff Phrasing:** Checkout order submission and drawer reviews route to the Paystack payment gateway under standard enterprise CTAs (`Proceed to Payment` and `Review delivery and proceed to payment`).
 
 ### Promotions, Discount Codes & Campaign Governance
-Located in [`apps/api/src/modules/checkout/discounts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/discounts) and [`apps/web/src/app/(admin)/admin/discount`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(admin)/admin/discount):
+Located in [`apps/api/src/modules/checkout/discounts`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/checkout/discounts) and [`apps/web/src/app/(admin)/admin/discount`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28admin%29/admin/discount):
 The platform implements an enterprise multi-tier coupon and promotions engine:
 
 1. **Dual-Scope Coupon Architecture:**
@@ -926,7 +946,7 @@ Located in [`apps/api/src/modules/billing`](file:///c:/MY%20PROJECT/NUTS-P/apps/
    - **Outbox Event & Vendor Credit:** Atomically transitions order `PENDING -> PROCESSING`, creates order history note, publishes `order.confirmed` transactional outbox event, and credits vendor pending wallets.
 
 5. **Storefront Order Self-Healing Polling & Payment Resumption ([`PaymentsController`](file:///c:/MY%20PROJECT/NUTS-P/apps/api/src/modules/billing/payments/payments.controller.ts)):**
-   - **Active Order Polling & Self-Healing:** The storefront order detail view ([`apps/web/src/app/(storefront)/order/[id]/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/(storefront)/order/[id]/page.tsx)) polls every 3 seconds while `order.status === 'PENDING'`, and executes a silent background verification against Paystack. If the customer completed payment on Paystack and closed the browser before callback redirection, the order detail page settles payment immediately on load.
+   - **Active Order Polling & Self-Healing:** The storefront order detail view ([`apps/web/src/app/(storefront)/order/[id]/page.tsx`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/app/%28storefront%29/order/%5Bid%5D/page.tsx)) polls every 3 seconds while `order.status === 'PENDING'`, and executes a silent background verification against Paystack. If the customer completed payment on Paystack and closed the browser before callback redirection, the order detail page settles payment immediately on load.
    - **Direct Gateway Initialization (`POST /payment/initialize`):**
      - Accepts `orderId` validated using `ParseUUIDPipe` and enforces authenticated customer order ownership.
      - Employs direct Paystack checkout initialization where 3DS card challenges and bank OTPs are handled securely directly on Paystack's gateway.
@@ -1223,7 +1243,7 @@ A common architectural question in distributed systems is how **Client Ingress I
 | **Origin & Generation** | Generated by the **Client** (Browser / Frontend random UUID). | Deterministically derived by the **Backend Domain Logic**. |
 | **Transport Boundary** | HTTP Request Header: `Idempotency-Key: <uuid>`. | Asynchronous message payload property & database column. |
 | **Protected Surface** | Protects the HTTP ingress API against client double-submissions. | Protects message consumers, email relays, and SSE emitters. |
-| **Target Failure Modes** | A buyer double-clicks "Pay", or a mobile Wi-Fi drop resends `POST /checkout`. | Paystack sends 3 webhook retries; RabbitMQ redelivers unacknowledged messages. |
+| **Target Failure Modes** | A buyer double-clicks "Pay", or a mobile Wi-Fi drop resends `POST /orders/checkout`. | Paystack sends 3 webhook retries; RabbitMQ redelivers unacknowledged messages. |
 | **Database Guarantee** | PostgreSQL table `checkout_idempotency` (`@@unique([userId, idempotencyKey])`). | PostgreSQL table `notifications` (`dedupeKey String? @unique`). |
 | **Deterministic Formula** | N/A (Arbitrary client UUID). | `EVENT_TYPE + ':' + ENTITY_ID + ':' + ROLE + ':' + ACTOR_ID`. |
 
@@ -1323,7 +1343,7 @@ NUTS Platform provides an enterprise-grade OpenAPI 3.0 interactive developer por
   - `GET /api/v1/admin/search/status`: Search engine operational health and index diagnostics.
 
 ### Dynamic Content-Security-Policy (CSP) & Web Crypto Nonce
-In [`apps/web/src/middleware.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/middleware.ts):
+In [`apps/web/src/proxy.ts`](file:///c:/MY%20PROJECT/NUTS-P/apps/web/src/proxy.ts):
 - Every request generates a cryptographically random base64 nonce using the Web Crypto API.
 - Generates strict CSP directives:
   - `default-src 'self'`
@@ -1495,7 +1515,7 @@ Located in [`apps/api/src/common/filters/global-exception.filter.ts`](file:///c:
 │       │   ├── components/           # Reusable UI & domain components
 │       │   ├── lib/                  # Path sanitization, auth broadcasts
 │       │   ├── zustand/              # State stores (auth, cart, notifications)
-│       │   └── middleware.ts         # Edge Router authentication & CSP gateway
+│       │   └── proxy.ts              # Edge Router authentication & CSP gateway
 │       ├── next.config.ts            # Standalone build & memory configurations
 │       └── Dockerfile                # Production Next.js standalone container
 │
